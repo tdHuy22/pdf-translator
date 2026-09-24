@@ -1,0 +1,920 @@
+{
+ "judge": "gpt-oss",
+ "seed": 7,
+ "rows": [
+  {
+   "key": [
+    "attention-is-all-you-need",
+    4,
+    3
+   ],
+   "mapping": {
+    "A": "9b",
+    "B": "2b",
+    "C": "google",
+    "D": "4b"
+   },
+   "scores": {
+    "9b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Đúng nghĩa, thuật ngữ phù hợp, ngữ pháp tốt"
+    },
+    "2b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Cũng chính xác, ngữ pháp trôi chảy"
+    },
+    "google": {
+     "adequacy": 2,
+     "terminology": 1,
+     "fluency": 2,
+     "note": "Dịch sai thuật ngữ, ngữ pháp kém"
+    },
+    "4b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Tương tự A, ngữ pháp tốt"
+    }
+   },
+   "best": "9b"
+  },
+  {
+   "key": [
+    "attention-is-all-you-need",
+    4,
+    4
+   ],
+   "mapping": {
+    "A": "2b",
+    "B": "4b",
+    "C": "9b",
+    "D": "google"
+   },
+   "scores": {
+    "2b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "đúng nghĩa, giữ thuật ngữ"
+    },
+    "4b": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "thiếu “hàm” và “đầu ra” hơi lỏng"
+    },
+    "9b": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "thiếu “hàm” và “đầu ra”"
+    },
+    "google": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "đúng thuật ngữ, tự nhiên"
+    }
+   },
+   "best": "google"
+  },
+  {
+   "key": [
+    "attention-is-all-you-need",
+    4,
+    5
+   ],
+   "mapping": {
+    "A": "2b",
+    "B": "google",
+    "C": "9b",
+    "D": "4b"
+   },
+   "scores": {
+    "2b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Đúng nghĩa, thuật ngữ hơi lỏng, ngữ pháp tốt"
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "Nhiều lỗi thuật ngữ, ngữ pháp không chuẩn"
+    },
+    "9b": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "Thuật ngữ sai, ngữ pháp chưa hoàn chỉnh"
+    },
+    "4b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Đúng nghĩa, thuật ngữ hợp lý, ngữ pháp tốt"
+    }
+   },
+   "best": "2b"
+  },
+  {
+   "key": [
+    "attention-is-all-you-need",
+    4,
+    6
+   ],
+   "mapping": {
+    "A": "9b",
+    "B": "4b",
+    "C": "google",
+    "D": "2b"
+   },
+   "scores": {
+    "9b": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "đã dịch một số thuật ngữ sai, thiếu \"dot product\""
+    },
+    "4b": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "cũng có lỗi thuật ngữ"
+    },
+    "google": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "đúng nghĩa, thuật ngữ tốt, ngôn ngữ tự nhiên"
+    },
+    "2b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "đúng nghĩa, thuật ngữ tốt, ngôn ngữ tự nhiên"
+    }
+   },
+   "best": "google"
+  },
+  {
+   "key": [
+    "attention-is-all-you-need",
+    4,
+    8
+   ],
+   "mapping": {
+    "A": "4b",
+    "B": "google",
+    "C": "2b",
+    "D": "9b"
+   },
+   "scores": {
+    "4b": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "Missing some words, unclear phrasing"
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "Terminology ok but sentence structure awkward"
+    },
+    "2b": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Good translation, clear terms"
+    },
+    "9b": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "Missing some details, phrasing odd"
+    }
+   },
+   "best": "2b"
+  },
+  {
+   "key": [
+    "attention-is-all-you-need",
+    4,
+    9
+   ],
+   "mapping": {
+    "A": "4b",
+    "B": "9b",
+    "C": "google",
+    "D": "2b"
+   },
+   "scores": {
+    "4b": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "đúng nghĩa, giữ thuật ngữ, ngữ pháp tốt"
+    },
+    "9b": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "đúng nghĩa, thuật ngữ chuẩn, ngữ pháp tốt"
+    },
+    "google": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "đúng nghĩa, thuật ngữ chuẩn, ngữ pháp tốt"
+    },
+    "2b": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "đúng nghĩa, thuật ngữ chuẩn, ngữ pháp tốt"
+    }
+   },
+   "best": "4b"
+  },
+  {
+   "key": [
+    "bert",
+    3,
+    0
+   ],
+   "mapping": {
+    "A": "2b",
+    "B": "9b",
+    "C": "4b",
+    "D": "google"
+   },
+   "scores": {
+    "2b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Đúng nghĩa, nhưng “cấu trúc” hơi lỏng, “token” chưa giữ nguyên tiếng Anh."
+    },
+    "9b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Tương tự A, “token” chưa giữ nguyên."
+    },
+    "4b": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "Số liệu “hạ lưu” sai, “token tách biệt” không chuẩn."
+    },
+    "google": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Tương tự A/B, “token” chưa giữ nguyên."
+    }
+   },
+   "best": "2b"
+  },
+  {
+   "key": [
+    "bert",
+    3,
+    1
+   ],
+   "mapping": {
+    "A": "9b",
+    "B": "google",
+    "C": "4b",
+    "D": "2b"
+   },
+   "scores": {
+    "9b": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Chưa rõ \"auto-encoder\" dịch đúng; dùng \"mã hóa tự động\" hơi sai"
+    },
+    "google": {
+     "adequacy": 2,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "Sắp xếp sai, thiếu \"auto-encoder\""
+    },
+    "4b": {
+     "adequacy": 2,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "Không dịch đúng \"auto-encoder\""
+    },
+    "2b": {
+     "adequacy": 2,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "Dùng \"tự mã hóa\" không chính xác"
+    }
+   },
+   "best": "9b"
+  },
+  {
+   "key": [
+    "bert",
+    3,
+    5
+   ],
+   "mapping": {
+    "A": "2b",
+    "B": "4b",
+    "C": "google",
+    "D": "9b"
+   },
+   "scores": {
+    "2b": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "Số liệu và trích dẫn không chính xác, thuật ngữ không đúng"
+    },
+    "4b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Đúng nghĩa, thuật ngữ phù hợp, ngôn ngữ tự nhiên"
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "Những lỗi thuật ngữ và ngữ pháp"
+    },
+    "9b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Đúng nghĩa, thuật ngữ chuẩn, ngôn ngữ mượt"
+    }
+   },
+   "best": "4b"
+  },
+  {
+   "key": [
+    "bert",
+    3,
+    8
+   ],
+   "mapping": {
+    "A": "2b",
+    "B": "9b",
+    "C": "4b",
+    "D": "google"
+   },
+   "scores": {
+    "2b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Đúng nghĩa, nhưng “encoder” dịch thành “mô tả” hơi sai; thuật ngữ “Transformer” giữ nguyên. Cú pháp hơi lặp, nhưng vẫn tự nhiên."
+    },
+    "9b": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Dùng “bộ mã hóa” chính xác, giữ nguyên “Transformer”. Câu văn mạch lạc, không lỗi ngữ pháp."
+    },
+    "4b": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Tương tự B, nhưng “mô tả” thay vì “mô tả” hơi lặp. Cách diễn đạt tốt."
+    },
+    "google": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Cách diễn đạt trôi chảy, thuật ngữ đúng. Chỉ có một lỗi nhỏ: “kiến trúc mô hình” lặp."
+    }
+   },
+   "best": "9b"
+  },
+  {
+   "key": [
+    "bert",
+    3,
+    9
+   ],
+   "mapping": {
+    "A": "9b",
+    "B": "google",
+    "C": "2b",
+    "D": "4b"
+   },
+   "scores": {
+    "9b": {
+     "adequacy": 5,
+     "terminology": 4,
+     "fluency": 5,
+     "note": "đúng nghĩa, thuật ngữ chuẩn, ngữ pháp tốt"
+    },
+    "google": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "số liệu đúng nhưng “Total Parameters” chưa dịch"
+    },
+    "2b": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "sai thuật ngữ “attention” và “thông số”"
+    },
+    "4b": {
+     "adequacy": 5,
+     "terminology": 4,
+     "fluency": 5,
+     "note": "đúng nghĩa, thuật ngữ chuẩn, ngữ pháp tốt"
+    }
+   },
+   "best": "9b"
+  },
+  {
+   "key": [
+    "datasentinel",
+    9,
+    0
+   ],
+   "mapping": {
+    "A": "9b",
+    "B": "2b",
+    "C": "4b",
+    "D": "google"
+   },
+   "scores": {
+    "9b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Đúng nghĩa, thuật ngữ hơi lỏng"
+    },
+    "2b": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "Nhiều lỗi ngữ pháp, thuật ngữ không chuẩn"
+    },
+    "4b": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "Cũng có lỗi về thuật ngữ và ngữ pháp"
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "Cách diễn đạt không chuẩn"
+    }
+   },
+   "best": "9b"
+  },
+  {
+   "key": [
+    "datasentinel",
+    9,
+    18
+   ],
+   "mapping": {
+    "A": "9b",
+    "B": "4b",
+    "C": "google",
+    "D": "2b"
+   },
+   "scores": {
+    "9b": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "Đúng ý nhưng có lỗi thuật ngữ và ngữ pháp"
+    },
+    "4b": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Dịch chính xác, thuật ngữ đúng, ngữ pháp tốt"
+    },
+    "google": {
+     "adequacy": 2,
+     "terminology": 2,
+     "fluency": 2,
+     "note": "Lỗi nhiều về thuật ngữ và ngữ pháp"
+    },
+    "2b": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "Đúng ý nhưng có lỗi ngữ pháp"
+    }
+   },
+   "best": "4b"
+  },
+  {
+   "key": [
+    "datasentinel",
+    9,
+    29
+   ],
+   "mapping": {
+    "A": "2b",
+    "B": "9b",
+    "C": "google",
+    "D": "4b"
+   },
+   "scores": {
+    "2b": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "Chưa giữ nguyên thuật ngữ 'Combined Attack', dùng 'tấn công kết hợp' nhưng không rõ ràng; 'nhãn thực nghiệm' sai ngữ cảnh."
+    },
+    "9b": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Dùng đúng 'Combined Attack', 'epoch', 'learning rate', ngữ pháp tốt."
+    },
+    "google": {
+     "adequacy": 2,
+     "terminology": 2,
+     "fluency": 2,
+     "note": "Sử dụng từ vựng không chuẩn, lỗi ngữ pháp, 'kỷ nguyên' sai."
+    },
+    "4b": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Tương tự B, ngữ pháp ổn."
+    }
+   },
+   "best": "9b"
+  },
+  {
+   "key": [
+    "datasentinel",
+    9,
+    30
+   ],
+   "mapping": {
+    "A": "2b",
+    "B": "9b",
+    "C": "4b",
+    "D": "google"
+   },
+   "scores": {
+    "2b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Đúng nghĩa, nhưng “được tiêm” hơi lạ"
+    },
+    "9b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Cũng đúng, nhưng “datasentinel” viết hoa sai"
+    },
+    "4b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Tương tự B, “Datasentinel” viết hoa sai"
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "Những lỗi ngữ pháp và “NLLLD” sai chính tả"
+    }
+   },
+   "best": "2b"
+  },
+  {
+   "key": [
+    "datasentinel",
+    9,
+    33
+   ],
+   "mapping": {
+    "A": "google",
+    "B": "2b",
+    "C": "4b",
+    "D": "9b"
+   },
+   "scores": {
+    "google": {
+     "adequacy": 2,
+     "terminology": 2,
+     "fluency": 2,
+     "note": "dịch sai nhiều, thuật ngữ không đúng, ngữ pháp kém"
+    },
+    "2b": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "đúng ý nhưng vẫn có lỗi ngữ pháp và thuật ngữ"
+    },
+    "4b": {
+     "adequacy": 2,
+     "terminology": 2,
+     "fluency": 2,
+     "note": "có nhiều sai sót, thuật ngữ không chuẩn"
+    },
+    "9b": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "độ chính xác tương đương B, nhưng ngữ pháp hơi trôi chảy hơn"
+    }
+   },
+   "best": "2b"
+  },
+  {
+   "key": [
+    "datasentinel",
+    9,
+    34
+   ],
+   "mapping": {
+    "A": "google",
+    "B": "9b",
+    "C": "2b",
+    "D": "4b"
+   },
+   "scores": {
+    "google": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": ""
+    },
+    "9b": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": ""
+    },
+    "2b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": ""
+    },
+    "4b": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": ""
+    }
+   },
+   "best": "google"
+  },
+  {
+   "key": [
+    "roformer-rope",
+    4,
+    1
+   ],
+   "mapping": {
+    "A": "9b",
+    "B": "google",
+    "C": "2b",
+    "D": "4b"
+   },
+   "scores": {
+    "9b": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Đúng nghĩa, giữ nguyên thuật ngữ, ngữ pháp tốt"
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "Sử dụng “mã thông báo” thay vì token, hơi lặp từ"
+    },
+    "2b": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Cách diễn đạt tự nhiên, giữ nguyên thuật ngữ"
+    }
+   },
+   "best": "2b"
+  },
+  {
+   "key": [
+    "roformer-rope",
+    4,
+    2
+   ],
+   "mapping": {
+    "A": "9b",
+    "B": "google",
+    "C": "4b",
+    "D": "2b"
+   },
+   "scores": {
+    "9b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Đúng nghĩa, thuật ngữ hơi lỏng, ngữ pháp tốt"
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "Nhiều lỗi thuật ngữ, ngữ pháp không mượt"
+    },
+    "4b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Đúng nghĩa, thuật ngữ hợp lý, ngữ pháp tốt"
+    },
+    "2b": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "Thuật ngữ và ngữ pháp chưa ổn"
+    }
+   },
+   "best": "9b"
+  },
+  {
+   "key": [
+    "roformer-rope",
+    4,
+    4
+   ],
+   "mapping": {
+    "A": "9b",
+    "B": "2b",
+    "C": "4b",
+    "D": "google"
+   },
+   "scores": {
+    "9b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "đúng nghĩa, thuật ngữ phù hợp, ngữ pháp tốt"
+    },
+    "2b": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "một số lỗi ngữ pháp và diễn đạt"
+    },
+    "4b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "đúng nghĩa, thuật ngữ phù hợp, ngữ pháp tốt"
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "một số lỗi ngữ pháp và diễn đạt"
+    }
+   },
+   "best": "9b"
+  },
+  {
+   "key": [
+    "roformer-rope",
+    4,
+    6
+   ],
+   "mapping": {
+    "A": "google",
+    "B": "4b",
+    "C": "2b",
+    "D": "9b"
+   },
+   "scores": {
+    "google": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "Mô tả khá đúng nhưng có lỗi về “mã thông báo” và “tích bên trong” không chính xác"
+    },
+    "4b": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Dùng thuật ngữ chuẩn, ngữ pháp tốt, giữ nguyên các biến"
+    },
+    "2b": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "Cách diễn đạt hơi mơ hồ, “tích trong” không rõ ràng"
+    },
+    "9b": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Cách dịch chuẩn, ngữ pháp đúng, giữ nguyên các biến"
+    }
+   },
+   "best": "4b"
+  },
+  {
+   "key": [
+    "roformer-rope",
+    4,
+    9
+   ],
+   "mapping": {
+    "A": "2b",
+    "B": "google",
+    "C": "9b",
+    "D": "4b"
+   },
+   "scores": {
+    "2b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "đúng nghĩa, thuật ngữ hơi lỏng"
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "sai thuật ngữ, ngữ pháp"
+    },
+    "9b": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "có lỗi ngữ pháp, thuật ngữ"
+    },
+    "4b": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "có lỗi ngữ pháp, thuật ngữ"
+    }
+   },
+   "best": "2b"
+  },
+  {
+   "key": [
+    "roformer-rope",
+    4,
+    10
+   ],
+   "mapping": {
+    "A": "9b",
+    "B": "2b",
+    "C": "4b",
+    "D": "google"
+   },
+   "scores": {
+    "9b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Đúng nghĩa, thuật ngữ phù hợp, ngữ pháp tốt"
+    },
+    "2b": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "Thiếu “phần thực” và “được đặt sẵn” hơi lạc đề"
+    },
+    "4b": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Cách diễn đạt tự nhiên, thuật ngữ chính xác"
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "Câu “đặt trước khác 0” hơi lộn xộn"
+    }
+   },
+   "best": "4b"
+  }
+ ]
+}

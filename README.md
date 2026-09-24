@@ -1,0 +1,237 @@
+# VietPaper – Dịch bài báo PDF → Tiếng Việt (song song, giữ bố cục)
+
+## Cài đặt & chạy
+Yêu cầu: macOS/Linux, Python ≥ 3.10.
+```
+./run.sh          # lần đầu tự tạo .venv và cài thư viện, sau đó mở http://127.0.0.1:8000
+```
+Chạy nền và bật/tắt bằng `restart.sh` (log ghi vào `app.log`):
+```
+./restart.sh            # khởi động lại (sau khi sửa code thì chạy lệnh này)
+./restart.sh start|stop|status|logs
+```
+Thử nhanh với file mẫu trong `samples/` (`sample_text.pdf`, `sample_scan.pdf` là bản scan).
+
+Mã nguồn: `app.py` (toàn bộ phía server), `store.py` (lưu tài liệu xuống đĩa), `static/index.html` (bố cục + CSS), `static/app.js` (giao diện). File tĩnh được trả kèm `Cache-Control: no-cache` nên sửa xong tải lại trang là thấy ngay.
+
+## LLM hỗ trợ (mọi API tương thích OpenAI)
+| Nhà cung cấp | Base URL | Ghi chú |
+|---|---|---|
+| Ollama | http://localhost:11434/v1 | `ollama pull qwen2.5:7b` |
+| llama.cpp | http://localhost:8080/v1 | `llama-server -m model.gguf -c 8192` |
+| LM Studio | http://localhost:1234/v1 | |
+| OpenRouter | https://openrouter.ai/api/v1 | cần API key |
+| OpenAI | https://api.openai.com/v1 | cần API key |
+
+## OCR (PDF scan)
+| Engine | Loại | Ghi chú |
+|---|---|---|
+| **RapidOCR** (mặc định) | local, miễn phí | Model PP-OCR của PaddleOCR chạy bằng ONNX, tự tải ~15MB lần đầu. Ngôn ngữ: `eng`, `ch`, `latin`, `japan`, `korean`… Dòng chữ được gom thành đoạn theo vùng của **PP-DocLayoutV3** (ONNX, tự tải ~130MB vào `models/layout/` lần đầu): đúng đoạn, đúng thứ tự đọc, bỏ qua hình/công thức/chữ dọc bên lề, bảng thì dịch từng ô |
+| Tesseract | local, miễn phí | `brew install tesseract tesseract-lang`, ngôn ngữ `eng`, `eng+vie`… Dòng chữ cũng được gom theo PP-DocLayout |
+| OCR.space | API miễn phí | Đăng ký key miễn phí tại ocr.space (key demo `helloworld` bị giới hạn) |
+| Vision LLM | local hoặc API | Mọi API OpenAI-compatible có vision: Ollama, llama.cpp, LM Studio, OpenRouter… PP-DocLayout + RapidOCR định vị đoạn, VLM đọc lại chữ từng vùng → tốt với scan xấu. Prompt tự chọn theo tên model: `PaddleOCR-VL` → `OCR:`, `glm-ocr` → `Text Recognition:`. Riêng **Unlimited-OCR** gửi cả trang (150 dpi) một lần; PP-DocLayout làm "trọng tài": bỏ dòng không khớp vùng nào, vùng bị sót thì đọc bù bằng RapidOCR |
+| Endpoint tuỳ chỉnh | local hoặc API | Server OCR riêng (PaddleOCR, Surya, docTR…). Xem `examples/custom_ocr_server.py` |
+
+**Hợp đồng endpoint tuỳ chỉnh:** `POST` multipart `file=<page.png>`, `lang=<mã>` (header `Authorization: Bearer <key>` nếu có) → trả `{"lines": [{"bbox": [x0,y0,x1,y1], "text": "..."}]}` theo pixel ảnh (hoặc `"box": [[x,y]×4]` kiểu PaddleOCR).
+
+**Số vùng gửi cùng lúc** (Vision LLM): Ollama / API cloud để 4; llama-server chạy `-np 1` (vd. server TUF) để 1 — gửi nhiều hơn chỉ phải xếp hàng và dễ quá thời gian chờ. Chọn "Nhà cung cấp" sẽ tự điền giá trị hợp lý. Con số này nhân với "Số trang dịch song song".
+
+**Model layout PP-DocLayoutV3** được ghim đúng commit và kiểm tra SHA-256 khi tải; tải lỗi (mất mạng) thì app gộp dòng theo khoảng cách như cũ và 10 phút sau mới thử tải lại.
+
+**Model local có chế độ suy nghĩ** (Qwen3/3.5, DeepSeek-R1…): giữ bật "Tắt thinking cho model local", nếu không mỗi trang có thể mất hàng chục phút.
+
+Chế độ OCR: **Tự động** (OCR trang không có lớp chữ, **hoặc lớp chữ đọc ra rác** — PDF cũ có font thiếu bảng mã, trên 25% ký tự là ký tự thay thế/vùng dùng riêng), **Luôn OCR**, **Tắt**.
+
+## Cách app gửi request cho model
+Đo trên qwen3.5 (19/09/2026): tiếng Anh ~4,7 ký tự/token, tiếng Việt ~3,5, chữ Hán ~1,7; prompt hệ thống ~370 token. Prompt dài hơn ngữ cảnh thì **Ollama cắt âm thầm** (gửi ~5.500 token, model chỉ nhận 2.050). Vì vậy app **đo tài liệu → hỏi server → chọn cách gửi**:
+
+**Hỏi server một lần cho mỗi (URL, model)** — in ra log khi dịch trang đầu:
+| Server | Ngữ cảnh lấy ở đâu | Số lượt song song |
+|---|---|---|
+| Ollama | ngữ cảnh tối đa của model (`/api/show`), app tự đặt `num_ctx` qua `/api/chat` | 1 |
+| llama.cpp | `n_ctx` ở `/props`; chế độ router (tự nạp model, như server TUF) trả 0 → lấy `--ctx-size` của preset trong `/v1/models` | `total_slots` / `--parallel` |
+| OpenRouter, OpenAI, LM Studio… | `context_length` của model trong `/v1/models` nếu server có trả, không thì 32768 | 4 |
+
+**Chọn cách gửi:**
+- `num_ctx` (chỉ Ollama): bậc nhỏ nhất đủ cho trang nặng nhất của tài liệu, không vượt ngữ cảnh tối đa của model; cố định cho cả tài liệu vì đổi giữa chừng là Ollama nạp lại model (~8 giây). Đặt tay bằng ô `num_ctx` nếu muốn. Thêm ngữ cảnh gần như không tốn RAM với qwen3.5 (4096 → 16384: 5,06 → 5,38 GB).
+- Lô = **cả trang nếu vừa 85% ngữ cảnh**, tối đa 40 đoạn; nếu không thì cắt theo token ước lượng (chữ gốc + bản dịch dự kiến + khung JSON mỗi đoạn). Đoạn trùng chữ (nhãn hàng lặp lại trong bảng) chỉ dịch một lần — trang 155 ô của DataSentinel còn 16 câu.
+- **Gộp 2–3 trang vào một lượt gọi khi ngữ cảnh còn trống** (`Gộp trang mỗi lượt gọi`, mặc định *Tự động*, tối đa 3): một nhóm = đúng **một** lượt gọi, trang sau chỉ được thêm khi cả nhóm vẫn nằm trong 85% ngữ cảnh **và** trong 40 đoạn. Đo trên `bert.pdf`: ngữ cảnh 4096 → 1 trang/lượt, 8192 → 2 trang, 16384 → 3 trang. Được gì: câu bị ngắt sang trang sau được dịch liền mạch trong cùng một lượt (không phải gửi kèm câu "prev"/"next" nữa), đầu bảng lặp lại ở trang sau chỉ dịch một lần, và prompt hệ thống chỉ đọc một lần cho cả nhóm. Trang phải OCR thì dừng nhóm ở đó (OCR 30–70 giây/trang, gộp vào là phải chờ cả nhóm mới thấy kết quả).
+- **Trần token đầu ra** cho mỗi lượt (`num_predict` / `max_tokens`) ≈ 1,6 × độ dài dự kiến: model nhỏ không lặp vô hạn, API tính tiền không sinh tràn.
+- **Không gửi quá số slot** của server: llama.cpp/Ollama một slot thì request thứ hai chỉ nằm xếp hàng.
+- **Phần đầu prompt giữ nguyên cho cả tài liệu** (prompt hệ thống + tên bài + bảng thuật ngữ) để server tái dùng KV cache.
+- **Phát hiện prompt bị cắt**: server báo nhận ít hơn 80% số token đã gửi → tự chia đôi lô rồi gửi lại.
+- Với Ollama còn ép đầu ra đúng khung JSON (`format` = JSON schema) nên không còn cảnh JSON hỏng phải dịch lại từng đoạn; đo được là không làm chậm.
+- Số token thật của từng trang hiện khi di chuột lên ảnh trang dịch.
+
+## Thuật ngữ & độ dài
+- **Bảng thuật ngữ tự lập** (bật sẵn): trước khi dịch trang đầu, app rút các thuật ngữ của bài rồi hỏi LLM **một lượt** để chốt cách dịch từng thuật ngữ — hoặc giữ nguyên tiếng Anh nếu đó là thói quen học thuật. Bảng này nằm trong phần đầu prompt của mọi lượt gọi, nên cả bài dùng thuật ngữ như nhau. Bảng bạn tự nhập luôn được ưu tiên.
+  - **Rút thuật ngữ** (`term_candidates`, không gọi LLM, ~0,2–0,5 giây/bài): đọc thân bài (bỏ tên tác giả trước Abstract, tài liệu tham khảo — phụ lục sau đó vẫn tính, chữ trong hình/bảng, ký hiệu toán), rồi lấy: chữ viết tắt bài tự định nghĩa kèm dạng đầy đủ (`Rotary Position Embedding (RoPE)`, thuật toán Schwartz–Hearst), tên riêng/ký hiệu (`GQA`, `FlashAttention-2`, `A100`), cụm 2–3 từ lặp ≥ 3 lần (`multi-head attention`, `target data`; bỏ mảnh của cụm dài hơn như `scaled dot-product`), và từ đơn không phổ thông. Gộp số ít/số nhiều và hoa/thường; bỏ tên người (đứng trước *et al*).
+  - **LLM xếp loại và dịch** (`build_glossary`, một lượt): 40 ứng viên đầu, mỗi cái kèm một câu của bài chứa nó, cùng tên bài và đầu abstract. Với từng ứng viên LLM trả `kind` — `name` (tên riêng/viết tắt, giữ tiếng Anh), `term` (khái niệm, kèm cách dịch), `other` (không phải thuật ngữ, bỏ) — theo schema JSON ép bằng llama.cpp/Ollama. Loại phải là trường riêng: khi chỉ có một trường "text", model `4b` lẫn "giữ ứng viên" với "giữ nguyên tiếng Anh" và chép lại nguyên văn mọi ứng viên. Có câu ngữ cảnh thì dịch đúng nghĩa trong bài hơn (`position embedding` → "nhúng vị trí" thay vì "đóng gói vị trí", `dot products` → "tích vô hướng" thay vì "sản phẩm tích vô hướng").
+  - **Kiểm lại câu trả lời của LLM** (`gloss_rows`): tên riêng/viết tắt luôn giữ nguyên dù LLM lỡ dịch, dạng đầy đủ ghi kèm viết tắt (`nhúng vị trí xoay (RoPE)`), bỏ lời giải thích trong ngoặc, bản dịch dài bất thường và bản "dịch" thành một thuật ngữ tiếng Anh khác. Hai thuật ngữ khác nhau bị dịch cùng một chữ thì hàng sau hiện trên bảng nhưng **bỏ tích Dùng** — để nguyên thì bảng sẽ xoá mất khác biệt giữa hai khái niệm.
+  - **Gợi ý khác & học từ bạn**: dưới bảng là các chip *Gợi ý khác* — ứng viên LLM không chọn và ứng viên hạng 41–80 (không gửi LLM) — bấm để thêm vào bảng (mặc định giữ nguyên tiếng Anh). Mỗi hàng có nút ✕ để xoá. Khi bấm **Lưu bảng**, app so với bảng trước đó và nhớ vào `data/user_terms.json` cho **mọi tài liệu sau**: thuật ngữ bị xoá thì không gợi ý nữa (hiện ở *Đang ẩn vì bạn từng xoá*, bấm ↺ để bỏ ẩn); thuật ngữ bạn sửa cách dịch, đổi dịch↔giữ nguyên hay tự thêm thì được dùng đúng cách đó, và được thêm vào bảng của bài nào có thuật ngữ ấy (≥ 2 lần) dù LLM không chọn. Bỏ tích *Dùng* chỉ có tác dụng trong bài đó. Bench không dùng file này (đo thuật toán, không đo sở thích của bạn).
+  - **Model lập bảng riêng** (Cài đặt → *4. Lập bảng thuật ngữ*, mặc định dùng đúng model dịch): chỉ một lượt gọi cho mỗi tài liệu, nên có thể dùng model cloud, vd. OpenRouter `nvidia/nemotron-3-ultra-550b-a55b:free`. Với model suy luận trên OpenRouter app tắt phần suy nghĩ cho lượt này (225 → 13 giây, lọc/dịch vẫn tốt). OpenRouter hay trả "quá tải" với model free → thử lại một lần, rồi lùi về model dịch. Muốn dùng model free phải cho phép trong https://openrouter.ai/settings/privacy (bỏ yêu cầu ZDR) và guardrail của workspace — tức chấp nhận nhà cung cấp có thể lưu/dùng nội dung gửi đi.
+  - **Đo** bằng `scripts/bench_glossary.py` trên 6 bài có đáp án tay (`bench/glossary_gold.json`; 4 bài dev để chỉnh luật, 2 bài test giữ riêng; `--rescore` chấm lại mọi lượt đã lưu theo đáp án hiện tại). Chỉ phần code, 40 thuật ngữ đầu, so với cách cũ (regex cụm viết hoa + đếm từ): độ chính xác dev 55 → 85%, test 51 → 80%; độ phủ dev 34 → 74%, test 26 → 81%. Cả bảng (code + LLM), 21/09/2026:
+
+    | Model lập bảng | Độ chính xác dev / test | Độ phủ dev / test | Giây/bài |
+    |---|---|---|---|
+    | `4b` (TUF) | 91 / 86% | 65 / 77% | ~29 |
+    | Nemotron Ultra (OpenRouter free) | 90 / 82% | 63 / 79% | ~40 (dao động theo hàng chờ) |
+    | Nemotron Ultra, 150 ứng viên theo ngưỡng nới, bảng 60 hàng | 84 / 77% | 75 / 96% | ~80 |
+
+    Đã thử và **không** giữ lại (21/09/2026): gửi nhiều ứng viên hơn (đuôi danh sách 57–88% rác, model lấp bảng bằng chúng); xếp hạng bằng hồi quy logistic học từ 4 bài dev với đặc trưng tên bài/abstract/tiêu đề mục/in nghiêng/mẫu câu định nghĩa/độ rải/độ phổ biến tiếng Anh (`scripts/fit_term_ranker.py`, AUC dev 0,85 → 0,85, test 0,86 → 0,93 mà độ phủ top 40 không tăng); cắt ứng viên theo xác suất của mô hình đó (4b: 83/59% so với 91/65% ở dev). Script vẫn giữ để thử lại khi có thêm nhãn, vd. từ `data/user_terms.json`. Model mạnh không chọn thuật ngữ tốt hơn `4b` một khi prompt tách trường `kind` và có câu ngữ cảnh; nó chủ yếu dịch tự nhiên hơn (`secret key` → "khóa bí mật" thay vì "mã bí mật", `backward pass` → "lan truyền ngược"). Trần độ phủ nằm ở số ứng viên: 40 ứng viên đầu chỉ chứa 74/81% đáp án; gửi nhiều hơn thì model lấp bảng bằng cụm phổ thông. Đáp án là của một người chọn — hai người chọn "đâu là thuật ngữ" thường chỉ trùng 70–85%, nên đừng đọc các con số này chính xác tới từng điểm.
+  - Vì sao cần: cùng một model, cùng một trang, hai lần chạy cho ra "Chúng ta gọi **attention**…" và "Chúng ta gọi **chú ý**…". Thử tắt phạt lặp (`presence_penalty`) không đổi được điều đó — chỉ có bảng thuật ngữ mới chốt được.
+  - **Xem và sửa bảng ngay trên giao diện** (nút 📒 **Thuật ngữ**): bảng được lập ngay khi mở file, mỗi thuật ngữ có thể chọn **dịch** (sửa được cách dịch) hay **giữ nguyên tiếng Anh**, hoặc bỏ tích *Dùng* để không đưa vào prompt. Bấm **Lưu bảng** rồi dịch; trang đã dịch trước đó cần bấm "↻ Dịch lại" để áp bảng mới. Hàng "giữ nguyên" vẫn nằm trong prompt (ghi `term = term`) để model không tự dịch thuật ngữ đó.
+- **Tên bài** đi kèm prompt dịch, bảng thuật ngữ và phần trò chuyện. Lấy từ metadata, không có thì lấy dòng chữ to nhất trang đầu — **bỏ chữ xoay dọc ở lề**: con dấu `arXiv:1810.04805v2 [cs.CL] 24 May 2019` in to hơn cả tiêu đề nên trước đây cả 10 bài trong `data/` đều lấy nhầm con dấu làm tên bài. Lấy cả dòng và gộp các dòng liền nhau cùng cỡ chữ lớn nhất (tiêu đề dài nằm trên hai dòng; tiêu đề in hoa nhỏ có chữ cái đầu là span riêng → lấy span sẽ ra `RANSFORMER`). Sau khi sửa: 10/10 bài ra đúng tên.
+- Prompt quy ước sẵn: "we" của nhóm tác giả dịch là **"chúng tôi"**; câu phải đủ ngữ pháp, rút gọn bằng cách chọn từ ngắn chứ không bỏ chủ ngữ hay từ nối.
+- `Độ dài tối đa (× bản gốc)` (mặc định 1.3): gửi `max_len` cho từng đoạn; đoạn nào vẫn dài quá sẽ được LLM rút gọn thêm một lượt. Riêng **ô bảng** không cho dài hơn bản gốc (ô hẹp, hai bên đã có ô khác nên không nới được) và được nhắc dùng cách viết ngắn nhất hoặc giữ viết tắt tiếng Anh.
+- Google Translate: dùng làm bộ dịch chính, hoặc tự động thay thế khi LLM lỗi kết nối hoặc bỏ sót đoạn.
+
+## Model local đã thử (MacBook M2 16GB, Ollama, 17/09/2026)
+Dịch 5 đoạn văn học thuật:
+| Model | Thời gian | Nhận xét |
+|---|---|---|
+| **qwen3.5:latest (9B, tắt thinking)** ✅ | ~25 giây | Chính xác nhất, gọn (độ dài ≈ bản gốc), giữ thuật ngữ và trích dẫn |
+| qwen3.5:4b-mlx | ~16 giây | Nhanh hơn nhưng dịch sai thuật ngữ nhiều hơn |
+| translategemma:12b | ~130 giây | Văn mượt nhưng dài hơn 20–40%, dịch sai "random seeds" |
+| translategemma:4b | ~43 giây | Mất chữ, dịch sai "overparameterized", bỏ "zero-shot" |
+| HY-MT1.5-7B | ~200 giây | Dài hơn ~50%, sai nghĩa ("linearly" → "cấp số nhân"), lẫn chữ Trung |
+
+OCR trang scan chất lượng thấp (72 / 60 dpi, JPEG nén mạnh):
+| Engine | Độ khớp 72dpi | Độ khớp 60dpi | Thời gian |
+|---|---|---|---|
+| RapidOCR | 88,8% | 60,6% | 1–3 giây |
+| Vision LLM qwen3.5:latest ✅ | 99,9% | 93,1% | 15–70 giây |
+| Vision LLM glm-ocr | 99,8% | 84,9% | 30–45 giây |
+
+→ Mặc định: **qwen3.5:latest** cho dịch; **RapidOCR + PP-DocLayout** cho OCR; khi chọn Vision LLM thì mặc định **PaddleOCR-VL-1.6** (`ollama pull hf.co/PaddlePaddle/PaddleOCR-VL-1.6-GGUF`) — đo 18/09/2026 trên PDF học thuật: đúng 98,4%, nhanh hơn GLM-OCR ~2–3 lần.
+
+## Server llama.cpp TUF (GTX 1650 Ti 4GB, 15GB RAM) – 17/09/2026
+Router `llm-router` (user service), cấu hình `~/.config/llama/models.ini`. Đã thêm preset `2b-vision`, `9b-vision` (có mmproj).
+
+Dịch 5 đoạn học thuật:
+| Preset | Thời gian | Nhận xét |
+|---|---|---|
+| **9b-uncensored** (Qwen3.5-9B Q4_K_M) ✅ | ~35 giây | Chính xác nhất trong mọi model đã thử, đúng thuật ngữ, độ dài ≈ bản gốc |
+| gpt-oss (20B MoE) | ~35 giây | Tốt, gọn nhưng lẫn nhiều từ tiếng Anh (downstream, fine-tuning, edge), vài lỗi nhỏ |
+| 2b (Qwen3.5-2B distill) | ~17 giây | Sai thuật ngữ (zero-shot → "không giám sát", baseline → "cơ sở dữ liệu") |
+| phi4 (Phi-4-mini) | ~9 giây | Rất kém, sai nghĩa nhiều |
+
+OCR trang scan xấu — đo lại 20/09/2026 bằng `scripts/bench_ocr.py`, đọc **từng vùng chữ** (cách app dùng thật), trang 3–6 của `attention.pdf`:
+
+| Preset | Khớp 72 dpi | Khớp 60 dpi | Giây/vùng | VRAM |
+|---|---:|---:|---:|---:|
+| **paddleocr-vl** (ngl=99) ✅ | **97,0%** | 95,6% | 1,2–1,4 | ~2,0 GB |
+| glm-ocr (ngl=99) | 95,6% | 95,7% | **0,8** | ~2,2 GB |
+| 9b-vision (ngl=8, mốc cũ) | 99,7% | — | **147** | ~3,2 GB |
+
+Điểm mấu chốt: hai model OCR chuyên dụng đủ nhỏ để đẩy **hết** lên GPU 4 GB (`ngl=99`), còn `9b-vision` chỉ nhét được 8 lớp nên chạy phần lớn trên CPU — **147 giây/vùng xuống còn 1,2 giây**. Một trang scan ~10 vùng: 25 phút → khoảng 12 giây. Gọi từ Mac qua Tailscale không chậm thêm (đo 0,5 giây/vùng khi model đã nóng).
+
+→ PDF có lớp chữ: chọn preset **TUF**, model **`4b`** (xem mục dưới). PDF scan: `paddleocr-vl`, đọc từng vùng.
+Chi tiết cách quét tham số và báo cáo đầy đủ: [docs/ocr-tuf.md](docs/ocr-tuf.md), kết quả nằm ở `~/vietpaper-ocr-bench/REPORT.md` trên TUF.
+
+## Bench chất lượng dịch: Google Translate vs 2b / 4b / 9b (TUF) – 21/09/2026
+```
+.venv/bin/python scripts/bench_quality.py --systems google,2b,4b,9b   # dịch 5 trang bằng cả 4 hệ thống
+.venv/bin/python scripts/judge_quality.py                             # trọng tài gpt-oss chấm mù 23 đoạn
+.venv/bin/python scripts/quality_report.py && open bench/quality/report.html   # người chấm mù, đối chiếu
+```
+5 trang trong `data/` (Attention tr.4, BERT tr.3, RoFormer tr.4, DataSentinel tr.9 và tr.18) — có văn xuôi, công thức giữa câu và bảng ô hẹp. Mọi hệ thống chạy cùng điều kiện: **bảng thuật ngữ đóng băng** (lập một lần bằng `9b`, ghi ở `bench/quality/glossary.json`), `google_fallback=False` để đoạn bỏ sót hiện ra là bỏ sót, `temperature=0`, không gộp trang.
+
+| Hệ thống | Giây/trang | tok/s | Đoạn bỏ sót | Mất công thức | Đúng thuật ngữ | Điểm nghĩa (trọng tài) |
+|---|---:|---:|---:|---:|---:|---:|
+| Google Translate | **2,8** | – | 0 | 0 | 318/424 | 2,97 |
+| 2b | 238 | 59,3 | **8** | **6** | 276/366 | 3,32 |
+| **4b** ✅ | **32,5** | 30,5 | 0 | 0 | 375/424 | 3,41 |
+| 9b | 135 | 8,0 | 0 | 0 | 385/424 | **3,49** |
+
+**Chọn `4b`.** So từng đoạn thì 4b và 9b **hoà 16/22 đoạn** (4b thắng 2, thua 4) — chênh lệch nằm trong sai số của 23 đoạn, trong khi 4b nhanh gấp **4,2 lần**. Lý do tốc độ không phải kích thước model mà là VRAM: `4b` nằm **trọn** trên GPU 4 GB (`ngl=99`, 30,5 tok/s), `9b` chỉ nhét được 19/49 lớp (`ngl=19`, 8,0 tok/s) — đúng hiện tượng đã gặp với OCR ở mục trên.
+
+**Google Translate kém hơn, nhưng bằng chứng là cột thuật ngữ chứ không phải điểm trọng tài.** Nó giữ đúng cách dịch đã chốt **318/424** lần, so với 375 (4b) và 385 (9b) — đây là phép đếm chuỗi, xác định, trên 424 lần xuất hiện, không phải ý kiến của model nào. Theo điểm trọng tài thì Google thua 9–14 đoạn và chỉ thắng 3–4, nhưng với 23 đoạn chỉ có cặp *google vs 9b* đạt ý nghĩa thống kê (kiểm định dấu p = 0,013); *vs 4b* p = 0,118 và *vs 2b* p = 0,146 mới là xu hướng. Google vẫn nhanh nhất, không bao giờ bỏ sót đoạn và giữ nguyên 100% `{vN}`, nhưng dịch sạch thuật ngữ thành nghĩa đen: *"Scaled Dot-Product Attention"* → **"Sự chú ý đến sản phẩm chấm theo tỷ lệ"**, *dimension* → *"thứ nguyên"*. Cả 2b/4b/9b đều giữ nguyên thuật ngữ tiếng Anh. Google cũng không đọc được bảng thuật ngữ (chỉ LLM mới có), nên cột "đúng thuật ngữ" của nó là trùng hợp chứ không phải tuân thủ. → giữ đúng vai trò hiện tại: bộ dịch dự phòng khi LLM lỗi.
+
+**Preset `2b` đang không dùng được** (lỗi cấu hình server, không phải model dở): đây là bản *reasoning-distilled*, **bỏ qua cả `reasoning_effort=none` lẫn `chat_template_kwargs.enable_thinking=false`** nên luôn suy nghĩ; llama.cpp để phần suy nghĩ ở `reasoning_content`, còn `content` rỗng. Trần token đầu ra của app (≈1,6 × độ dài bản dịch) bị phần suy nghĩ ăn sạch → app báo "LLM không trả về JSON" cho gần như mọi đoạn: đo lần đầu **2/14 đoạn**. Bench phải nới trần ×4 mới lên 10/14, và vẫn mất 6 công thức, bỏ sót 8 đoạn, 238 giây/trang. Sửa gốc: thêm `reasoning-budget = 0` vào khối `[2b]` của `~/.config/llama/models.ini` trên TUF rồi `systemctl --user restart llm-router`, sau đó chạy lại bench với `--think-scale 1`. 4b và 9b **không** dính lỗi này.
+
+Chấm nghĩa: trọng tài là **`gpt-oss`** (20B, khác họ với Qwen 2b/4b/9b nên không thiên vị), chấm mù A/B/C/D với hoán vị riêng từng đoạn, thang 1–5 trên 3 trục (nghĩa / thuật ngữ / tự nhiên), chỉ chấm đoạn mà **cả 4 hệ thống** đều có bản dịch.
+
+**Trọng tài này không đủ tinh để xếp hạng ba model** — `judge_quality.py` tự in ra phần chẩn đoán đó: nhãn A/B/C/D đã xáo ngẫu nhiên mà điểm trung bình của bốn nhãn vẫn lệch nhau **0,36 điểm**, trong khi khoảng cách 4b↔9b chỉ là 0,08. Tức là nhiễu vị trí của chính trọng tài lớn gấp bốn lần thứ cần đo. Nó cũng nén điểm vào khoảng 3–4 (chưa lần nào cho 5đ ở trục thuật ngữ) và để 17/23 đoạn đồng hạng nhất. Kết luận rút ra được từ nó chỉ là **"4b và 9b không phân biệt được"** (p = 0,69), đúng thứ cần cho quyết định trên. Muốn xếp hạng chắc chắn hơn: chấm tay trên `bench/quality/report.html`, dùng trọng tài mạnh hơn qua OpenRouter, hoặc chấm mỗi đoạn hai lượt với thứ tự đảo rồi lấy trung bình.
+
+## Đọc đối chiếu: bôi đen, tô vàng, hỏi LLM
+Trên mỗi ảnh trang có một **lớp chữ trong suốt** dựng từ chính lớp chữ của PDF (bản gốc lấy từ file gốc, bản dịch lấy từ trang đã dựng), mỗi dòng được kéo giãn ngang cho khớp đúng bề rộng dòng thật — nên bôi đen, copy chữ như đọc PDF bình thường. Dòng của mỗi đoạn được xếp lại theo thứ tự đọc: trang dịch đổ chữ Việt trước rồi mới dán công thức (dạng vector) đè lên, nên theo thứ tự nội dung PDF thì chữ của công thức rơi xuống cuối đoạn (`"… = 6 lớp giống nhau. … N x x dmodel"`). Công thức nằm **lọt giữa** khoảng ngang của một dòng (`"… nhỏ hơn |i| ."`) thì dòng đó được cắt ra để chen công thức vào đúng chỗ. Chỉ xếp trong phạm vi từng đoạn nên bài hai cột không bị trộn cột.
+- **Rê chuột** lên một đoạn: đoạn tương ứng ở bản kia hiện **viền xanh** (chỉ để đối chiếu, không phải tô vàng). Số hiệu đoạn giống nhau ở hai bản (bản dịch được đặt lại đúng theo từng đoạn gốc) nên việc ghép cặp là chính xác, không phải đoán theo vị trí.
+- **Bôi đen** → thanh nổi hiện hai nút:
+  - **🖍 Tô vàng**: tô **đúng phần chữ đã bôi đen** — vài chữ thì tô vài chữ. Bên bản kia tô **câu tương ứng**: chữ hai bản khác nhau nên không khớp được từng ký tự, nhưng trong một đoạn thì thứ tự câu giữ nguyên (prompt cấm model gộp/tách đoạn) nên câu thứ k bên này là câu thứ k bên kia; số câu hai bên lệch nhau thì mới tô cả đoạn. Bộ tách câu bỏ qua dấu chấm của viết tắt (`et al.`, `Fig.`, `e.g.`), chữ cái đầu tên người (`J. Smith`) và số thập phân, và nhập dấu chú thích đứng lẻ (`†`, `‡` — bản dịch hay đẩy xuống cuối câu) vào câu trước. Bôi đè lên vệt cũ thì nút đổi thành "Bỏ tô vàng". Lưu theo tài liệu trên đĩa (tải lại trang, khởi động lại app vẫn còn) và ghi thành **annotation highlight thật trong PDF tải về** (một annotation cho mỗi khung chữ, đúng phần đã tô).
+  - **💬 Giải thích đoạn này**: mở khung trò chuyện với đoạn đang chọn đính kèm.
+- **Tải lại trang** không mất gì: app nhớ tài liệu cuối và lấy lại bản dịch, tô vàng, bảng thuật ngữ từ server (`GET /api/<id>/state`). Khởi động lại app cũng không mất — xem mục dưới.
+
+## Lưu tài liệu, mở lại PDF đã tải lên (21/09/2026)
+
+Mỗi PDF tải lên được lưu trong `data/docs/<id>/` (`store.py`): `src.pdf` (bản gốc), `out.pdf` (bản dịch đang dựng), `state.json` (tên, trang đã dịch, bản dịch từng đoạn, khối đã trích/OCR, tô vàng, bảng thuật ngữ). Nút **📚 Tài liệu** liệt kê mọi bài đã lưu (tên bài, số trang đã dịch, số vệt tô, lần cuối, dung lượng) để mở lại hoặc xoá hẳn (🗑, có hỏi lại, không hoàn tác được). Không tự xoá theo thời gian.
+
+- **Khởi động lại app** không mất gì: tài liệu chưa có trong bộ nhớ thì được nạp lại từ đĩa ở request đầu tiên (mất vài ms), mọi endpoint chạy như cũ. Trang đã dịch không gọi LLM lại, trang đã OCR không OCR lại, số hiệu đoạn giữ nguyên nên tô vàng vẫn khớp.
+- **Tải lên lại đúng file cũ** (so bằng SHA-256, tên file khác cũng được) → mở lại bản đã lưu, không tạo bản mới, không dịch lại.
+- **Khi nào ghi**: `out.pdf` sau mỗi lượt dịch (một lần cho cả nhóm trang); `state.json` sau mỗi lần tô vàng / sửa thuật ngữ / dịch xong / OCR xong một trang. Ghi nguyên tử (file tạm + `os.replace`): tắt app giữa chừng thì còn bản cũ nguyên vẹn. `state.json` chỉ ghi nhận trang đã có trong `out.pdf` trên đĩa, nên tắt app đúng lúc đang dịch thì mở lại trang đó là "chưa dịch" chứ không phải "đã dịch" mà ảnh vẫn là bản gốc.
+- **Chi phí** (Attention, 15 trang, đo 21/09/2026): ghi `out.pdf` ~0,6 s/lần, không tăng theo số trang; `out.pdf` 4 MB, `state.json` 180 KB. Phải ghi với `garbage=4`: mỗi trang dịch nhúng lại nguyên font, `garbage=3` không gộp được nên file lên 16,6 MB và mỗi lần ghi chậm dần tới ~1 s.
+- API: `GET /api/docs` (danh sách), `DELETE /api/docs/<id>` (xoá). `data/*.pdf` (bài dùng cho bench) và file tải lên kiểu cũ `data/<id>.pdf`, `data/<id>_vi.pdf` không bị đụng tới — xoá tay được.
+- **💬 Hỏi về tài liệu**: hỏi bất cứ điều gì về bài. LLM nhận: tên bài, bảng thuật ngữ, **mục lục bài** (rút từ các dòng dạng `3.2 Scaled Dot-Product Attention`), rồi đoạn đang bôi đen, rồi nội dung trang đang xem và các trang bên cạnh — **kèm cả bản gốc lẫn bản dịch của từng đoạn** — nhồi tới 55% ngữ cảnh. Trả lời chảy về từng chữ (streaming). Mặc định dùng đúng server/model đang dịch; bỏ tích "Dùng đúng server/model đang dịch" trong ⚙️ Cấu hình để chọn model khác (ví dụ dịch bằng model chuyên dịch, còn hỏi đáp bằng Qwen3.5).
+  - **Câu trả lời hiện đúng công thức, bảng và ký tự đặc biệt** (`static/render.js`): Markdown (marked) + công thức LaTeX (KaTeX) + lọc HTML (DOMPurify), thư viện nằm sẵn trong `static/vendor/` (~600 KB, không gọi CDN — tải lại bằng `.venv/bin/python scripts/download_vendor.py`; thiếu file thì chat lùi về chữ thô chứ không hỏng). Prompt trò chuyện bảo model viết công thức bằng `$…$` / `$$…$$` và so sánh bằng bảng Markdown — trước đây prompt **cấm** LaTeX nên có dựng engine cũng không có gì để dựng. Nút **📋 Chép** chép bản Markdown gốc (còn nguyên LaTeX), không phải chữ đã dựng.
+  - Đang chảy chữ thì bong bóng được vẽ lại ~12 lần/giây; mỗi công thức chỉ dựng bằng KaTeX **một lần** rồi nhớ lại, nên công thức hiện ngay và không nhấp nháy, còn `$$` đang gõ dở thì hiện chữ thô thay vì lỗi đỏ. Đo 21/09/2026 trên câu trả lời thật của `4b` (TUF): 970 lần lấy mẫu trong lúc chảy, 60 công thức + 2 bảng, **0 lần công thức biến mất, 0 khung lỗi đỏ**; vẽ ~0,3 ms/lần.
+  - Câu trả lời LLM là dữ liệu không tin được (bài báo có thể chứa câu dặn model làm gì đó): HTML thô trong câu trả lời **không bao giờ thành thẻ** (dấu `<` bị thoát, hiện ra đúng là chữ), và mọi thẻ trình duyệt **tự tải** khi hiện ra (`img`, `video`, `iframe`…) bị bỏ — nếu không, một câu kiểu "chèn ảnh `https://…/?q=<tóm tắt cuộc trò chuyện>`" là đủ để nội dung bị gửi ra ngoài lúc câu trả lời hiện lên. Link thường vẫn giữ (phải bấm mới đi).
+  - Sửa `static/render.js` xong thì mở **http://127.0.0.1:8000/render-test.html**: 21 ca (công thức 4 kiểu dấu, `$5` không phải công thức, `$` trong code, bảng, LaTeX hỏng, chặn tự tải…) và giả lập chảy chữ từng ký tự, không cần server LLM.
+
+## API key
+Key lưu **theo từng server**, nên đổi qua lại OpenRouter → Ollama → OpenRouter không phải gõ lại:
+- trong trình duyệt (`localStorage`), và
+- một bản trên máy chạy app (`data/keys.json`, quyền `600`) — xoá dữ liệu duyệt web hoặc mở app từ máy khác vẫn dịch được. Request gửi key rỗng thì server tự điền key đã nhớ của base URL đó.
+
+Server **không bao giờ trả key đầy đủ** về giao diện, chỉ trả dạng che (`sk-o…9f2c`) để hiện vào ô nhập. Xoá một key: `curl -X DELETE "http://127.0.0.1:8000/api/keys?slot=<base_url>"`.
+
+## Font bản dịch
+Bản dịch tự dùng font **cùng loại với chữ gốc** (có chân / không chân / đơn cách), giữ đậm-nghiêng. Chế độ "auto" chọn font có **độ rộng chữ gần font gốc nhất** (đo từ PDF): bài LaTeX dùng Times (0,44 em/chữ) → Times New Roman (0,44), thay vì Source Serif 4 (0,51) làm chữ phải co. Font nhúng được cắt chỉ còn ký tự đã dùng (MuPDF, không cần cài thêm) nên PDF tải về thường nhỏ hơn cả bản gốc.
+- Có sẵn trên macOS: Times New Roman, Georgia, Arial, Courier New.
+- Font đẹp hơn (OFL, đủ dấu tiếng Việt): Source Serif 4, Noto Serif, Be Vietnam Pro, Noto Sans →
+  `.venv/bin/python scripts/download_fonts.py` (tải vào `fonts/`, khoảng 6MB), khởi động lại app rồi chọn trong ⚙️ Cấu hình.
+
+## Kiểm tra nhanh sau khi sửa code
+```
+.venv/bin/python scripts/smoke_features.py    # ~20 giây, KHÔNG cần server LLM
+```
+Thay hàm gọi LLM bằng hàm giả rồi chạy thật cả luồng trên `data/bert.pdf`: gộp trang, bảng thuật ngữ (lập → sửa → lưu → vào đúng prompt), lớp chữ hai bản khớp số hiệu đoạn, tô vàng → annotation trong PDF tải về, ngữ cảnh gửi cho phần trò chuyện, nhớ API key, khôi phục sau khi tải lại trang, và lưu xuống đĩa rồi mở lại như sau khi khởi động lại app (xoá bộ nhớ → state, ảnh trang dịch, số hiệu đoạn, thuật ngữ, trò chuyện giống hệt; tải lên lại cùng file ra cùng id; xoá tài liệu). Dùng thư mục lưu tạm, không đụng `data/docs/`. In ✓/✗ từng mục và trả mã lỗi ≠ 0 nếu có mục sai.
+
+## Bench bố cục PDF có lớp chữ
+10 bài báo LLM ngắn trên arXiv (139 trang) trong `data/`: Attention, BERT, RoBERTa, RAG, RoFormer, GQA, FlashAttention-2, Mistral 7B, Mixtral, DataSentinel.
+```
+.venv/bin/python scripts/bench_text.py            # ~2 phút, không gọi LLM; --render: dựng cả bản dịch giả; --download: tải lại bài thiếu
+```
+Đếm các lỗi trích chữ: ô bảng bị dính, khối in sai đậm/nghiêng (lệch bản gốc > 20% số chữ), hai dòng bị trộn, chữ vụn giữa các `{vN}`, mất/thừa gạch nối; kết quả lưu ở `bench/results/` và tự so với lần chạy trước. Kết quả 19/09/2026:
+
+| | Ô bảng dính | Sai đậm/nghiêng | Hàng trộn | Chữ vụn | Mất gạch nối | Lỗi dựng |
+|---|---:|---:|---:|---:|---:|---:|
+| Trước khi sửa | 127 | 199 | 21 | 6 | 71 | 0 |
+| Sau khi sửa | 1* | 0 | 0 | 0 | 0 | 0 |
+
+\* Ô chứa chuỗi tấn công vô nghĩa căn đều hai bên (DataSentinel tr. 16): khoảng cách giữa các từ rộng hơn một cỡ chữ nên thước đo tưởng là hai cột.
+
+`--render` đo thêm bố cục: cỡ chữ bản dịch so với bản gốc, phần chữ bị co quá 15%, khối bị nội dung khối khác trượt vào, dung lượng PDF tải về. Trang có bản dịch thật trong `bench/translations/` (tạo bằng `scripts/bench_llm.py`, gọi LLM thật) thì dựng bằng bản dịch đó, còn lại in lại chữ gốc. Kết quả 19/09/2026 trên 4 trang dịch thật bằng qwen3.5:
+
+| | Cỡ chữ so với gốc | Chữ bị co > 15% | Khối lệch khung | PDF 10 bài (gốc 13,2 MB) |
+|---|---:|---:|---:|---:|
+| Trước (Source Serif, giãn dòng 1,15, cỡ nhóm = phân vị 25%) | 86,5% | 21,5% | — | 19,4 MB |
+| Sau | 97,6% | 3,3% | 0 | 13,7 MB |
+
+## Bench OCR (tìm lệnh chạy tốt nhất cho model OCR)
+`scripts/bench_ocr.py` chỉ cần `pymupdf`, chạy được ngay trên máy có server: tạo bản scan xấu từ PDF có lớp chữ, cho model đọc lại, chấm bằng độ khớp từ.
+```
+python3 scripts/bench_ocr.py --make-scan samples/attention.pdf --out scan72.pdf --dpi 72 --jpeg 40
+python3 scripts/bench_ocr.py --scan scan72.pdf --truth samples/attention.pdf --pages 3-6 \
+    --base-url http://127.0.0.1:8080/v1 --model 9b-vision --mode page --csv ocr.csv
+```
+`--mode region` cắt từng vùng chữ như app vẫn làm. Hướng dẫn đầy đủ cho người (hoặc AI) chỉnh server: [docs/ocr-tuf.md](docs/ocr-tuf.md) — hợp đồng gọi OCR, prompt từng model, tham số llama-server nên quét, mốc đã đo.
+
+## Cách hoạt động
+1. PyMuPDF trích từng ký tự kèm toạ độ, cỡ chữ, màu, đậm/nghiêng; PP-DocLayoutV3 gom dòng thành đoạn theo vùng bố cục và bỏ qua công thức đứng riêng, chữ trong hình, số trang. Chữ đậm/nghiêng giữa đoạn (tiêu đề đầu đoạn, tên tác giả, tên hội nghị trong tài liệu tham khảo) được bọc `<b>`/`<i>` và giữ trong bản dịch. Bảng dịch từng ô (ô nhiều dòng được nối lại thành câu, ô toàn số giữ nguyên); khối có nhiều công thức hơn từ (nhãn toán trong sơ đồ) không dịch. Gạch nối cuối dòng: bỏ gạch ngắt từ (trans-lation), giữ gạch của từ ghép (LLaMA3-8B, pre-trained) dựa vào cách chính bài báo viết từ đó ở chỗ khác. Bấm "Dịch lại" mà không đổi cấu hình OCR thì dùng lại kết quả trích/OCR cũ, chỉ dịch lại.
+2. Công thức nằm giữa câu (font toán CMMI/CMSY/CMEX…, chỉ số trên/dưới, ký hiệu không có mã Unicode như Σ) được thay bằng `{v1}`, `{v2}`… trước khi dịch; bản dịch làm mất `{vN}` bị loại (dịch lại / Google / giữ nguyên bản gốc).
+3. Gửi theo lô JSON cho LLM; đoạn nào lỗi thì dịch lại riêng. Đoạn là mảnh câu bị ngắt sang cột/trang khác được gửi kèm phần câu trước/sau làm ngữ cảnh (chỉ để hiểu, không dịch).
+4. Xoá chữ gốc trong khung (giữ hình/đường kẻ) và chèn bản dịch vào đúng khung với giãn dòng như bản gốc. Bản dịch dài hơn thì được lấn vào khoảng trống sẵn có (xuống dưới tối đa một dòng, ô bảng/khối một dòng sang phải) trước khi phải co chữ; các đoạn cùng kiểu chữ trên trang in cùng một cỡ (trung vị). Mỗi `{vN}` được thay bằng chính công thức gốc (chép dạng vector từ trang gốc) nên chỉ số, căn thức, phân số giữ nguyên.
+5. Giao diện hiển thị bản gốc bên trái – bản dịch bên phải; tải về PDF đã dịch.
+6. Mỗi ảnh trang được phủ một lớp chữ trong suốt (lấy lại từ lớp chữ PDF của chính trang đó) để bôi đen, tô vàng đồng bộ hai bản và hỏi LLM về đoạn đang đọc.
+
+Giới hạn: trang scan (OCR) chưa giữ được công thức giữa câu — chữ lấy từ OCR nên công thức thành chữ thường hoặc bị bỏ.

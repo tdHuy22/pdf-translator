@@ -1,0 +1,10 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pdf-translator",
+      "url": "http://127.0.0.1:8000",
+      "port": 8000
+    }
+  ]
+}

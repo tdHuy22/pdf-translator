@@ -1,0 +1,80 @@
+{
+ "mode": "B",
+ "paper": "bert",
+ "page": 3,
+ "seconds": 294,
+ "blocks": 14,
+ "unique": 14,
+ "translated": 14,
+ "via_google": 0,
+ "errors": [],
+ "tokens": {
+  "calls": 1,
+  "prompt": 1507,
+  "completion": 1111,
+  "max_call": 2618
+ },
+ "num_ctx": 8192,
+ "tagged": 3,
+ "kept_tags": 3,
+ "len_ratio": 1.0,
+ "model": "qwen3.5:latest",
+ "items": [
+  {
+   "text": "Figure 1: Overall pre-training and fine-tuning procedures for BERT. Apart from output layers, the same architectures are used in both pre-training and fine-tuning. The same pre-trained model parameters are used to initialize models for different down-stream tasks. During fine-tuning, all parameters are fine-tuned. [CLS] is a special symbol added in front of every input example, and [SEP] is a special separator token (e.g. separating questions/answers).",
+   "vi": "Hình 1: Quy trình huấn luyện trước và tinh chỉnh tổng thể cho BERT. Ngoài các lớp đầu ra, cùng kiến trúc được sử dụng trong cả hai giai đoạn. Các tham số mô hình huấn luyện trước giống nhau được dùng để khởi tạo cho các mô hình khác nhau của các tác vụ xuống dòng. Trong quá trình tinh chỉnh, tất cả các tham số đều được tinh chỉnh. [CLS] là ký hiệu đặc biệt được thêm vào đầu mỗi ví dụ đầu vào, và [SEP] là token phân tách đặc biệt (ví dụ: tách câu hỏi/câu trả lời)."
+  },
+  {
+   "text": "ing and auto-encoder objectives have been used for pre-training such models (Howard and Ruder, 2018; Radford et al., 2018; Dai and Le, 2015).",
+   "vi": "huấn luyện và mục tiêu mã hóa tự động đã được sử dụng để huấn luyện trước các mô hình này (Howard và Ruder, 2018; Radford et al., 2018; Dai và Le, 2015)."
+  },
+  {
+   "text": "2.3 Transfer Learning from Supervised Data",
+   "vi": "2.3 Học chuyển giao từ dữ liệu có giám sát"
+  },
+  {
+   "text": "There has also been work showing effective transfer from supervised tasks with large datasets, such as natural language inference (Conneau et al., 2017) and machine translation (McCann et al., 2017). Computer vision research has also demonstrated the importance of transfer learning from large pre-trained models, where an effective recipe is to fine-tune models pre-trained with ImageNet (Deng et al., 2009; Yosinski et al., 2014).",
+   "vi": "Cũng đã có nghiên cứu chỉ ra việc chuyển giao hiệu quả từ các tác vụ có giám sát với tập dữ liệu lớn, như suy luận ngôn ngữ tự nhiên (Conneau et al., 2017) và dịch máy (McCann et al., 2017). Nghiên cứu thị giác máy tính cũng đã chứng minh tầm quan trọng của học chuyển giao từ các mô hình huấn luyện trước lớn, trong đó công thức hiệu quả là tinh chỉnh các mô hình được huấn luyện trước bằng ImageNet (Deng et al., 2009; Yosinski et al., 2014)."
+  },
+  {
+   "text": "3 BERT",
+   "vi": "3 BERT"
+  },
+  {
+   "text": "We introduce BERT and its detailed implementation in this section. There are two steps in our framework: <i>pre-training</i> and <i>fine-tuning</i>. During pre-training, the model is trained on unlabeled data over different pre-training tasks. For fine-tuning, the BERT model is first initialized with the pre-trained parameters, and all of the parameters are fine-tuned using labeled data from the downstream tasks. Each downstream task has separate fine-tuned models, even though they are initialized with the same pre-trained parameters. The question-answering example in Figure 1 will serve as a running example for this section.",
+   "vi": "Chúng tôi giới thiệu BERT và triển khai chi tiết của nó trong phần này. Có hai bước trong khuôn khổ của chúng tôi: <i>huấn luyện trước</i> và <i>tinh chỉnh</i>. Trong huấn luyện trước, mô hình được huấn luyện trên dữ liệu không nhãn qua các tác vụ huấn luyện trước khác nhau. Đối với tinh chỉnh, mô hình BERT trước tiên được khởi tạo với các tham số huấn luyện trước, và tất cả các tham số đều được tinh chỉnh sử dụng dữ liệu có nhãn từ các tác vụ xuống dòng. Mỗi tác vụ xuống dòng có các mô hình tinh chỉnh riêng biệt, mặc dù chúng được khởi tạo với cùng các tham số huấn luyện trước. Ví dụ về trả lời câu hỏi trong Hình 1 sẽ phục vụ làm ví dụ chạy cho phần này."
+  },
+  {
+   "text": "A distinctive feature of BERT is its unified architecture across different tasks. There is mini-",
+   "vi": "Đặc điểm nổi bật của BERT là kiến trúc thống nhất qua các tác vụ khác nhau. Không có sự"
+  },
+  {
+   "text": "mal difference between the pre-trained architecture and the final downstream architecture.",
+   "vi": "khác biệt nhỏ giữa kiến trúc huấn luyện trước và kiến trúc xuống dòng cuối cùng."
+  },
+  {
+   "text": "<b>Model Architecture</b> BERT’s model architecture is a multi-layer bidirectional Transformer encoder based on the original implementation described in Vaswani et al. (2017) and released in the tensor2tensor library.{v1} Because the use of Transformers has become common and our implementation is almost identical to the original, we will omit an exhaustive background description of the model architecture and refer readers to Vaswani et al. (2017) as well as excellent guides such as “The Annotated Transformer.”{v2}",
+   "vi": "<b>Kiến trúc Mô hình</b> Kiến trúc mô hình của BERT là bộ mã hóa Transformer hai chiều nhiều lớp dựa trên triển khai gốc được mô tả trong Vaswani et al. (2017) và phát hành trong thư viện tensor2tensor.{v1} Vì việc sử dụng Transformers đã trở nên phổ biến và triển khai của chúng tôi gần như giống hệt với bản gốc, chúng tôi sẽ bỏ qua mô tả nền tảng chi tiết về kiến trúc mô hình và hướng độc giả đến Vaswani et al. (2017) cũng như các hướng dẫn xuất sắc như “The Annotated Transformer.”{v2}"
+  },
+  {
+   "text": "In this work, we denote the number of layers (i.e., Transformer blocks) as {v1}, the hidden size as {v2}, and the number of self-attention heads as {v3} We primarily report results on two model sizes: <b>BERT</b>{v4} (L=12, H=768, A=12, Total Parameters=110M) and <b>BERT</b>{v5} (L=24, H=1024, A=16, Total Parameters=340M).",
+   "vi": "Trong công việc này, chúng tôi ký hiệu số lượng lớp (tức là khối Transformer) là {v1}, kích thước ẩn là {v2}, và số đầu tự chú ý là {v3} Chúng tôi chủ yếu báo cáo kết quả trên hai kích thước mô hình: <b>BERT</b>{v4} (L=12, H=768, A=12, Tổng Tham số=110M) và <b>BERT</b>{v5} (L=24, H=1024, A=16, Tổng Tham số=340M)."
+  },
+  {
+   "text": "BERT{v1} was chosen to have the same model size as OpenAI GPT for comparison purposes. Critically, however, the BERT Transformer uses bidirectional self-attention, while the GPT Transformer uses constrained self-attention where every token can only attend to context to its left.{v2}",
+   "vi": "BERT{v1} được chọn để có cùng kích thước mô hình như OpenAI GPT cho mục đích so sánh. Quan trọng hơn, tuy nhiên, Transformer BERT sử dụng tự chú ý hai chiều, trong khi Transformer GPT sử dụng tự chú ý bị giới hạn nơi mỗi token chỉ có thể chú ý đến ngữ cảnh bên trái của nó.{v2}"
+  },
+  {
+   "text": "{v1}In all cases we set the feed-forward/filter size to be 4{v2}, i.e., 3072 for the {v3} = 768 and 4096 for the {v4} = 1024.",
+   "vi": "{v1}Trong tất cả các trường hợp chúng tôi đặt kích thước feed-forward/lọc là 4{v2}, tức là 3072 cho {v3} = 768 và 4096 cho {v4} = 1024."
+  },
+  {
+   "text": "{v1}We note that in the literature the bidirectional Trans-",
+   "vi": "{v1}Chúng tôi lưu ý rằng trong tài liệu, Trans-"
+  },
+  {
+   "text": "Pre-training Fine-Tuning",
+   "vi": "Huấn luyện trước Tinh chỉnh"
+  }
+ ]
+}

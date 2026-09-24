@@ -1,0 +1,7 @@
+pymupdf>=1.24
+fastapi
+uvicorn
+httpx
+python-multipart
+rapidocr
+onnxruntime

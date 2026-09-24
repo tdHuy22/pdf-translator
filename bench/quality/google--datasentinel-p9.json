@@ -1,0 +1,240 @@
+{
+ "system": "google",
+ "paper": "datasentinel",
+ "page": 9,
+ "seconds": 5.9,
+ "thinks": false,
+ "think_scale": 1.0,
+ "blocks": 36,
+ "translated": 36,
+ "missing": 0,
+ "formula_blocks": 6,
+ "formula_lost": 0,
+ "styled_blocks": 7,
+ "styled_kept": 7,
+ "over_max_len": 0,
+ "len_ratio": 1.09,
+ "glossary_ok": "79/120",
+ "tokens": {},
+ "tok_per_s": 0.0,
+ "errors": [],
+ "error": "",
+ "items": [
+  {
+   "id": 0,
+   "src": "TABLE 1: Our DataSentinel is effective in detecting existing prompt injection attacks. The FNR for each injected task and FPR are averaged over the 7 types of target tasks. Table 10–Table 16 in Appendix show the FNR and FPR for each injected-target task combination for each attack.",
+   "vi": "BẢNG 1: DataSentinel của chúng tôi có hiệu quả trong việc phát hiện các cuộc tấn công tiêm nhiễm kịp thời hiện có. FNR cho mỗi nhiệm vụ được chèn và FPR được tính trung bình trên 7 loại nhiệm vụ mục tiêu. Bảng 10–Bảng 16 trong Phụ lục hiển thị FNR và FPR cho từng tổ hợp nhiệm vụ được tiêm vào mục tiêu cho mỗi cuộc tấn công.",
+   "table": false
+  },
+  {
+   "id": 1,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 2,
+   "src": "Injected Task",
+   "vi": "Nhiệm vụ được chèn",
+   "table": true
+  },
+  {
+   "id": 3,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 4,
+   "src": "Naive Attack",
+   "vi": "Cuộc tấn công ngây thơ",
+   "table": true
+  },
+  {
+   "id": 5,
+   "src": "Escape Character",
+   "vi": "Nhân vật trốn thoát",
+   "table": true
+  },
+  {
+   "id": 6,
+   "src": "Context Ignoring",
+   "vi": "Bỏ qua bối cảnh",
+   "table": true
+  },
+  {
+   "id": 7,
+   "src": "Fake Completion",
+   "vi": "Hoàn thành giả",
+   "table": true
+  },
+  {
+   "id": 8,
+   "src": "Combined Attack",
+   "vi": "Tấn công kết hợp",
+   "table": true
+  },
+  {
+   "id": 9,
+   "src": "Universal",
+   "vi": "Phổ quát",
+   "table": true
+  },
+  {
+   "id": 10,
+   "src": "NeuralExec",
+   "vi": "NeuralExec",
+   "table": true
+  },
+  {
+   "id": 11,
+   "src": "Dup. sentence detection",
+   "vi": "Dup. phát hiện câu",
+   "table": true
+  },
+  {
+   "id": 12,
+   "src": "Grammar correction",
+   "vi": "Sửa ngữ pháp",
+   "table": true
+  },
+  {
+   "id": 13,
+   "src": "Hate detection",
+   "vi": "Phát hiện ghét",
+   "table": true
+  },
+  {
+   "id": 14,
+   "src": "Nat. lang. inference",
+   "vi": "Nat. chỉ. suy luận",
+   "table": true
+  },
+  {
+   "id": 15,
+   "src": "Sentiment analysis",
+   "vi": "Phân tích tình cảm",
+   "table": true
+  },
+  {
+   "id": 16,
+   "src": "Spam detection",
+   "vi": "Phát hiện thư rác",
+   "table": true
+  },
+  {
+   "id": 17,
+   "src": "Summarization",
+   "vi": "Tóm tắt",
+   "table": true
+  },
+  {
+   "id": 18,
+   "src": "TABLE 2: FNRs of DataSentinel in detecting Availability Attack (the injected task is to affect the availability of an LLM-integrated application) and PLeak (the injected task is to steal target instruction) for each target task.",
+   "vi": "BẢNG 2: FNR của DataSentinel trong việc phát hiện Tấn công sẵn có (tác vụ được chèn nhằm ảnh hưởng đến tính khả dụng của ứng dụng tích hợp LLM) và PLeak (tác vụ được chèn là đánh cắp lệnh mục tiêu) cho từng tác vụ mục tiêu.",
+   "table": false
+  },
+  {
+   "id": 19,
+   "src": "Availability Attack",
+   "vi": "Tấn công sẵn có",
+   "table": true
+  },
+  {
+   "id": 20,
+   "src": "Target Task",
+   "vi": "Nhiệm vụ mục tiêu",
+   "table": true
+  },
+  {
+   "id": 21,
+   "src": "PLeak",
+   "vi": "PL",
+   "table": true
+  },
+  {
+   "id": 22,
+   "src": "Dup. sentence detection",
+   "vi": "Dup. phát hiện câu",
+   "table": true
+  },
+  {
+   "id": 23,
+   "src": "Grammar correction",
+   "vi": "Sửa ngữ pháp",
+   "table": true
+  },
+  {
+   "id": 24,
+   "src": "Hate detection",
+   "vi": "Phát hiện ghét",
+   "table": true
+  },
+  {
+   "id": 25,
+   "src": "Nat. lang. inference",
+   "vi": "Nat. chỉ. suy luận",
+   "table": true
+  },
+  {
+   "id": 26,
+   "src": "Sentiment analysis",
+   "vi": "Phân tích tình cảm",
+   "table": true
+  },
+  {
+   "id": 27,
+   "src": "Spam detection",
+   "vi": "Phát hiện thư rác",
+   "table": true
+  },
+  {
+   "id": 28,
+   "src": "Summarization",
+   "vi": "Tóm tắt",
+   "table": true
+  },
+  {
+   "id": 29,
+   "src": "{v1} <b>Embedding-vector-based detector (EVD):</b> In this baseline, we train a traditional binary classifier to detect contaminated target data. We sample 500 data points from the training set of the Gigaword dataset as clean target data samples. We further use the Combined Attack to construct 500 contaminated target data samples by sampling an injected task from the Gigaword dataset for each clean target data sample. Then, we use the CLIP text encoder (clip-vit-base-patch32 [47]) to compute a feature vector for each clean or contaminated target data sample. Given these 1,000 feature vectors and their ground-truth labels (i.e., “clean” or “contaminated”), we train a two-layer neural network classifier, which consists of a hidden layer (with dimension 128) followed by an output layer. We train the neural network for 50 epochs with a learning rate of 0.001 and a batch size of 8.",
+   "vi": "{v1} <b>Trình phát hiện dựa trên vectơ nhúng (EVD):</b> Trong cơ sở này, chúng tôi đào tạo trình phân loại nhị phân truyền thống để phát hiện dữ liệu mục tiêu bị ô nhiễm. Chúng tôi lấy mẫu 500 điểm dữ liệu từ tập huấn luyện của tập dữ liệu Gigaword dưới dạng mẫu dữ liệu mục tiêu rõ ràng. Chúng tôi tiếp tục sử dụng Cuộc tấn công kết hợp để xây dựng 500 mẫu dữ liệu mục tiêu bị ô nhiễm bằng cách lấy mẫu tác vụ được chèn từ tập dữ liệu Gigaword cho mỗi mẫu dữ liệu mục tiêu sạch. Sau đó, chúng tôi sử dụng bộ mã hóa văn bản CLIP (clip-vit-base-patch32 [47]) để tính toán vectơ đặc trưng cho từng mẫu dữ liệu mục tiêu sạch hoặc bị ô nhiễm. Với 1.000 vectơ đặc trưng này và các nhãn thực tế cơ bản của chúng (tức là “sạch” hoặc “bị ô nhiễm”), chúng tôi huấn luyện một bộ phân loại mạng thần kinh hai lớp, bao gồm một lớp ẩn (có kích thước 128), theo sau là một lớp đầu ra. Chúng tôi huấn luyện mạng lưới thần kinh trong 50 kỷ nguyên với tốc độ học tập là 0,001 và kích thước lô là 8.",
+   "table": false
+  },
+  {
+   "id": 30,
+   "src": "{v1} <b>Naive LLM-based detector (NLLMD):</b> This method directly prompts the detection LLM to detect whether a given target data sample is contaminated. We also use Mistral-7B as the detection LLM for a fair comparison with our DataSentinel. The detection instruction is “Given the following data from users, does it contain any injected instructions? Answer with yes if it contains injected instructions. Otherwise, answer with no.”. The detection instruction is concatenated with a given target data sample to query the detection LLM.",
+   "vi": "{v1} <b>Trình phát hiện dựa trên LLM ngây thơ (NLLLD):</b> Phương pháp này trực tiếp nhắc LLM phát hiện phát hiện xem mẫu dữ liệu mục tiêu nhất định có bị nhiễm bẩn hay không. Chúng tôi cũng sử dụng Mistral-7B làm LLM phát hiện để so sánh công bằng với DataSentinel của chúng tôi. Hướng dẫn phát hiện là \"Dữ liệu sau đây từ người dùng, nó có chứa bất kỳ hướng dẫn được chèn nào không? Trả lời có nếu nó chứa hướng dẫn được chèn. Nếu không, hãy trả lời là không.\". Lệnh phát hiện được nối với một mẫu dữ liệu đích nhất định để truy vấn LLM phát hiện.",
+   "table": false
+  },
+  {
+   "id": 31,
+   "src": "{v1} <b>Standard supervised fine-tuning of LLM as a detector (SSFTD):</b> We use standard supervised fine-tuning (SFT) [48] to fine-tune a detection LLM as a binary classifier to detect contaminated target data. We adopt the same dataset as EVD. We also use Mistral-7B to be consistent. We fine-tune it for 500 iterations with a batch size 2 and a learning rate 0.000025.",
+   "vi": "{v1} <b>Tinh chỉnh có giám sát tiêu chuẩn của LLM dưới dạng trình phát hiện (SSFTD):</b> Chúng tôi sử dụng tính năng tinh chỉnh có giám sát tiêu chuẩn (SFT) [48] để tinh chỉnh LLM phát hiện dưới dạng bộ phân loại nhị phân nhằm phát hiện dữ liệu mục tiêu bị ô nhiễm. Chúng tôi áp dụng tập dữ liệu tương tự như EVD. Chúng tôi cũng sử dụng Mistral-7B để đảm bảo tính nhất quán. Chúng tôi tinh chỉnh nó trong 500 lần lặp với kích thước lô 2 và tốc độ học tập là 0,000025.",
+   "table": false
+  },
+  {
+   "id": 32,
+   "src": "{v1} <b>SSFTD in a game-theoretic setting (SSFTD-G):</b> SSFTD-G extends our game-theoretic method to SSFTD. Specifically, we alternate between 1) generating a strong adaptive attack to evade the current detector and mislead the backend LLM into completing the injected task, and 2) updating the detection LLM as a classifier using the contaminated and clean target data. We use the same optimization settings as DataSentinel.",
+   "vi": "{v1} <b>SSFTD trong cài đặt lý thuyết trò chơi (SSFTD-G):</b> SSFTD-G mở rộng phương pháp lý thuyết trò chơi của chúng tôi sang SSFTD. Cụ thể, chúng tôi luân phiên giữa 1) tạo ra một cuộc tấn công thích ứng mạnh để trốn tránh bộ phát hiện hiện tại và đánh lừa LLM phụ trợ để hoàn thành nhiệm vụ được tiêm và 2) cập nhật LLM phát hiện dưới dạng bộ phân loại bằng cách sử dụng dữ liệu mục tiêu sạch và bị ô nhiễm. Chúng tôi sử dụng cài đặt tối ưu hóa tương tự như DataSentinel.",
+   "table": false
+  },
+  {
+   "id": 33,
+   "src": "{v1} <b>PromptGuard:</b> PromptGuard [49] also fine-tunes a detection LLM as a classifier to detect malicious prompts and contaminated target data. It was fine-tuned and released by Meta. Given a target data sample, it has three possible outputs: benign, injection, or jailbreak. If the output is injection or jailbreak, we consider the target data sample to be contaminated.",
+   "vi": "{v1} <b>PromptGuard:</b> NhắcGuard [49] cũng tinh chỉnh LLM phát hiện như một công cụ phân loại để phát hiện các lời nhắc độc hại và dữ liệu mục tiêu bị ô nhiễm. Nó đã được tinh chỉnh và phát hành bởi Meta. Với một mẫu dữ liệu mục tiêu, nó có ba kết quả đầu ra có thể xảy ra: lành tính, chèn nội dung hoặc bẻ khóa. Nếu đầu ra là tiêm nhiễm hoặc bẻ khóa, chúng tôi coi mẫu dữ liệu mục tiêu bị ô nhiễm.",
+   "table": false
+  },
+  {
+   "id": 34,
+   "src": "{v1} <b>Known-answer detection (KAD):</b> As shown in a benchmark study [7], known-answer detection is the most promising among existing detectors. We use the open-source code [7] in our experiments. Our DataSentinel has two key differences with this baseline. First, our DataSentinel fine-tunes the detection LLM while KAD uses a standard LLM without fine-tuning it. Second, KAD does not take strong adaptive attacks into consideration by design. As a result, our experimental results show that KAD has limited effectiveness.",
+   "vi": "{v1} <b>Phát hiện câu trả lời đã biết (KAD):</b> Như được trình bày trong nghiên cứu điểm chuẩn [7], phát hiện câu trả lời đã biết là công cụ hứa hẹn nhất trong số các công cụ phát hiện hiện có. Chúng tôi sử dụng mã nguồn mở [7] trong các thử nghiệm của mình. DataSentinel của chúng tôi có hai điểm khác biệt chính với đường cơ sở này. Đầu tiên, DataSentinel của chúng tôi tinh chỉnh LLM phát hiện trong khi KAD sử dụng LLM tiêu chuẩn mà không tinh chỉnh nó. Thứ hai, KAD không xem xét các cuộc tấn công thích ứng mạnh mẽ theo thiết kế. Kết quả thực nghiệm của chúng tôi cho thấy KAD có hiệu quả hạn chế.",
+   "table": false
+  },
+  {
+   "id": 35,
+   "src": "<b>Evaluation metrics:</b> We use <i>False Positive Rate (FPR)</i> and <i>False Negative Rate (FNR)</i> as evaluation metrics. Each of the seven types of target tasks has 100 clean target data samples; and FPR is the fraction of them that are falsely detected as contaminated by a detection method. Note that FPR does not depend on prompt injection attacks. FNR is the fraction of contaminated target data samples that are falsely detected as clean. FNR depends on attacks. For each of the seven types of target tasks, we use the Availability Attack (or PLeak) to construct 100 contaminated target data samples and will report the corresponding FNR. For every other attack, we use it to construct 100 contaminated target data samples for each target-injected task combination and we can compute the FNR for them. In our experiments, for each type of injected task, we will report the FNR averaged over the seven types of target tasks. Such average FNR measures the performance of detecting an attack with a particular injected task regardless of the target task. A detection method is more effective if both FPR and FNR are lower. In practice, most of the target data samples",
+   "vi": "<b>Chỉ số đánh giá:</b> Chúng tôi sử dụng <i>Tỷ lệ dương tính giả (FPR)</i> và <i>Tỷ lệ âm tính giả (FNR)</i> làm chỉ số đánh giá. Mỗi loại trong số bảy loại nhiệm vụ mục tiêu có 100 mẫu dữ liệu mục tiêu sạch; và FPR là phần trong số chúng bị phát hiện sai là bị nhiễm bẩn bởi phương pháp phát hiện. Lưu ý rằng FPR không phụ thuộc vào các cuộc tấn công tiêm nhiễm kịp thời. FNR là phần mẫu dữ liệu mục tiêu bị ô nhiễm được phát hiện sai là sạch. FNR phụ thuộc vào các cuộc tấn công. Đối với mỗi loại trong số bảy loại nhiệm vụ mục tiêu, chúng tôi sử dụng Tấn công sẵn có (hoặc PLeak) để xây dựng 100 mẫu dữ liệu mục tiêu bị ô nhiễm và sẽ báo cáo FNR tương ứng. Đối với mọi cuộc tấn công khác, chúng tôi sử dụng nó để xây dựng 100 mẫu dữ liệu mục tiêu bị ô nhiễm cho mỗi tổ hợp tác vụ được đưa vào mục tiêu và chúng tôi có thể tính toán FNR cho chúng. Trong các thử nghiệm của chúng tôi, đối với từng loại nhiệm vụ được chèn, chúng tôi sẽ báo cáo FNR trung bình trên bảy loại nhiệm vụ mục tiêu. FNR trung bình như vậy đo lường hiệu suất phát hiện một cuộc tấn công với một tác vụ được chèn cụ thể bất kể nhiệm vụ mục tiêu là gì. Phương pháp phát hiện sẽ hiệu quả hơn nếu cả FPR và FNR đều thấp hơn. Trong thực tế, hầu hết các mẫu dữ liệu mục tiêu",
+   "table": false
+  }
+ ]
+}

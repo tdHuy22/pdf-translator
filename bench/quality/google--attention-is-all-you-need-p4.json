@@ -1,0 +1,84 @@
+{
+ "system": "google",
+ "paper": "attention-is-all-you-need",
+ "page": 4,
+ "seconds": 2.4,
+ "thinks": false,
+ "think_scale": 1.0,
+ "blocks": 10,
+ "translated": 10,
+ "missing": 0,
+ "formula_blocks": 6,
+ "formula_lost": 0,
+ "styled_blocks": 0,
+ "styled_kept": 0,
+ "over_max_len": 0,
+ "len_ratio": 1.03,
+ "glossary_ok": "18/37",
+ "tokens": {},
+ "tok_per_s": 0.0,
+ "errors": [],
+ "error": "",
+ "items": [
+  {
+   "id": 0,
+   "src": "Figure 2: (left) Scaled Dot-Product Attention. (right) Multi-Head Attention consists of several attention layers running in parallel.",
+   "vi": "Hình 2: (trái) Chú ý đến sản phẩm chấm theo tỷ lệ. (phải) Chú ý nhiều đầu bao gồm một số lớp chú ý chạy song song.",
+   "table": false
+  },
+  {
+   "id": 1,
+   "src": "of the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key.",
+   "vi": "của các giá trị, trong đó trọng số được gán cho mỗi giá trị được tính bằng hàm tương thích của truy vấn với khóa tương ứng.",
+   "table": false
+  },
+  {
+   "id": 2,
+   "src": "3.2.1 Scaled Dot-Product Attention",
+   "vi": "3.2.1 Chú ý đến sản phẩm chấm theo tỷ lệ",
+   "table": false
+  },
+  {
+   "id": 3,
+   "src": "We call our particular attention \"Scaled Dot-Product Attention\" (Figure 2). The input consists of queries and keys of dimension {v1}, and values of dimension {v2}. We compute the dot products of the query with all keys, divide each by {v3}, and apply a softmax function to obtain the weights on the values.",
+   "vi": "Chúng tôi gọi sự chú ý đặc biệt của mình là \"Sự chú ý đến sản phẩm chấm theo tỷ lệ\" (Hình 2). Đầu vào bao gồm các truy vấn và khóa có thứ nguyên {v1} và các giá trị của thứ nguyên {v2}. Chúng tôi tính toán tích số chấm của truy vấn bằng tất cả các khóa, chia từng khóa cho {v3} và áp dụng hàm softmax để thu được trọng số trên các giá trị.",
+   "table": false
+  },
+  {
+   "id": 4,
+   "src": "In practice, we compute the attention function on a set of queries simultaneously, packed together into a matrix {v1}. The keys and values are also packed together into matrices {v2} and {v3} . We compute the matrix of outputs as:",
+   "vi": "Trong thực tế, chúng tôi tính toán đồng thời hàm chú ý trên một tập hợp truy vấn, được đóng gói cùng nhau thành ma trận {v1}. Các khóa và giá trị cũng được đóng gói cùng nhau thành ma trận {v2} và {v3} . Chúng tôi tính toán ma trận đầu ra như sau:",
+   "table": false
+  },
+  {
+   "id": 5,
+   "src": "The two most commonly used attention functions are additive attention [2], and dot-product (multiplicative) attention. Dot-product attention is identical to our algorithm, except for the scaling factor of {v1} . Additive attention computes the compatibility function using a feed-forward network with a single hidden layer. While the two are similar in theoretical complexity, dot-product attention is much faster and more space-efficient in practice, since it can be implemented using highly optimized matrix multiplication code.",
+   "vi": "Hai hàm chú ý được sử dụng phổ biến nhất là chú ý cộng [2] và chú ý tích số chấm (nhân). Sự chú ý của sản phẩm chấm giống hệt với thuật toán của chúng tôi, ngoại trừ hệ số tỷ lệ là {v1} . Sự chú ý bổ sung tính toán chức năng tương thích bằng cách sử dụng mạng chuyển tiếp nguồn cấp dữ liệu với một lớp ẩn duy nhất. Mặc dù cả hai đều giống nhau về độ phức tạp về mặt lý thuyết, nhưng sự chú ý của tích số chấm nhanh hơn và tiết kiệm không gian hơn trong thực tế vì nó có thể được thực hiện bằng cách sử dụng mã nhân ma trận được tối ưu hóa cao.",
+   "table": false
+  },
+  {
+   "id": 6,
+   "src": "While for small values of {v1} the two mechanisms perform similarly, additive attention outperforms dot product attention without scaling for larger values of {v2} [3]. We suspect that for large values of {v3}, the dot products grow large in magnitude, pushing the softmax function into regions where it has extremely small gradients {v4}. To counteract this effect, we scale the dot products by {v5} .",
+   "vi": "Trong khi đối với các giá trị nhỏ của {v1}, hai cơ chế hoạt động tương tự nhau, thì sự chú ý bổ sung hoạt động tốt hơn sự chú ý của sản phẩm chấm mà không cần điều chỉnh tỷ lệ đối với các giá trị lớn hơn của {v2} [3]. Chúng tôi nghi ngờ rằng đối với các giá trị lớn của {v3}, tích số chấm tăng theo độ lớn, đẩy hàm softmax vào các vùng có độ dốc cực kỳ nhỏ {v4}. Để chống lại hiệu ứng này, chúng tôi chia tỷ lệ tích số chấm theo {v5} .",
+   "table": false
+  },
+  {
+   "id": 7,
+   "src": "3.2.2 Multi-Head Attention",
+   "vi": "3.2.2 Sự chú ý của nhiều đầu",
+   "table": false
+  },
+  {
+   "id": 8,
+   "src": "Instead of performing a single attention function with {v1}-dimensional keys, values and queries, we found it beneficial to linearly project the queries, keys and values {v2} times with different, learned linear projections to {v3} and {v4} dimensions, respectively. On each of these projected versions of queries, keys and values we then perform the attention function in parallel, yielding {v5}-dimensional",
+   "vi": "Thay vì thực hiện một chức năng chú ý duy nhất với các khóa, giá trị và truy vấn có chiều {v1}, chúng tôi nhận thấy việc chiếu tuyến tính các truy vấn, khóa và giá trị {v2} lần với các phép chiếu tuyến tính đã học khác nhau tới các chiều {v3} và {v4} tương ứng. Sau đó, trên mỗi phiên bản truy vấn, khóa và giá trị dự kiến ​​này, chúng tôi thực hiện song song chức năng chú ý, mang lại {v5} chiều",
+   "table": false
+  },
+  {
+   "id": 9,
+   "src": "{v1}To illustrate why the dot products get large, assume that the components of {v2} and {v3} are independent random variables with mean 0 and variance 1. Then their dot product, {v4}, has mean 0 and variance {v5}.",
+   "vi": "{v1}Để minh họa lý do tại sao tích vô hướng lớn, giả sử rằng các thành phần của {v2} và {v3} là các biến ngẫu nhiên độc lập có trung bình 0 và phương sai 1. Khi đó tích vô hướng của chúng, {v4}, có trung bình 0 và phương sai {v5}.",
+   "table": false
+  }
+ ]
+}

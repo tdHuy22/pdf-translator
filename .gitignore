@@ -1,0 +1,11 @@
+.venv/
+data/
+__pycache__/
+fonts/
+models/
+.DS_Store
+*.log
+*.pyc
+# Large sample PDFs (keep the tiny text sample)
+samples/*
+!samples/sample_text.pdf

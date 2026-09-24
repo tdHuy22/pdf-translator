@@ -1,0 +1,409 @@
+{
+ "papers": {
+  "attention-is-all-you-need": {
+   "pages": 15,
+   "blocks": 169,
+   "formulas": 131,
+   "chars": 32246,
+   "tables": 4,
+   "wrong_style": 27,
+   "chars_in_blocks": 31326,
+   "mixed_rows": 3,
+   "garbled": 3,
+   "table_blocks": 8,
+   "merged_cells": 7,
+   "lost_hyphens": 3,
+   "extract_s_per_page": 0.85,
+   "render_s_per_page": 0.24,
+   "size_kb": 2602,
+   "orig_kb": 2163,
+   "examples": {
+    "wrong_style": [
+     "p1: B Ashish Vaswani{v1} Google Brain avaswani@google.com",
+     "p1: B Noam Shazeer{v1} Google Brain noam@google.com",
+     "p1:  Niki Parmar{v1} Google Research nikip@google.com",
+     "p1: B Jakob Uszkoreit{v1} Google Research usz@google.com",
+     "p1:  Llion Jones{v1} Google Research llion@google.com"
+    ],
+    "garbled": [
+     "p6: … learn to attend by r{v5}e{v6}la{v7}ti{v8}v{v9}e. positions, since …",
+     "p8: … embeddings and the p{v1}o{v2}s{v3}i{v4}t{v5}i o=na 0l {v6}e1n.co…",
+     "p13: …I{v1}n{v2}p{v3}u{v4}t{v5}I n{v6}p{v7}u{v8}t{v…"
+    ],
+    "merged_cells": [
+     "p6: Layer Type Complexity per Layer Sequential Maximum Path Length Operati",
+     "p8: BLEU Training Cost (FLOPs)",
+     "p8: EN-DE EN-FR EN-DE EN-FR ByteNet [18] 23.75 Deep-Att + PosUnk [39] 39.2",
+     "p8: Deep-Att + PosUnk Ensemble [39] 40.4 8{v1}",
+     "p8: Transformer (base model) 27.3 38.1 3{v1}"
+    ],
+    "lost_hyphens": [
+     "p1: English-to → Englishto",
+     "p3: position-wise → positionwise",
+     "p11: attention-based → attentionbased"
+    ]
+   },
+   "coverage": 97.1
+  },
+  "bert": {
+   "pages": 16,
+   "blocks": 263,
+   "formulas": 106,
+   "chars": 53872,
+   "tables": 8,
+   "wrong_style": 34,
+   "chars_in_blocks": 50845,
+   "mixed_rows": 3,
+   "table_blocks": 14,
+   "merged_cells": 12,
+   "lost_hyphens": 23,
+   "extract_s_per_page": 0.92,
+   "render_s_per_page": 0.17,
+   "size_kb": 1054,
+   "orig_kb": 756,
+   "examples": {
+    "wrong_style": [
+     "p1: B Jacob Devlin Ming-Wei Chang Kenton Lee Kristina Toutanova Google AI La",
+     "p10: I Alan Akbik, Duncan Blythe, and Roland Vollgraf. 2018. Contextual strin",
+     "p10: I Rami Al-Rfou, Dokook Choe, Noah Constant, Mandy Guo, and Llion Jones. ",
+     "p10:  Rie Kubota Ando and Tong Zhang. 2005. A framework for learning predict",
+     "p10: I John Blitzer, Ryan McDonald, and Fernando Pereira. 2006. Domain adapta"
+    ],
+    "merged_cells": [
+     "p7: System EMDevF1 EMTestF1",
+     "p7: System EMDevF1 EMTestF1",
+     "p7: System Dev Test",
+     "p7: BERTBASE 81.6 BERTLARGE 86.6 86.3",
+     "p7: Human (expert){v1} - 85.0 Human (5 annotations){v2} - 88.0"
+    ],
+    "lost_hyphens": [
+     "p1: pre-train → pretrain",
+     "p1: pre-trained → pretrained",
+     "p1: to-right → toright",
+     "p2: to-right → toright",
+     "p2: pre-train → pretrain"
+    ]
+   },
+   "coverage": 94.4
+  },
+  "roberta": {
+   "pages": 13,
+   "blocks": 221,
+   "formulas": 134,
+   "chars": 41118,
+   "tables": 10,
+   "chars_in_blocks": 39523,
+   "mixed_rows": 8,
+   "table_blocks": 20,
+   "merged_cells": 14,
+   "garbled": 1,
+   "lost_hyphens": 5,
+   "extract_s_per_page": 1.04,
+   "render_s_per_page": 0.21,
+   "size_kb": 314,
+   "orig_kb": 204,
+   "examples": {
+    "merged_cells": [
+     "p4: Masking SQuAD 2.0 MNLI-m SST-2",
+     "p5: Model SQuAD 1.1/2.0 MNLI-m SST-2 RACE",
+     "p6: bsz steps lr ppl MNLI-m SST-2",
+     "p7: SQuAD Model data bsz steps MNLI-m SST-2 (v1.1/2.0)",
+     "p8: MNLI QNLI QQP RTE SST MRPC CoLA STS WNLI Avg"
+    ],
+    "garbled": [
+     "p6: …v5}W{v6}e taunnde tWhe{v7}le{v8}a{v9}r{v10}n{v11}in{v12}g{v13} rawteit h(l rv) afr…"
+    ],
+    "lost_hyphens": [
+     "p2: CC-NEWS → CCNEWS",
+     "p2: mini-batches → minibatches",
+     "p3: single-task → singletask",
+     "p5: FULL-SENTENCES → FULLSENTENCES",
+     "p5: FULL-SENTENCES → FULLSENTENCES"
+    ]
+   },
+   "coverage": 96.1
+  },
+  "rag": {
+   "pages": 19,
+   "blocks": 204,
+   "formulas": 86,
+   "chars": 59041,
+   "tables": 7,
+   "chars_in_blocks": 57048,
+   "table_blocks": 19,
+   "merged_cells": 11,
+   "wrong_style": 39,
+   "lost_hyphens": 9,
+   "extract_s_per_page": 1.37,
+   "render_s_per_page": 0.17,
+   "size_kb": 1057,
+   "orig_kb": 864,
+   "examples": {
+    "merged_cells": [
+     "p6: Model NQ TQA WQ CT",
+     "p6: Model Jeopardy MSMARCO FVR3 FVR2 B-1 QB-1 R-L B-1 Label Acc.",
+     "p7: Task Input Model Generation",
+     "p7: BART {v1}The middle ear is the part of the ear between the middle ear ",
+     "p7: BART The currency needed in Scotland is Pound sterling. RAG-T Pound is"
+    ],
+    "wrong_style": [
+     "p7:  Document 2: ... artists of the 1920s ”Lost Generation” expatriate comm",
+     "p10: I [2] Petr Baudiš and Jan Šediv`y. Modeling of the question answering ta",
+     "p10:  [3] Jonathan Berant, Andrew Chou, Roy Frostig, and Percy Liang. Semant",
+     "p10: I [5] Danqi Chen, Adam Fisch, Jason Weston, and Antoine Bordes. Reading ",
+     "p10:  [6] Eunsol Choi, Daniel Hewlett, Jakob Uszkoreit, Illia Polosukhin, Al"
+    ],
+    "lost_hyphens": [
+     "p1: Pre-trained → Pretrained",
+     "p1: knowledge-intensive → knowledgeintensive",
+     "p2: stack-augmented → stackaugmented",
+     "p4: per-token → pertoken",
+     "p6: Open-Domain → OpenDomain"
+    ]
+   },
+   "coverage": 96.6
+  },
+  "roformer-rope": {
+   "pages": 14,
+   "blocks": 209,
+   "formulas": 145,
+   "chars": 37877,
+   "tables": 5,
+   "wrong_style": 13,
+   "chars_in_blocks": 34824,
+   "table_blocks": 7,
+   "merged_cells": 7,
+   "lost_hyphens": 1,
+   "extract_s_per_page": 1.23,
+   "render_s_per_page": 0.28,
+   "size_kb": 1257,
+   "orig_kb": 585,
+   "examples": {
+    "wrong_style": [
+     "p1:  Ahmed Murtadha Zhuiyi Technology Co., Ltd. Shenzhen mengjiayi@wezhuiyi",
+     "p1:  Shengfeng Pan Zhuiyi Technology Co., Ltd. Shenzhen nickpan@wezhuiyi.co",
+     "p5:  RoPE with linear attention: The self-attention can be rewritten in a m",
+     "p12:  Jonas Gehring, Michael Auli, David Grangier, Denis Yarats, and Yann N ",
+     "p13:  Chulhee Yun, Srinadh Bhojanapalli, Ankit Singh Rawat, Sashank Reddi, a"
+    ],
+    "merged_cells": [
+     "p9: Model BLEU",
+     "p9: Transformer-baseVaswani et al. [2017] 27.3 RoFormer 27.5",
+     "p10: Model MRPC SST-2 QNLI STS-B QQP MNLI(m/mm)",
+     "p11: Model BERTDevlin et al. [2019] WoBERTSu [2020] NEZHAWei et al. [2019] ",
+     "p11: Tokenization level char word char word Position embedding abs. abs. re"
+    ],
+    "lost_hyphens": [
+     "p4: self-attention → selfattention"
+    ]
+   },
+   "coverage": 91.9
+  },
+  "gqa": {
+   "pages": 7,
+   "blocks": 91,
+   "formulas": 15,
+   "chars": 20126,
+   "tables": 1,
+   "chars_in_blocks": 19705,
+   "wrong_style": 10,
+   "table_blocks": 1,
+   "merged_cells": 1,
+   "lost_hyphens": 8,
+   "extract_s_per_page": 1.18,
+   "render_s_per_page": 0.16,
+   "size_kb": 952,
+   "orig_kb": 262,
+   "examples": {
+    "wrong_style": [
+     "p3:  Figure 3: Uptrained MQA yields a favorable tradeoff compared to MHA wi",
+     "p5:  Arman Cohan, Franck Dernoncourt, Doo Soon Kim, Trung Bui, Seokhwan Kim",
+     "p5:  Alexander R. Fabbri, Irene Li, Tianwei She, Suyi Li, and Dragomir R. R",
+     "p6:  Mandar Joshi, Eunsol Choi, Daniel S. Weld, and Luke Zettlemoyer. 2017.",
+     "p6:  Ramesh Nallapati, Bowen Zhou, Cícero Nogueira dos Santos, Çaglar Gülçe"
+    ],
+    "merged_cells": [
+     "p3: Model Tinfer Average CNN arXiv PubMed MediaSum MultiNews WMT TriviaQA"
+    ],
+    "lost_hyphens": [
+     "p1: multi-query → multiquery",
+     "p1: multi-head → multihead",
+     "p1: multi-head → multihead",
+     "p1: multi-query → multiquery",
+     "p2: multi-head → multihead"
+    ]
+   },
+   "coverage": 97.9
+  },
+  "flashattention-2": {
+   "pages": 14,
+   "blocks": 150,
+   "formulas": 294,
+   "chars": 33038,
+   "tables": 1,
+   "chars_in_blocks": 29087,
+   "mixed_rows": 1,
+   "wrong_style": 18,
+   "garbled": 1,
+   "table_blocks": 1,
+   "merged_cells": 1,
+   "lost_hyphens": 1,
+   "extract_s_per_page": 1.09,
+   "render_s_per_page": 0.38,
+   "size_kb": 2075,
+   "orig_kb": 1621,
+   "examples": {
+    "wrong_style": [
+     "p6:  {v1} rowmax{v2}S{v3} O{v4} r{v5}o{v6}w{v7}s {v8}u{v9}m{v10}V{v11} {v12",
+     "p7:  Algorithm 2 FlashAttention-2 Backward Pass Require: Matrices Q{v1} K{v",
+     "p7: B Multi-query attention and grouped-query attention. Multi-query attenti",
+     "p13: I [1] Joshua Ainslie, James Lee-Thorp, Michiel de Jong, Yury Zemlyanskiy",
+     "p13: I [2] Iz Beltagy, Matthew E Peters, and Arman Cohan. Longformer: The lon"
+    ],
+    "garbled": [
+     "p6: …wmax{v2}S{v3} O{v4} r{v5}o{v6}w{v7}s {v8}u{v9}m{v10}V{v…"
+    ],
+    "merged_cells": [
+     "p12: Model Without FlashAttention FlashAttention FlashAttention-2 GPT3-1.3B"
+    ],
+    "lost_hyphens": [
+     "p7: grouped-query → groupedquery"
+    ]
+   },
+   "coverage": 88.0
+  },
+  "mistral-7b": {
+   "pages": 9,
+   "blocks": 98,
+   "formulas": 37,
+   "chars": 20959,
+   "tables": 5,
+   "chars_in_blocks": 20273,
+   "table_blocks": 12,
+   "merged_cells": 6,
+   "wrong_style": 15,
+   "extract_s_per_page": 1.07,
+   "render_s_per_page": 0.11,
+   "size_kb": 4342,
+   "orig_kb": 3661,
+   "examples": {
+    "merged_cells": [
+     "p2: Parameter Value",
+     "p2: dim 4096 n_layers 32 head_dim 128 hidden_dim 14336 n_heads 32 n_kv_hea",
+     "p4: Model Modality MMLU HellaSwag WinoG PIQA Arc-e Arc-c NQ TriviaQA Human",
+     "p5: Guardrails MT Bench",
+     "p5: No system prompt 6.84 {v1} 0.07 Llama 2 system prompt 6.38 {v2} 0.07 M"
+    ],
+    "wrong_style": [
+     "p3: B • Commonsense Reasoning (0-shot): Hellaswag [28], Winogrande [21], PIQ",
+     "p3: B • World Knowledge (5-shot): NaturalQuestions [16], TriviaQA [15]",
+     "p3: B • Reading Comprehension (0-shot): BoolQ [8], QuAC [7]",
+     "p3:  • Popular aggregated results: MMLU [12] (5-shot), BBH [23] (3-shot), a",
+     "p4: B Figure 4: Performance of Mistral 7B and different Llama models on a wi"
+    ]
+   },
+   "coverage": 96.7
+  },
+  "mixtral": {
+   "pages": 13,
+   "blocks": 119,
+   "formulas": 32,
+   "chars": 27096,
+   "tables": 7,
+   "chars_in_blocks": 24801,
+   "table_blocks": 12,
+   "merged_cells": 7,
+   "wrong_style": 20,
+   "lost_hyphens": 2,
+   "extract_s_per_page": 1.05,
+   "render_s_per_page": 0.09,
+   "size_kb": 3099,
+   "orig_kb": 2417,
+   "examples": {
+    "merged_cells": [
+     "p2: Parameter Value",
+     "p2: dim 4096 n_layers 32 head_dim 128 hidden_dim 14336 n_heads 32 n_kv_hea",
+     "p4: Active Model HellaS WinoG PIQA Arc-e Arc-c NQ TriQA HumanE MBPP Math G",
+     "p5: LLaMA 2 70B GPT-3.5 Mixtral 8x7B",
+     "p5: French German Spanish Italian Model Arc-c HellaS MMLU Arc-c HellaS MML"
+    ],
+    "wrong_style": [
+     "p3: B • Commonsense Reasoning (0-shot): Hellaswag [32], Winogrande [26], PIQ",
+     "p3: B • World Knowledge (5-shot): NaturalQuestions [20], TriviaQA [19]",
+     "p3: B • Reading Comprehension (0-shot): BoolQ [7], QuAC [5]",
+     "p3:  • Popular aggregated results: MMLU [16] (5-shot), BBH [29] (3-shot), a",
+     "p3:  Figure 2: Performance of Mixtral and different Llama models on a wide "
+    ],
+    "lost_hyphens": [
+     "p1: fine-tuned → finetuned",
+     "p4: Mixture-of → Mixtureof"
+    ]
+   },
+   "coverage": 91.5
+  },
+  "datasentinel": {
+   "pages": 19,
+   "blocks": 347,
+   "formulas": 444,
+   "chars": 80832,
+   "tables": 19,
+   "chars_in_blocks": 74592,
+   "wrong_style": 23,
+   "mixed_rows": 6,
+   "garbled": 1,
+   "table_blocks": 106,
+   "merged_cells": 61,
+   "lost_hyphens": 19,
+   "extract_s_per_page": 1.03,
+   "render_s_per_page": 0.43,
+   "size_kb": 1243,
+   "orig_kb": 654,
+   "examples": {
+    "wrong_style": [
+     "p4: I Defenses against prompt injection attacks can be categorized into prev",
+     "p7:  Algorithm 2: OptCTD 1: Input: {v1}, and {v2}. 2: Output: {v3}. 3: for ",
+     "p7:  Algorithm 3: UpdateLLM 1: Input: {v1}, and {v2}. 2: Output: {v3}. 3: f",
+     "p8: I Following previous work [7], we consider the following 7 types of natu",
+     "p8:  Prompt injection attacks: We consider both heuristicbased and optimiza"
+    ],
+    "garbled": [
+     "p7: …v10} i{v11}n {v12}i-b{v13}at{v14}c{v15}h{v16} o{v17}f {v18}s a{v1…"
+    ],
+    "merged_cells": [
+     "p9: FNR Injected Task FPR",
+     "p9: Naive Attack Escape Character Context Ignoring Fake Completion Combine",
+     "p9: Target Task Availability Attack PLeak",
+     "p9: Dup. sentence detection 0.00 0.00",
+     "p9: Grammar correction 0.00 0.00"
+    ],
+    "lost_hyphens": [
+     "p1: LLM-integrated → LLMintegrated",
+     "p1: state-of → stateof",
+     "p4: LLM-integrated → LLMintegrated",
+     "p5: third-party → thirdparty",
+     "p5: LLM-integrated → LLMintegrated"
+    ]
+   },
+   "coverage": 92.3
+  }
+ },
+ "total": {
+  "pages": 139,
+  "blocks": 1871,
+  "formulas": 1424,
+  "tables": 67,
+  "merged_cells": 127,
+  "wrong_style": 199,
+  "inline_styles": 0,
+  "mixed_rows": 21,
+  "garbled": 6,
+  "lost_hyphens": 71,
+  "extra_hyphens": 0,
+  "coverage": 94.0,
+  "extract_s_per_page": 1.08,
+  "render_errors": 0,
+  "render_s_per_page": 0.24,
+  "size_kb": 17995,
+  "orig_kb": 13187
+ }
+}

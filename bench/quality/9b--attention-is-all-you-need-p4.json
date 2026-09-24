@@ -1,0 +1,89 @@
+{
+ "system": "9b",
+ "paper": "attention-is-all-you-need",
+ "page": 4,
+ "seconds": 84.2,
+ "thinks": false,
+ "think_scale": 1.0,
+ "blocks": 10,
+ "translated": 10,
+ "missing": 0,
+ "formula_blocks": 6,
+ "formula_lost": 0,
+ "styled_blocks": 0,
+ "styled_kept": 0,
+ "over_max_len": 0,
+ "len_ratio": 0.86,
+ "glossary_ok": "29/37",
+ "tokens": {
+  "calls": 1,
+  "prompt": 1449,
+  "completion": 677,
+  "max_call": 2126
+ },
+ "tok_per_s": 8.0,
+ "errors": [],
+ "error": "",
+ "items": [
+  {
+   "id": 0,
+   "src": "Figure 2: (left) Scaled Dot-Product Attention. (right) Multi-Head Attention consists of several attention layers running in parallel.",
+   "vi": "Hình 2: (trái) Scaled Dot-Product Attention. (phải) Multi-Head Attention gồm nhiều lớp attention chạy song song.",
+   "table": false
+  },
+  {
+   "id": 1,
+   "src": "of the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key.",
+   "vi": "của các giá trị, trong đó trọng số gán cho mỗi giá trị được tính bằng hàm tương thích của query với key tương ứng.",
+   "table": false
+  },
+  {
+   "id": 2,
+   "src": "3.2.1 Scaled Dot-Product Attention",
+   "vi": "3.2.1 Scaled Dot-Product Attention",
+   "table": false
+  },
+  {
+   "id": 3,
+   "src": "We call our particular attention \"Scaled Dot-Product Attention\" (Figure 2). The input consists of queries and keys of dimension {v1}, and values of dimension {v2}. We compute the dot products of the query with all keys, divide each by {v3}, and apply a softmax function to obtain the weights on the values.",
+   "vi": "Chúng tôi gọi attention đặc biệt của chúng tôi là \"Scaled Dot-Product Attention\" (Hình 2). Đầu vào gồm queries và keys có chiều {v1}, và values có chiều {v2}. Chúng tôi tính tích vô hướng của query với tất cả keys, chia mỗi cái cho {v3}, rồi áp dụng hàm softmax để có trọng số trên values.",
+   "table": false
+  },
+  {
+   "id": 4,
+   "src": "In practice, we compute the attention function on a set of queries simultaneously, packed together into a matrix {v1}. The keys and values are also packed together into matrices {v2} and {v3} . We compute the matrix of outputs as:",
+   "vi": "Trong thực tế, chúng tôi tính hàm attention trên tập queries đồng thời, đóng gói vào ma trận {v1}. Keys và values cũng đóng gói vào ma trận {v2} và {v3}. Chúng tôi tính ma trận đầu ra như:",
+   "table": false
+  },
+  {
+   "id": 5,
+   "src": "The two most commonly used attention functions are additive attention [2], and dot-product (multiplicative) attention. Dot-product attention is identical to our algorithm, except for the scaling factor of {v1} . Additive attention computes the compatibility function using a feed-forward network with a single hidden layer. While the two are similar in theoretical complexity, dot-product attention is much faster and more space-efficient in practice, since it can be implemented using highly optimized matrix multiplication code.",
+   "vi": "Hai hàm attention phổ biến nhất là additive attention [2], và dot-product (nhân) attention. Dot-product attention giống thuật toán của chúng tôi, trừ hệ số tỷ lệ {v1}. Additive attention tính hàm tương thích dùng mạng tiến với một lớp ẩn. Dù hai cái có độ phức tạp lý thuyết tương tự, dot-product attention nhanh hơn và tiết kiệm bộ nhớ hơn trong thực tế, vì có thể dùng mã nhân ma trận tối ưu.",
+   "table": false
+  },
+  {
+   "id": 6,
+   "src": "While for small values of {v1} the two mechanisms perform similarly, additive attention outperforms dot product attention without scaling for larger values of {v2} [3]. We suspect that for large values of {v3}, the dot products grow large in magnitude, pushing the softmax function into regions where it has extremely small gradients {v4}. To counteract this effect, we scale the dot products by {v5} .",
+   "vi": "Mà với giá trị nhỏ của {v1} hai cơ chế hoạt động tương tự, additive attention vượt trội dot product attention không tỷ lệ với giá trị lớn của {v2} [3]. Chúng tôi nghi ngờ rằng với giá trị lớn của {v3}, tích vô hướng tăng lớn về độ lớn, đẩy hàm softmax vào vùng có gradient cực nhỏ {v4}. Để chống lại hiệu ứng này, chúng tôi tỷ lệ tích vô hướng bằng {v5}.",
+   "table": false
+  },
+  {
+   "id": 7,
+   "src": "3.2.2 Multi-Head Attention",
+   "vi": "3.2.2 Multi-Head Attention",
+   "table": false
+  },
+  {
+   "id": 8,
+   "src": "Instead of performing a single attention function with {v1}-dimensional keys, values and queries, we found it beneficial to linearly project the queries, keys and values {v2} times with different, learned linear projections to {v3} and {v4} dimensions, respectively. On each of these projected versions of queries, keys and values we then perform the attention function in parallel, yielding {v5}-dimensional",
+   "vi": "Thay vì thực hiện một hàm attention với keys, values và queries có chiều {v1}, chúng tôi thấy có lợi khi chiếu tuyến tính queries, keys và values {v2} lần với các chiếu tuyến tính khác nhau, học được, đến {v3} và {v4} chiều, tương ứng. Trên mỗi phiên bản chiếu của queries, keys và values này, chúng tôi thực hiện hàm attention song song, tạo ra {v5}-chiều,",
+   "table": false
+  },
+  {
+   "id": 9,
+   "src": "{v1}To illustrate why the dot products get large, assume that the components of {v2} and {v3} are independent random variables with mean 0 and variance 1. Then their dot product, {v4}, has mean 0 and variance {v5}.",
+   "vi": "{v1}Để minh họa tại sao tích vô hướng tăng lớn, giả sử các thành phần của {v2} và {v3} là biến ngẫu nhiên độc lập với trung bình 0 và phương sai 1. Khi đó tích vô hướng của chúng, {v4}, có trung bình 0 và phương sai {v5}.",
+   "table": false
+  }
+ ]
+}

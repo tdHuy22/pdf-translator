@@ -1,0 +1,1749 @@
+{
+ "summary": {
+  "dev": {
+   "prec": 87.8,
+   "recall": 67.1,
+   "r80": 0.0
+  },
+  "test": {
+   "prec": 83.8,
+   "recall": 79.0,
+   "r80": 0.0
+  }
+ },
+ "papers": {
+  "attention-is-all-you-need": {
+   "n": 33,
+   "prec": 93.9,
+   "recall": 52.0,
+   "junk": [
+    "English-to-German translation task"
+   ],
+   "dup": [],
+   "missed": [
+    "scaled dot-product attention",
+    "attention function",
+    "encoder-decoder",
+    "sequence transduction",
+    "convolutional neural network",
+    "constituency parsing",
+    "residual connection",
+    "attention head",
+    "maximum path length",
+    "dot-product attention",
+    "additive attention",
+    "machine translation"
+   ],
+   "split": "dev",
+   "ms": 51651,
+   "terms": [
+    "WSJ",
+    "Wall Street Journal",
+    "Transformer",
+    "BLEU",
+    "WMT",
+    "decoder",
+    "WMT 2014",
+    "encoder",
+    "GPUs",
+    "positions",
+    "self-attention",
+    "RNNs",
+    "multi-head attention",
+    "P100",
+    "positional encodings",
+    "tensor2tensor",
+    "attention mechanism",
+    "sub-layers",
+    "ByteNet",
+    "ConvS2S",
+    "values",
+    "newstest2013",
+    "P100 GPUs",
+    "embeddings",
+    "feed-forward network",
+    "queries",
+    "keys",
+    "WMT 2014 English-to-German",
+    "WMT 2014 English-to-French",
+    "English-to-French translation task",
+    "Recurrent neural networks",
+    "English-to-German translation task",
+    "encoder-decoder attention"
+   ],
+   "rows": [
+    {
+     "term": "WSJ",
+     "vi": "WSJ",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "Wall Street Journal",
+     "vi": "Wall Street Journal",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "Transformer",
+     "vi": "Transformer",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "BLEU",
+     "vi": "BLEU",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "WMT",
+     "vi": "WMT",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "decoder",
+     "vi": "bộ giải mã",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "WMT 2014",
+     "vi": "WMT 2014",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "encoder",
+     "vi": "bộ mã hóa",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "GPUs",
+     "vi": "GPUs",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "positions",
+     "vi": "vị trí",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "self-attention",
+     "vi": "self-attention",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "RNNs",
+     "vi": "RNNs",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "multi-head attention",
+     "vi": "multi-head attention",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "P100",
+     "vi": "P100",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "positional encodings",
+     "vi": "positional encodings",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "tensor2tensor",
+     "vi": "tensor2tensor",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "attention mechanism",
+     "vi": "cơ chế attention",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "sub-layers",
+     "vi": "sub-layer",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "ByteNet",
+     "vi": "ByteNet",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "ConvS2S",
+     "vi": "ConvS2S",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "values",
+     "vi": "giá trị",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "newstest2013",
+     "vi": "newstest2013",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "P100 GPUs",
+     "vi": "P100 GPUs",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "embeddings",
+     "vi": "embeddings",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "feed-forward network",
+     "vi": "mạng feed-forward",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "queries",
+     "vi": "query",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "keys",
+     "vi": "key",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "WMT 2014 English-to-German",
+     "vi": "WMT 2014 English-to-German",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "WMT 2014 English-to-French",
+     "vi": "WMT 2014 English-to-French",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "English-to-French translation task",
+     "vi": "English-to-French translation task",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "Recurrent neural networks",
+     "vi": "Recurrent neural networks",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "English-to-German translation task",
+     "vi": "English-to-German translation task",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "encoder-decoder attention",
+     "vi": "encoder-decoder attention",
+     "keep": true,
+     "use": true
+    }
+   ]
+  },
+  "gqa": {
+   "n": 33,
+   "prec": 84.8,
+   "recall": 66.7,
+   "junk": [
+    "projection matrices"
+   ],
+   "dup": [
+    "key-value heads"
+   ],
+   "missed": [
+    "decoder",
+    "mean pooling",
+    "pre-training",
+    "attention head",
+    "memory bandwidth overhead"
+   ],
+   "split": "dev",
+   "ms": 124512,
+   "terms": [
+    "grouped-query attention",
+    "multi-query attention",
+    "MQA",
+    "GQA",
+    "MHA",
+    "multi-head attention",
+    "groups",
+    "value heads",
+    "T5-XXL",
+    "TriviaQA",
+    "CNN",
+    "T5",
+    "WMT",
+    "memory bandwidth",
+    "GQA-8",
+    "checkpoint",
+    "key",
+    "MHA-XXL",
+    "MultiNews",
+    "inference",
+    "uptraining",
+    "PubMed",
+    "MediaSum",
+    "query heads",
+    "T5.1.1",
+    "TPUs",
+    "key-value heads",
+    "projection matrices",
+    "T5-Large",
+    "MHA-Large",
+    "encoder self-attention",
+    "uptraining proportion",
+    "checkpoint conversion"
+   ],
+   "rows": [
+    {
+     "term": "grouped-query attention",
+     "vi": "grouped-query attention",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "multi-query attention",
+     "vi": "multi-query attention",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "MQA",
+     "vi": "MQA",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "GQA",
+     "vi": "GQA",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "MHA",
+     "vi": "MHA",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "multi-head attention",
+     "vi": "multi-head attention",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "groups",
+     "vi": "nhóm",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "value heads",
+     "vi": "đầu giá trị",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "T5-XXL",
+     "vi": "T5-XXL",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "TriviaQA",
+     "vi": "TriviaQA",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "CNN",
+     "vi": "CNN",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "T5",
+     "vi": "T5",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "WMT",
+     "vi": "WMT",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "memory bandwidth",
+     "vi": "băng thông bộ nhớ",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "GQA-8",
+     "vi": "GQA-8",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "checkpoint",
+     "vi": "checkpoint",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "key",
+     "vi": "khóa",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "MHA-XXL",
+     "vi": "MHA-XXL",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "MultiNews",
+     "vi": "MultiNews",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "inference",
+     "vi": "suy luận",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "uptraining",
+     "vi": "uptraining",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "PubMed",
+     "vi": "PubMed",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "MediaSum",
+     "vi": "MediaSum",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "query heads",
+     "vi": "đầu truy vấn",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "T5.1.1",
+     "vi": "T5.1.1",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "TPUs",
+     "vi": "TPUs",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "key-value heads",
+     "vi": "đầu khóa-giá trị",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "projection matrices",
+     "vi": "ma trận chiếu",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "T5-Large",
+     "vi": "T5-Large",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "MHA-Large",
+     "vi": "MHA-Large",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "encoder self-attention",
+     "vi": "encoder self-attention",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "uptraining proportion",
+     "vi": "tỷ lệ uptraining",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "checkpoint conversion",
+     "vi": "chuyển đổi checkpoint",
+     "keep": false,
+     "use": true
+    }
+   ]
+  },
+  "flashattention-2": {
+   "n": 40,
+   "prec": 85.0,
+   "recall": 72.4,
+   "junk": [
+    "FP8",
+    "TMA",
+    "sequence length dimension"
+   ],
+   "dup": [
+    "SMs"
+   ],
+   "missed": [
+    "matrix multiply",
+    "occupancy",
+    "parallelism",
+    "online softmax",
+    "tiling",
+    "kernel",
+    "logsumexp",
+    "memory reads/writes"
+   ],
+   "split": "dev",
+   "ms": 53481,
+   "terms": [
+    "high bandwidth memory",
+    "HBM",
+    "SM",
+    "MQA",
+    "GQA",
+    "Multi-query attention",
+    "grouped-query attention",
+    "streaming multiprocessors",
+    "FlashAttention-2",
+    "FlashAttention",
+    "GPU",
+    "FLOPs",
+    "A100",
+    "SRAM",
+    "backward pass",
+    "attention",
+    "causal mask",
+    "TFLOPs",
+    "thread blocks",
+    "A100 GPU",
+    "warps",
+    "GEMM",
+    "forward pass",
+    "shared memory",
+    "head dimension",
+    "sequence length",
+    "H100 GPUs",
+    "H100",
+    "softmax",
+    "CUTLASS",
+    "non-matmul FLOPs",
+    "partitioning",
+    "PyTorch",
+    "FP8",
+    "FP16",
+    "BF16",
+    "SMs",
+    "TMA",
+    "sequence length dimension",
+    "GPT-style"
+   ],
+   "rows": [
+    {
+     "term": "high bandwidth memory",
+     "vi": "bộ nhớ băng thông cao (HBM)",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "HBM",
+     "vi": "HBM",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "SM",
+     "vi": "SM",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "MQA",
+     "vi": "MQA",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "GQA",
+     "vi": "GQA",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "Multi-query attention",
+     "vi": "cơ chế đa truy vấn (MQA)",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "grouped-query attention",
+     "vi": "cơ chế truy vấn nhóm (GQA)",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "streaming multiprocessors",
+     "vi": "đa bộ xử lý luồng (SM)",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "FlashAttention-2",
+     "vi": "FlashAttention-2",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "FlashAttention",
+     "vi": "FlashAttention",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "GPU",
+     "vi": "GPU",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "FLOPs",
+     "vi": "FLOPs",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "A100",
+     "vi": "A100",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "SRAM",
+     "vi": "SRAM",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "backward pass",
+     "vi": "lan truyền ngược",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "attention",
+     "vi": "attention",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "causal mask",
+     "vi": "mặt nạ nhân quả",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "TFLOPs",
+     "vi": "TFLOPs",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "thread blocks",
+     "vi": "khối luồng",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "A100 GPU",
+     "vi": "A100 GPU",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "warps",
+     "vi": "warp",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "GEMM",
+     "vi": "GEMM",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "forward pass",
+     "vi": "lan truyền xuôi",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "shared memory",
+     "vi": "bộ nhớ chia sẻ",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "head dimension",
+     "vi": "kích thước đầu",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "sequence length",
+     "vi": "độ dài chuỗi",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "H100 GPUs",
+     "vi": "H100 GPUs",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "H100",
+     "vi": "H100",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "softmax",
+     "vi": "softmax",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "CUTLASS",
+     "vi": "CUTLASS",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "non-matmul FLOPs",
+     "vi": "FLOPs không phải matmul",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "partitioning",
+     "vi": "phân chia công việc",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "PyTorch",
+     "vi": "PyTorch",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "FP8",
+     "vi": "FP8",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "FP16",
+     "vi": "FP16",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "BF16",
+     "vi": "BF16",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "SMs",
+     "vi": "SMs",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "TMA",
+     "vi": "TMA",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "sequence length dimension",
+     "vi": "chiều độ dài chuỗi",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "GPT-style",
+     "vi": "GPT-style",
+     "keep": true,
+     "use": true
+    }
+   ]
+  },
+  "roformer-rope": {
+   "n": 40,
+   "prec": 87.5,
+   "recall": 77.3,
+   "junk": [
+    "WMT 2014",
+    "MIT"
+   ],
+   "dup": [],
+   "missed": [
+    "Transformer",
+    "inner product",
+    "long-term decay",
+    "fine-tuning",
+    "query"
+   ],
+   "split": "dev",
+   "ms": 55180,
+   "terms": [
+    "Rotary Position Embedding",
+    "RoPE",
+    "PLM",
+    "pre-trained language models",
+    "Convolution neural networks",
+    "Recurrent neural networks",
+    "CNN",
+    "RRN",
+    "natural language processing",
+    "NLP",
+    "MLM",
+    "masked language-modeling",
+    "RoFormer",
+    "relative position",
+    "position embedding",
+    "PerFormer",
+    "BERT",
+    "CAIL2019-SCM",
+    "position encoding",
+    "GLUE",
+    "WoBERT",
+    "position information",
+    "absolute position",
+    "self-attention",
+    "relative position encoding",
+    "absolute position embedding",
+    "sequence length",
+    "BLEU",
+    "WMT",
+    "MRPC",
+    "QQP",
+    "relative position information",
+    "pre-training",
+    "WMT 2014",
+    "relative position embeddings",
+    "MIT",
+    "linear self-attention",
+    "maximum sequence length",
+    "rotation matrix",
+    "relative distance"
+   ],
+   "rows": [
+    {
+     "term": "Rotary Position Embedding",
+     "vi": "Nhúng vị trí quay (RoPE)",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "RoPE",
+     "vi": "RoPE",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "PLM",
+     "vi": "PLM",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "pre-trained language models",
+     "vi": "mô hình ngôn ngữ tiền huấn luyện (PLM)",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "Convolution neural networks",
+     "vi": "Convolution neural networks",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "Recurrent neural networks",
+     "vi": "Recurrent neural networks",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "CNN",
+     "vi": "CNN",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "RRN",
+     "vi": "RRN",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "natural language processing",
+     "vi": "xử lý ngôn ngữ tự nhiên (NLP)",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "NLP",
+     "vi": "NLP",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "MLM",
+     "vi": "MLM",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "masked language-modeling",
+     "vi": "mô hình hóa ngôn ngữ bị che (MLM)",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "RoFormer",
+     "vi": "RoFormer",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "relative position",
+     "vi": "vị trí tương đối",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "position embedding",
+     "vi": "nhúng vị trí",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "PerFormer",
+     "vi": "PerFormer",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "BERT",
+     "vi": "BERT",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "CAIL2019-SCM",
+     "vi": "CAIL2019-SCM",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "position encoding",
+     "vi": "mã hóa vị trí",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "GLUE",
+     "vi": "GLUE",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "WoBERT",
+     "vi": "WoBERT",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "position information",
+     "vi": "thông tin vị trí",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "absolute position",
+     "vi": "vị trí tuyệt đối",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "self-attention",
+     "vi": "self-attention",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "relative position encoding",
+     "vi": "mã hóa vị trí tương đối",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "absolute position embedding",
+     "vi": "nhúng vị trí tuyệt đối",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "sequence length",
+     "vi": "độ dài chuỗi",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "BLEU",
+     "vi": "BLEU",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "WMT",
+     "vi": "WMT",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "MRPC",
+     "vi": "MRPC",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "QQP",
+     "vi": "QQP",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "relative position information",
+     "vi": "thông tin vị trí tương đối",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "pre-training",
+     "vi": "tiền huấn luyện",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "WMT 2014",
+     "vi": "WMT 2014",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "relative position embeddings",
+     "vi": "nhúng vị trí tương đối",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "MIT",
+     "vi": "MIT",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "linear self-attention",
+     "vi": "tự chú ý tuyến tính",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "maximum sequence length",
+     "vi": "độ dài chuỗi tối đa",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "rotation matrix",
+     "vi": "ma trận quay",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "relative distance",
+     "vi": "khoảng cách tương đối",
+     "keep": false,
+     "use": true
+    }
+   ]
+  },
+  "datasentinel": {
+   "n": 40,
+   "prec": 87.5,
+   "recall": 73.1,
+   "junk": [],
+   "dup": [
+    "injected data"
+   ],
+   "missed": [
+    "clean target data",
+    "LLM-integrated application",
+    "minimax optimization",
+    "game-theoretic",
+    "fine-tuning",
+    "inner max problem",
+    "outer min problem"
+   ],
+   "split": "test",
+   "ms": 169730,
+   "terms": [
+    "LLM",
+    "large language models",
+    "Greedy Coordinate Gradient",
+    "false positive rates",
+    "FPR",
+    "false negative rates",
+    "FNR",
+    "known-answer detection",
+    "KAD",
+    "GCG",
+    "SSFTD",
+    "EVD",
+    "NLLMD",
+    "SFT",
+    "supervised fine-tuning",
+    "SSFTD-G",
+    "DataSentinel",
+    "detection LLM",
+    "target data",
+    "injected task",
+    "target task",
+    "injected prompt",
+    "detection instruction",
+    "separator",
+    "secret key",
+    "target instruction",
+    "injected instruction",
+    "injected data",
+    "backend LLM",
+    "prompt injection attacks",
+    "LLM-integrated",
+    "prompt injection",
+    "PLeak",
+    "adaptive attacks",
+    "contaminated target data",
+    "NeuralExec",
+    "LLaMA3-8B-Instruct",
+    "OptCTD",
+    "heuristic-based attacks",
+    "optimization-based attacks"
+   ],
+   "rows": [
+    {
+     "term": "LLM",
+     "vi": "LLM",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "large language models",
+     "vi": "large language models",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "Greedy Coordinate Gradient",
+     "vi": "Greedy Coordinate Gradient",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "false positive rates",
+     "vi": "tỷ lệ dương tính giả (FPR)",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "FPR",
+     "vi": "FPR",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "false negative rates",
+     "vi": "tỷ lệ âm tính giả (FNR)",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "FNR",
+     "vi": "FNR",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "known-answer detection",
+     "vi": "phát hiện đáp án đã biết (KAD)",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "KAD",
+     "vi": "KAD",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "GCG",
+     "vi": "GCG",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "SSFTD",
+     "vi": "SSFTD",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "EVD",
+     "vi": "EVD",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "NLLMD",
+     "vi": "NLLMD",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "SFT",
+     "vi": "SFT",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "supervised fine-tuning",
+     "vi": "huấn luyện tinh chỉnh có giám sát (SFT)",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "SSFTD-G",
+     "vi": "SSFTD-G",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "DataSentinel",
+     "vi": "DataSentinel",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "detection LLM",
+     "vi": "LLM phát hiện",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "target data",
+     "vi": "dữ liệu mục tiêu",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "injected task",
+     "vi": "nhiệm vụ bị tiêm",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "target task",
+     "vi": "nhiệm vụ mục tiêu",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "injected prompt",
+     "vi": "prompt bị tiêm",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "detection instruction",
+     "vi": "hướng dẫn phát hiện",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "separator",
+     "vi": "phân tách",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "secret key",
+     "vi": "khóa bí mật",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "target instruction",
+     "vi": "hướng dẫn mục tiêu",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "injected instruction",
+     "vi": "hướng dẫn bị tiêm",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "injected data",
+     "vi": "dữ liệu bị tiêm",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "backend LLM",
+     "vi": "LLM backend",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "prompt injection attacks",
+     "vi": "tấn công tiêm prompt",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "LLM-integrated",
+     "vi": "LLM-integrated",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "prompt injection",
+     "vi": "tiêm prompt",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "PLeak",
+     "vi": "PLeak",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "adaptive attacks",
+     "vi": "tấn công thích ứng",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "contaminated target data",
+     "vi": "dữ liệu mục tiêu bị nhiễm",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "NeuralExec",
+     "vi": "NeuralExec",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "LLaMA3-8B-Instruct",
+     "vi": "LLaMA3-8B-Instruct",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "OptCTD",
+     "vi": "OptCTD",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "heuristic-based attacks",
+     "vi": "tấn công dựa trên heuristic",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "optimization-based attacks",
+     "vi": "tấn công dựa trên tối ưu hóa",
+     "keep": false,
+     "use": true
+    }
+   ]
+  },
+  "mixtral": {
+   "n": 40,
+   "prec": 80.0,
+   "recall": 85.0,
+   "junk": [],
+   "dup": [
+    "GPT-3.5-Turbo",
+    "active parameters",
+    "feedforward blocks"
+   ],
+   "missed": [
+    "router",
+    "benchmark",
+    "context size"
+   ],
+   "split": "test",
+   "ms": 62488,
+   "terms": [
+    "Expert Parallelism",
+    "Bias Benchmark for QA",
+    "BOLD",
+    "Bias in Open-Ended Language Generation Dataset",
+    "Sparse Mixture of Experts",
+    "BBQ",
+    "FFN",
+    "EP",
+    "feed-forward network",
+    "SMoE",
+    "SFT",
+    "DPO",
+    "Direct Preference Optimization",
+    "supervised fine-tuning",
+    "Mixtral",
+    "expert",
+    "Mixtral 8x7B",
+    "Llama 2",
+    "GPT-3.5",
+    "active parameter count",
+    "token",
+    "MoE",
+    "GPUs",
+    "GPT-3.5-Turbo",
+    "TensorRT-LLM",
+    "GShard",
+    "active parameters",
+    "MoE layer",
+    "MMLU",
+    "TopK",
+    "SwiGLU",
+    "LMSys",
+    "vLLM",
+    "Apache 2.0",
+    "Mistral 7B",
+    "Instruct",
+    "Mixtral 8x7B Instruct",
+    "feedforward blocks",
+    "Apache 2.0 license",
+    "Gemini Pro"
+   ],
+   "rows": [
+    {
+     "term": "Expert Parallelism",
+     "vi": "Song song chuyên gia (EP)",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "Bias Benchmark for QA",
+     "vi": "Bias Benchmark for QA",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "BOLD",
+     "vi": "BOLD",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "Bias in Open-Ended Language Generation Dataset",
+     "vi": "Bias in Open-Ended Language Generation Dataset",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "Sparse Mixture of Experts",
+     "vi": "Hỗn hợp chuyên gia thưa (SMoE)",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "BBQ",
+     "vi": "BBQ",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "FFN",
+     "vi": "FFN",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "EP",
+     "vi": "EP",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "feed-forward network",
+     "vi": "Mạng nơ-ron truyền thẳng (FFN)",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "SMoE",
+     "vi": "SMoE",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "SFT",
+     "vi": "SFT",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "DPO",
+     "vi": "DPO",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "Direct Preference Optimization",
+     "vi": "Direct Preference Optimization",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "supervised fine-tuning",
+     "vi": "Huấn luyện có giám sát (SFT)",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "Mixtral",
+     "vi": "Mixtral",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "expert",
+     "vi": "Chuyên gia",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "Mixtral 8x7B",
+     "vi": "Mixtral 8x7B",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "Llama 2",
+     "vi": "Llama 2",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "GPT-3.5",
+     "vi": "GPT-3.5",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "active parameter count",
+     "vi": "Số lượng tham số hoạt động",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "token",
+     "vi": "Token",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "MoE",
+     "vi": "MoE",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "GPUs",
+     "vi": "GPUs",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "GPT-3.5-Turbo",
+     "vi": "GPT-3.5-Turbo",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "TensorRT-LLM",
+     "vi": "TensorRT-LLM",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "GShard",
+     "vi": "GShard",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "active parameters",
+     "vi": "Tham số hoạt động",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "MoE layer",
+     "vi": "Lớp MoE",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "MMLU",
+     "vi": "MMLU",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "TopK",
+     "vi": "TopK",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "SwiGLU",
+     "vi": "SwiGLU",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "LMSys",
+     "vi": "LMSys",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "vLLM",
+     "vi": "vLLM",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "Apache 2.0",
+     "vi": "Apache 2.0",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "Mistral 7B",
+     "vi": "Mistral 7B",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "Instruct",
+     "vi": "Instruct",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "Mixtral 8x7B Instruct",
+     "vi": "Mixtral 8x7B Instruct",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "feedforward blocks",
+     "vi": "Khối truyền thẳng",
+     "keep": false,
+     "use": true
+    },
+    {
+     "term": "Apache 2.0 license",
+     "vi": "Apache 2.0 license",
+     "keep": true,
+     "use": true
+    },
+    {
+     "term": "Gemini Pro",
+     "vi": "Gemini Pro",
+     "keep": true,
+     "use": true
+    }
+   ]
+  }
+ }
+}

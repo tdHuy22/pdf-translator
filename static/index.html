@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VietPaper – Dịch bài báo PDF</title>
+<link rel="stylesheet" href="/vendor/katex.min.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📄</text></svg>">
+<style>
+  :root { --bg:#f3f4f6; --panel:#fff; --line:#d1d5db; --text:#111827; --muted:#6b7280; --accent:#2563eb; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); }
+  header { position:sticky; top:0; z-index:5; background:var(--panel); border-bottom:1px solid var(--line);
+           padding:8px 12px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  header h1 { font-size:16px; margin:0 12px 0 0; }
+  input, select, button { font:inherit; font-size:13px; padding:5px 8px; border:1px solid var(--line); border-radius:6px; background:#fff; }
+  button { cursor:pointer; } button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button:disabled { opacity:.5; cursor:default; }
+  #settings { display:none; background:var(--panel); border-bottom:1px solid var(--line); padding:10px 12px;
+              grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px; }
+  #settings.open { display:grid; }
+  #settings h3.sec { grid-column:1/-1; margin:8px 0 0; font-size:13px; border-bottom:1px solid var(--line); padding-bottom:3px; }
+  #settings label { font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:3px; }
+  #status { font-size:13px; color:var(--muted); margin-left:auto; }
+  .bar { height:3px; background:var(--accent); width:0; transition:width .3s; }
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:12px; }
+  .colhead { font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; }
+  .pair { display:contents; }
+  .page { position:relative; overflow:hidden; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.15); }
+  .page img { width:100%; display:block; }
+  .page .ph { aspect-ratio:0.77; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; color:var(--muted); font-size:13px; }
+  .tools { position:absolute; top:6px; right:6px; display:flex; gap:4px; z-index:3; }
+  .tools button { font-size:11px; padding:2px 6px; opacity:.85; }
+  .num { position:absolute; top:6px; left:6px; z-index:3; font-size:11px; background:rgba(0,0,0,.55); color:#fff; padding:1px 6px; border-radius:4px; }
+  .empty { padding:80px 20px; text-align:center; color:var(--muted); grid-column:1/-1; }
+  @media (max-width:700px){ .cols{ grid-template-columns:1fr; } }
+
+  /* ---- Lớp chữ trong suốt đè lên ảnh trang: bôi đen chọn chữ, tô vàng theo đoạn ---- */
+  .layer { position:absolute; top:0; left:0; z-index:1; transform-origin:0 0; }
+  .page .ph { position:relative; z-index:2; }
+  .blk { position:absolute; border-radius:2px; pointer-events:none; }
+  /* Rê chuột lên một đoạn → viền xanh quanh ĐOẠN TƯƠNG ỨNG ở bản kia (chỉ để đối chiếu, không phải tô vàng) */
+  .blk.peer { outline:2px solid rgba(37,99,235,.4); outline-offset:1px; border-radius:3px; }
+  /* Vệt tô vàng: đúng phần chữ đã bôi đen. multiply để chữ bên dưới vẫn đọc được */
+  .hl { position:absolute; pointer-events:none; background:rgba(250,204,21,.55); mix-blend-mode:multiply; border-radius:2px; }
+  .ln { position:absolute; white-space:pre; transform-origin:0 0; color:transparent; cursor:text; }
+  .ln::selection { background:rgba(37,99,235,.32); }
+  #selbar { position:absolute; z-index:20; display:none; gap:4px; background:var(--panel);
+            border:1px solid var(--line); border-radius:8px; padding:4px; box-shadow:0 4px 14px rgba(0,0,0,.2); }
+  #selbar.on { display:flex; }
+  #selbar button { font-size:12px; padding:4px 8px; }
+
+  /* ---- Bảng thuật ngữ ---- */
+  #gloss { display:none; background:var(--panel); border-bottom:1px solid var(--line); padding:8px 12px; }
+  #gloss.open { display:block; }
+  .ghead { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px; }
+  .ghead .hint { font-size:12px; color:var(--muted); }
+  #gwrap { max-height:46vh; overflow:auto; border:1px solid var(--line); border-radius:6px; }
+  #gtab { width:100%; border-collapse:collapse; font-size:13px; }
+  #gtab th { position:sticky; top:0; background:#f9fafb; text-align:left; font-size:12px; color:var(--muted);
+             padding:5px 8px; border-bottom:1px solid var(--line); }
+  #gtab td { padding:3px 8px; border-bottom:1px solid #f1f2f4; }
+  #gtab tr.off { opacity:.42; }
+  #gtab input[type=text] { width:100%; padding:3px 6px; }
+  #gtab label { font-size:12px; margin-right:8px; white-space:nowrap; }
+  #gtab input.gterm { font-weight:600; }
+  #gtab .gdel { border:none; background:none; color:var(--muted); cursor:pointer; font-size:14px; padding:2px 6px; }
+  #gtab .gdel:hover { color:#dc2626; }
+  #gextra > div { margin-top:6px; line-height:2; }
+  .gchip { font-size:12px; padding:1px 8px; margin:0 4px 2px 0; border:1px solid var(--line); border-radius:12px;
+           background:#fff; cursor:pointer; }
+  .gchip:hover { border-color:#2563eb; color:#2563eb; }
+  .gchip small { color:var(--muted); margin-left:4px; }
+  .gchip.hid { color:var(--muted); border-style:dashed; }
+  /* ---- Tài liệu đã lưu (cùng kiểu với bảng thuật ngữ) ---- */
+  #docs { display:none; background:var(--panel); border-bottom:1px solid var(--line); padding:8px 12px; }
+  #docs.open { display:block; }
+  #dwrap { max-height:46vh; overflow:auto; border:1px solid var(--line); border-radius:6px; }
+  #dtab { width:100%; border-collapse:collapse; font-size:13px; }
+  #dtab th { position:sticky; top:0; background:#f9fafb; text-align:left; font-size:12px; color:var(--muted);
+             padding:5px 8px; border-bottom:1px solid var(--line); }
+  #dtab td { padding:5px 8px; border-bottom:1px solid #f1f2f4; vertical-align:top; }
+  #dtab tr.cur { background:#eef2ff; }
+  #dtab .hint { font-size:11px; color:var(--muted); }
+  #dtab a { color:inherit; text-decoration:none; } #dtab a:hover b { text-decoration:underline; }
+
+  /* ---- Khung trò chuyện ---- */
+  body.chat .cols { margin-right:380px; }
+  #chat { position:fixed; top:0; right:0; width:380px; height:100vh; z-index:10; display:none;
+          background:var(--panel); border-left:1px solid var(--line); flex-direction:column; }
+  body.chat #chat { display:flex; }
+  .chead { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid var(--line); font-size:14px; }
+  .chead b { flex:1; }
+  #msgs { flex:1; overflow:auto; padding:10px; display:flex; flex-direction:column; gap:10px; }
+  .msg { font-size:13px; line-height:1.5; white-space:pre-wrap; padding:8px 10px; border-radius:10px; }
+  .msg.me { background:#e0e7ff; align-self:flex-end; max-width:88%; }
+  .msg.ai { background:#f3f4f6; }
+  .msg.err { background:#fee2e2; }
+  .msg .quote { display:block; border-left:3px solid var(--accent); padding-left:6px; margin-bottom:5px;
+                font-size:12px; color:var(--muted); max-height:5.6em; overflow:hidden; }
+  /* Câu trả lời LLM được dựng thành HTML (Markdown + công thức) nên bỏ pre-wrap, nếu không mỗi xuống dòng
+     của Markdown bị tính hai lần. Bong bóng của người dùng vẫn giữ pre-wrap vì đó là chữ gõ thô. */
+  .msg.ai .body { white-space:normal; }
+  .msg.ai .body > :first-child { margin-top:0; }
+  .msg.ai .body > :last-child { margin-bottom:0; }
+  .msg.ai .body p, .msg.ai .body ul, .msg.ai .body ol, .msg.ai .body pre { margin:.5em 0; }
+  .msg.ai .body ul, .msg.ai .body ol { padding-left:1.3em; }
+  .msg.ai .body li { margin:.15em 0; }
+  .msg.ai .body h1, .msg.ai .body h2, .msg.ai .body h3, .msg.ai .body h4 { font-size:1.05em; margin:.7em 0 .3em; }
+  .msg.ai .body code { background:rgba(0,0,0,.06); padding:.1em .3em; border-radius:4px; font-size:.92em; }
+  .msg.ai .body pre { background:rgba(0,0,0,.06); padding:8px; border-radius:6px; overflow-x:auto; }
+  .msg.ai .body pre code { background:none; padding:0; }
+  .msg.ai .body blockquote { border-left:3px solid var(--line); margin:.5em 0; padding-left:8px; color:var(--muted); }
+  /* Khung chat hẹp: bảng phải cuộn ngang được chứ không kéo giãn cả khung */
+  .msg.ai .body table { border-collapse:collapse; font-size:.92em; margin:.5em 0; }
+  .msg.ai .body th, .msg.ai .body td { border:1px solid var(--line); padding:3px 6px; text-align:left; }
+  .msg.ai .body th { background:rgba(0,0,0,.04); }
+  .msg.ai .body > table, .msg.ai .body .tablewrap { display:block; overflow-x:auto; max-width:100%; }
+  .msg.ai .body .katex-display { overflow-x:auto; overflow-y:hidden; padding:2px 0; margin:.5em 0; }
+  .msg.ai .body pre.plain { white-space:pre-wrap; background:none; padding:0; font:inherit; }
+  .msgbar { display:flex; gap:6px; margin-top:6px; }
+  .msgbar button { font:inherit; font-size:11px; padding:1px 6px; border:1px solid var(--line);
+                   border-radius:5px; background:transparent; color:var(--muted); cursor:pointer; }
+  .msgbar button:hover { background:rgba(0,0,0,.05); }
+  #selbox { font-size:12px; color:var(--muted); padding:6px 10px; border-top:1px solid var(--line);
+            background:#fffbeb; display:flex; gap:6px; align-items:flex-start; }
+  #selbox[hidden] { display:none; }   /* #selbox{display:flex} là style của trang nên đè lên [hidden] của trình duyệt */
+  #selbox span { flex:1; max-height:4.5em; overflow:hidden; }
+  #ask { display:flex; gap:6px; padding:8px; border-top:1px solid var(--line); }
+  #q { flex:1; font:inherit; font-size:13px; padding:6px; border:1px solid var(--line); border-radius:6px; resize:vertical; }
+  @media (max-width:900px){ body.chat .cols { margin-right:0; } #chat { width:100%; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>📄 VietPaper <small style="font-weight:normal;opacity:.7">– dịch bài báo sang tiếng Việt</small></h1>
+  <button id="btnDocs" title="Tài liệu đã tải lên trước đây (lưu trên máy, khởi động lại app vẫn còn)">📚 Tài liệu</button>
+  <input type="file" id="file" accept="application/pdf">
+  <button id="btnAll" class="primary" disabled>Dịch tất cả</button>
+  <button id="btnStop" disabled>Dừng</button>
+  <button id="btnDl" disabled>Tải PDF đã dịch</button>
+  <button id="btnGloss" disabled>📒 Thuật ngữ</button>
+  <button id="btnChat" disabled>💬 Hỏi về tài liệu</button>
+  <button id="btnSet">⚙️ Cấu hình</button>
+  <span id="status">Chưa mở file</span>
+</header>
+<div class="bar" id="bar"></div>
+<div id="settings">
+  <h3 class="sec">1. Dịch</h3>
+  <label>Cách dịch
+    <select id="translator">
+      <option value="llm">LLM đa năng (Qwen, Gemma, GPT…) – dịch theo lô, giữ độ dài</option>
+      <option value="mt">Model chuyên dịch (TranslateGemma, HY-MT…) – từng đoạn</option>
+      <option value="google">Google Translate (miễn phí, không cần key, không cần server)</option>
+    </select></label>
+  <label class="tr-llm">Nhà cung cấp
+    <select id="preset">
+      <option value="ollama">Ollama (local)</option>
+      <option value="llamacpp">llama.cpp server (local)</option>
+      <option value="tuf">llama.cpp – server TUF (Tailscale)</option>
+      <option value="lmstudio">LM Studio (local)</option>
+      <option value="openrouter">OpenRouter</option>
+      <option value="openai">OpenAI</option>
+      <option value="custom">Tùy chỉnh (OpenAI-compatible)</option>
+    </select></label>
+  <label class="tr-llm">Base URL <input id="base_url"></label>
+  <label class="tr-llm">API key <input id="api_key" type="password" placeholder="(để trống nếu local)"></label>
+  <label class="tr-llm">Model
+    <span style="display:flex;gap:4px"><input id="model" style="flex:1"><button id="btnModels" type="button">Tải DS</button></span>
+    <select id="models" style="display:none;margin-top:4px"></select></label>
+  <label class="tr-llm">Temperature <input id="temperature" type="number" step="0.1" min="0" max="2"></label>
+  <label class="tr-llm" style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="disable_thinking"> Tắt thinking cho model tự host (nhanh hơn nhiều)</label>
+  <label class="tr-llm" style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="google_fallback"> Dùng Google Translate khi LLM lỗi</label>
+  <label>Độ dài bản dịch tối đa (× bản gốc) <input id="length_ratio" type="number" step="0.05" min="0.8" max="3"></label>
+  <label>Số trang dịch song song <input id="concurrency" type="number" min="1" max="8"></label>
+  <label class="tr-llm" title="Ngữ cảnh model còn chỗ thì dồn nhiều trang vào MỘT lượt gọi: câu ngắt qua trang được dịch liền mạch, đầu bảng lặp ở trang sau chỉ dịch một lần">Gộp trang mỗi lượt gọi
+    <select id="page_span">
+      <option value="0">Tự động theo ngữ cảnh còn trống (tối đa 3)</option>
+      <option value="1">1 trang – không gộp</option>
+      <option value="2">Tối đa 2 trang</option>
+      <option value="3">Tối đa 3 trang</option>
+    </select></label>
+  <label class="tr-llm" style="flex-direction:row;align-items:center;gap:6px" title="Trước khi dịch trang đầu, app hỏi LLM một lượt để chốt cách dịch các thuật ngữ của bài, rồi dùng thống nhất cho mọi trang"><input type="checkbox" id="glossary_auto"> Tự lập bảng thuật ngữ cho mỗi tài liệu</label>
+  <label style="grid-column:1/-1">Thuật ngữ dùng cho <b>MỌI tài liệu</b> (mỗi dòng: English = Tiếng Việt) — thuật ngữ riêng của từng bài thì sửa trong 📒 Thuật ngữ
+    <textarea id="glossary" rows="3" style="font:inherit;font-size:13px;padding:5px;border:1px solid var(--line);border-radius:6px"></textarea></label>
+
+  <h3 class="sec">2. OCR (PDF scan)</h3>
+  <label>Khi nào OCR
+    <select id="ocr_mode">
+      <option value="auto">Tự động (trang không có lớp chữ)</option>
+      <option value="force">Luôn OCR</option>
+      <option value="off">Tắt</option>
+    </select></label>
+  <label>Cách OCR
+    <select id="ocr_engine">
+      <option value="rapidocr">RapidOCR – PaddleOCR ONNX (local, khuyên dùng)</option>
+      <option value="tesseract">Tesseract (local, cần brew install tesseract)</option>
+      <option value="ocrspace">OCR.space API (miễn phí, cần mạng)</option>
+      <option value="vlm">Vision LLM (Ollama, llama.cpp, OpenRouter…)</option>
+      <option value="custom">Endpoint OCR tuỳ chỉnh (HTTP)</option>
+    </select></label>
+  <label class="ocr-opt" data-engine="tesseract ocrspace">Ngôn ngữ OCR <input id="ocr_lang" placeholder="eng"></label>
+  <label class="ocr-opt" data-engine="ocrspace">OCR.space API key <input id="ocr_api_key" type="password" placeholder="helloworld (demo)"></label>
+  <label class="ocr-opt" data-engine="vlm">Nhà cung cấp
+    <select id="ocr_preset">
+      <option value="ollama">Ollama (local)</option>
+      <option value="llamacpp">llama.cpp server (local)</option>
+      <option value="tuf">llama.cpp – server TUF (Tailscale)</option>
+      <option value="lmstudio">LM Studio (local)</option>
+      <option value="openrouter">OpenRouter</option>
+      <option value="openai">OpenAI</option>
+      <option value="custom">Tùy chỉnh (OpenAI-compatible)</option>
+    </select></label>
+  <label class="ocr-opt" data-engine="vlm">Base URL <input id="ocr_vlm_base_url"></label>
+  <label class="ocr-opt" data-engine="vlm">API key <input id="ocr_vlm_api_key" type="password" placeholder="(để trống nếu local)"></label>
+  <label class="ocr-opt" data-engine="vlm">Model
+    <span style="display:flex;gap:4px"><input id="ocr_vlm_model" style="flex:1"><button id="btnOcrModels" type="button">Tải DS</button></span>
+    <select id="ocr_models" style="display:none;margin-top:4px"></select></label>
+  <label class="ocr-opt" data-engine="vlm" title="Ollama/API cloud: 4. llama-server chỉ có 1 slot (-np 1, vd. TUF): 1 — gửi nhiều hơn chỉ phải xếp hàng, dễ quá thời gian chờ">Số vùng gửi cùng lúc
+    <input id="ocr_vlm_concurrency" type="number" min="1" max="8"></label>
+  <label class="ocr-opt" data-engine="custom">URL <input id="ocr_custom_url" placeholder="http://localhost:9000/ocr"></label>
+  <label class="ocr-opt" data-engine="custom">API key <input id="ocr_custom_api_key" type="password" placeholder="(tuỳ chọn)"></label>
+
+  <h3 class="sec">3. Trò chuyện về tài liệu</h3>
+  <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="chat_same"> Dùng đúng server/model đang dịch</label>
+  <label class="chat-opt">Nhà cung cấp
+    <select id="chat_preset">
+      <option value="ollama">Ollama (local)</option>
+      <option value="llamacpp">llama.cpp server (local)</option>
+      <option value="tuf">llama.cpp – server TUF (Tailscale)</option>
+      <option value="lmstudio">LM Studio (local)</option>
+      <option value="openrouter">OpenRouter</option>
+      <option value="openai">OpenAI</option>
+      <option value="custom">Tùy chỉnh (OpenAI-compatible)</option>
+    </select></label>
+  <label class="chat-opt">Base URL <input id="chat_base_url"></label>
+  <label class="chat-opt">API key <input id="chat_api_key" type="password" placeholder="(để trống nếu local)"></label>
+  <label class="chat-opt">Model
+    <span style="display:flex;gap:4px"><input id="chat_model" style="flex:1"><button id="btnChatModels" type="button">Tải DS</button></span>
+    <select id="chat_models" style="display:none;margin-top:4px"></select></label>
+
+  <h3 class="sec">4. Lập bảng thuật ngữ</h3>
+  <label style="flex-direction:row;align-items:center;gap:6px" title="Bảng thuật ngữ chỉ tốn một lượt gọi cho mỗi tài liệu, nên đáng dùng model mạnh hơn model dịch (vd. Nemotron Ultra free trên OpenRouter, ~15 giây)"><input type="checkbox" id="gloss_same"> Dùng đúng server/model đang dịch</label>
+  <label class="gloss-opt">Nhà cung cấp
+    <select id="gloss_preset">
+      <option value="ollama">Ollama (local)</option>
+      <option value="llamacpp">llama.cpp server (local)</option>
+      <option value="tuf">llama.cpp – server TUF (Tailscale)</option>
+      <option value="lmstudio">LM Studio (local)</option>
+      <option value="openrouter">OpenRouter</option>
+      <option value="openai">OpenAI</option>
+      <option value="custom">Tùy chỉnh (OpenAI-compatible)</option>
+    </select></label>
+  <label class="gloss-opt">Base URL <input id="gloss_base_url"></label>
+  <label class="gloss-opt">API key <input id="gloss_api_key" type="password" placeholder="(để trống nếu local)"></label>
+  <label class="gloss-opt">Model
+    <span style="display:flex;gap:4px"><input id="gloss_model" style="flex:1"><button id="btnGlossModels" type="button">Tải DS</button></span>
+    <select id="gloss_models" style="display:none;margin-top:4px"></select></label>
+
+  <h3 class="sec">5. Font bản dịch</h3>
+  <label>Font có chân (chữ gốc serif) <select id="font_serif" class="font-sel" data-kind="serif"></select></label>
+  <label>Font không chân (chữ gốc sans) <select id="font_sans" class="font-sel" data-kind="sans"></select></label>
+  <label>Font đơn cách (code) <select id="font_mono" class="font-sel" data-kind="mono"></select></label>
+</div>
+
+<div id="gloss">
+  <div class="ghead">
+    <b>📒 Bảng thuật ngữ của bài</b>
+    <span class="hint" id="gcount"></span>
+    <button id="gAdd">+ Thêm thuật ngữ</button>
+    <button id="gMake">Lập lại bằng LLM</button>
+    <button id="gSave" class="primary">Lưu bảng</button>
+    <button id="gClose">✕</button>
+  </div>
+  <div class="hint" style="margin-bottom:6px">Thuật ngữ <b>của riêng bài này</b>, app tự rút ra rồi hỏi LLM cách dịch. Chọn thuật ngữ nào <b>dịch</b> (sửa được cách dịch) và thuật ngữ nào <b>giữ nguyên tiếng Anh</b>. Bảng được gửi kèm mọi lượt gọi nên cả bài dùng thuật ngữ thống nhất. Trang đã dịch rồi thì bấm “↻ Dịch lại” để áp bảng mới.<br>App <b>học từ bảng bạn lưu</b>: thuật ngữ bạn xoá (✕) sẽ không được gợi ý ở tài liệu sau; cách dịch bạn sửa hay thuật ngữ bạn thêm sẽ được dùng lại ở mọi tài liệu có thuật ngữ đó.<br>Thuật ngữ bạn muốn dùng cho <b>mọi tài liệu</b> thì gõ trong ⚙️ Cấu hình — phần đó luôn được ưu tiên hơn bảng này.</div>
+  <div id="gwrap"><table id="gtab"></table></div>
+  <div id="gextra"></div>
+</div>
+
+<div id="docs">
+  <div class="ghead">
+    <b>📚 Tài liệu đã lưu</b>
+    <span class="hint" id="dcount"></span>
+    <button id="dClose">✕</button>
+  </div>
+  <div class="hint" style="margin-bottom:6px">Mọi PDF đã tải lên được lưu trong <code>data/docs/</code> cùng bản dịch, tô vàng và bảng thuật ngữ — khởi động lại app vẫn mở lại được. Tải lên lại đúng file cũ thì app mở lại bản đã lưu, không dịch lại.</div>
+  <div id="dwrap"><table id="dtab"></table></div>
+</div>
+
+<div id="selbar" onmousedown="event.preventDefault()">
+  <button id="selAsk">💬 Giải thích đoạn này</button>
+  <button id="selMark">🖍 Tô vàng</button>
+</div>
+
+<aside id="chat">
+  <div class="chead"><b>💬 Hỏi về tài liệu</b>
+    <button id="chatClear" title="Xoá hội thoại">🗑</button>
+    <button id="chatClose">✕</button></div>
+  <div id="msgs"></div>
+  <div id="selbox" hidden><span id="seltext"></span><button id="selDrop" title="Bỏ đoạn đang chọn">✕</button></div>
+  <form id="ask"><textarea id="q" rows="2" placeholder="Hỏi về bài báo… (Enter để gửi)"></textarea>
+    <button class="primary" type="submit">Gửi</button></form>
+</aside>
+
+<div class="cols" id="cols">
+  <div class="empty">Chọn một file PDF bài báo để bắt đầu. Bản gốc hiển thị bên trái, bản dịch tiếng Việt giữ nguyên bố cục bên phải.</div>
+</div>
+
+<!-- Hiển thị câu trả lời LLM: tải bằng scripts/download_vendor.py. Thiếu file nào thì render.js tự lùi về chữ thô. -->
+<script src="/vendor/marked.min.js"></script>
+<script src="/vendor/purify.min.js"></script>
+<script src="/vendor/katex.min.js"></script>
+<script src="/render.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,959 @@
+{
+ "system": "4b",
+ "paper": "datasentinel",
+ "page": 18,
+ "seconds": 14.3,
+ "thinks": false,
+ "think_scale": 1.0,
+ "blocks": 155,
+ "translated": 155,
+ "missing": 0,
+ "formula_blocks": 0,
+ "formula_lost": 0,
+ "styled_blocks": 0,
+ "styled_kept": 0,
+ "over_max_len": 10,
+ "len_ratio": 1.02,
+ "glossary_ok": "140/146",
+ "tokens": {
+  "calls": 1,
+  "prompt": 1266,
+  "completion": 406,
+  "max_call": 1672
+ },
+ "tok_per_s": 28.4,
+ "errors": [],
+ "error": "",
+ "items": [
+  {
+   "id": 0,
+   "src": "TABLE 12: FPR and FNR of DataSentinel for each injected-target task combination when the attack is Context Ignoring.",
+   "vi": "Bảng 12: FPR và FNR của DataSentinel cho mỗi kết hợp nhiệm vụ mục tiêu bị tiêm khi tấn công là Bỏ qua ngữ cảnh.",
+   "table": false
+  },
+  {
+   "id": 1,
+   "src": "Target Task",
+   "vi": "Nhiệm vụ mục tiêu",
+   "table": true
+  },
+  {
+   "id": 2,
+   "src": "Dup. sentence detection",
+   "vi": "Phát hiện câu trùng lặp",
+   "table": true
+  },
+  {
+   "id": 3,
+   "src": "Grammar correction",
+   "vi": "Sửa lỗi ngữ pháp",
+   "table": true
+  },
+  {
+   "id": 4,
+   "src": "Hate detection",
+   "vi": "Phát hiện thù ghét",
+   "table": true
+  },
+  {
+   "id": 5,
+   "src": "Nat. lang. inference",
+   "vi": "Suy luận ngôn ngữ tự nhiên",
+   "table": true
+  },
+  {
+   "id": 6,
+   "src": "Sentiment analysis",
+   "vi": "Phân tích cảm xúc",
+   "table": true
+  },
+  {
+   "id": 7,
+   "src": "Spam detection",
+   "vi": "Phát hiện spam",
+   "table": true
+  },
+  {
+   "id": 8,
+   "src": "Summarization",
+   "vi": "Tóm tắt",
+   "table": true
+  },
+  {
+   "id": 9,
+   "src": "Injected Task",
+   "vi": "Nhiệm vụ bị tiêm",
+   "table": true
+  },
+  {
+   "id": 10,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 11,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 12,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 13,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 14,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 15,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 16,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 17,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 18,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 19,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 20,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 21,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 22,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 23,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 24,
+   "src": "Dup. sentence detection",
+   "vi": "Phát hiện câu trùng lặp",
+   "table": true
+  },
+  {
+   "id": 25,
+   "src": "Grammar correction",
+   "vi": "Sửa lỗi ngữ pháp",
+   "table": true
+  },
+  {
+   "id": 26,
+   "src": "Hate detection",
+   "vi": "Phát hiện thù ghét",
+   "table": true
+  },
+  {
+   "id": 27,
+   "src": "Nat. lang. inference",
+   "vi": "Suy luận ngôn ngữ tự nhiên",
+   "table": true
+  },
+  {
+   "id": 28,
+   "src": "Sentiment analysis",
+   "vi": "Phân tích cảm xúc",
+   "table": true
+  },
+  {
+   "id": 29,
+   "src": "Spam detection",
+   "vi": "Phát hiện spam",
+   "table": true
+  },
+  {
+   "id": 30,
+   "src": "Summarization",
+   "vi": "Tóm tắt",
+   "table": true
+  },
+  {
+   "id": 31,
+   "src": "TABLE 13: FPR and FNR of DataSentinel for each injected-target task combination when the attack is Fake Completion.",
+   "vi": "Bảng 13: FPR và FNR của DataSentinel cho mỗi kết hợp nhiệm vụ mục tiêu bị tiêm khi tấn công là Hoàn thành giả mạo.",
+   "table": false
+  },
+  {
+   "id": 32,
+   "src": "Target Task",
+   "vi": "Nhiệm vụ mục tiêu",
+   "table": true
+  },
+  {
+   "id": 33,
+   "src": "Dup. sentence detection",
+   "vi": "Phát hiện câu trùng lặp",
+   "table": true
+  },
+  {
+   "id": 34,
+   "src": "Grammar correction",
+   "vi": "Sửa lỗi ngữ pháp",
+   "table": true
+  },
+  {
+   "id": 35,
+   "src": "Hate detection",
+   "vi": "Phát hiện thù ghét",
+   "table": true
+  },
+  {
+   "id": 36,
+   "src": "Nat. lang. inference",
+   "vi": "Suy luận ngôn ngữ tự nhiên",
+   "table": true
+  },
+  {
+   "id": 37,
+   "src": "Sentiment analysis",
+   "vi": "Phân tích cảm xúc",
+   "table": true
+  },
+  {
+   "id": 38,
+   "src": "Spam detection",
+   "vi": "Phát hiện spam",
+   "table": true
+  },
+  {
+   "id": 39,
+   "src": "Summarization",
+   "vi": "Tóm tắt",
+   "table": true
+  },
+  {
+   "id": 40,
+   "src": "Injected Task",
+   "vi": "Nhiệm vụ bị tiêm",
+   "table": true
+  },
+  {
+   "id": 41,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 42,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 43,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 44,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 45,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 46,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 47,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 48,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 49,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 50,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 51,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 52,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 53,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 54,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 55,
+   "src": "Dup. sentence detection",
+   "vi": "Phát hiện câu trùng lặp",
+   "table": true
+  },
+  {
+   "id": 56,
+   "src": "Grammar correction",
+   "vi": "Sửa lỗi ngữ pháp",
+   "table": true
+  },
+  {
+   "id": 57,
+   "src": "Hate detection",
+   "vi": "Phát hiện thù ghét",
+   "table": true
+  },
+  {
+   "id": 58,
+   "src": "Nat. lang. inference",
+   "vi": "Suy luận ngôn ngữ tự nhiên",
+   "table": true
+  },
+  {
+   "id": 59,
+   "src": "Sentiment analysis",
+   "vi": "Phân tích cảm xúc",
+   "table": true
+  },
+  {
+   "id": 60,
+   "src": "Spam detection",
+   "vi": "Phát hiện spam",
+   "table": true
+  },
+  {
+   "id": 61,
+   "src": "Summarization",
+   "vi": "Tóm tắt",
+   "table": true
+  },
+  {
+   "id": 62,
+   "src": "TABLE 14: FPR and FNR of DataSentinel for each injected-target task combination when the attack is Combined Attack.",
+   "vi": "Bảng 14: FPR và FNR của DataSentinel cho mỗi kết hợp nhiệm vụ mục tiêu bị tiêm khi tấn công là Tấn công kết hợp.",
+   "table": false
+  },
+  {
+   "id": 63,
+   "src": "Target Task",
+   "vi": "Nhiệm vụ mục tiêu",
+   "table": true
+  },
+  {
+   "id": 64,
+   "src": "Dup. sentence detection",
+   "vi": "Phát hiện câu trùng lặp",
+   "table": true
+  },
+  {
+   "id": 65,
+   "src": "Grammar correction",
+   "vi": "Sửa lỗi ngữ pháp",
+   "table": true
+  },
+  {
+   "id": 66,
+   "src": "Hate detection",
+   "vi": "Phát hiện thù ghét",
+   "table": true
+  },
+  {
+   "id": 67,
+   "src": "Nat. lang. inference",
+   "vi": "Suy luận ngôn ngữ tự nhiên",
+   "table": true
+  },
+  {
+   "id": 68,
+   "src": "Sentiment analysis",
+   "vi": "Phân tích cảm xúc",
+   "table": true
+  },
+  {
+   "id": 69,
+   "src": "Spam detection",
+   "vi": "Phát hiện spam",
+   "table": true
+  },
+  {
+   "id": 70,
+   "src": "Summarization",
+   "vi": "Tóm tắt",
+   "table": true
+  },
+  {
+   "id": 71,
+   "src": "Injected Task",
+   "vi": "Nhiệm vụ bị tiêm",
+   "table": true
+  },
+  {
+   "id": 72,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 73,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 74,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 75,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 76,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 77,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 78,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 79,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 80,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 81,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 82,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 83,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 84,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 85,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 86,
+   "src": "Dup. sentence detection",
+   "vi": "Phát hiện câu trùng lặp",
+   "table": true
+  },
+  {
+   "id": 87,
+   "src": "Grammar correction",
+   "vi": "Sửa lỗi ngữ pháp",
+   "table": true
+  },
+  {
+   "id": 88,
+   "src": "Hate detection",
+   "vi": "Phát hiện thù ghét",
+   "table": true
+  },
+  {
+   "id": 89,
+   "src": "Nat. lang. inference",
+   "vi": "Suy luận ngôn ngữ tự nhiên",
+   "table": true
+  },
+  {
+   "id": 90,
+   "src": "Sentiment analysis",
+   "vi": "Phân tích cảm xúc",
+   "table": true
+  },
+  {
+   "id": 91,
+   "src": "Spam detection",
+   "vi": "Phát hiện spam",
+   "table": true
+  },
+  {
+   "id": 92,
+   "src": "Summarization",
+   "vi": "Tóm tắt",
+   "table": true
+  },
+  {
+   "id": 93,
+   "src": "TABLE 15: FPR and FNR of DataSentinel for each injected-target task combination when the attack is Universal.",
+   "vi": "Bảng 15: FPR và FNR của DataSentinel cho mỗi kết hợp nhiệm vụ mục tiêu bị tiêm khi tấn công là Phổ quát.",
+   "table": false
+  },
+  {
+   "id": 94,
+   "src": "Target Task",
+   "vi": "Nhiệm vụ mục tiêu",
+   "table": true
+  },
+  {
+   "id": 95,
+   "src": "Dup. sentence detection",
+   "vi": "Phát hiện câu trùng lặp",
+   "table": true
+  },
+  {
+   "id": 96,
+   "src": "Grammar correction",
+   "vi": "Sửa lỗi ngữ pháp",
+   "table": true
+  },
+  {
+   "id": 97,
+   "src": "Hate detection",
+   "vi": "Phát hiện thù ghét",
+   "table": true
+  },
+  {
+   "id": 98,
+   "src": "Nat. lang. inference",
+   "vi": "Suy luận ngôn ngữ tự nhiên",
+   "table": true
+  },
+  {
+   "id": 99,
+   "src": "Sentiment analysis",
+   "vi": "Phân tích cảm xúc",
+   "table": true
+  },
+  {
+   "id": 100,
+   "src": "Spam detection",
+   "vi": "Phát hiện spam",
+   "table": true
+  },
+  {
+   "id": 101,
+   "src": "Summarization",
+   "vi": "Tóm tắt",
+   "table": true
+  },
+  {
+   "id": 102,
+   "src": "Injected Task",
+   "vi": "Nhiệm vụ bị tiêm",
+   "table": true
+  },
+  {
+   "id": 103,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 104,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 105,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 106,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 107,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 108,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 109,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 110,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 111,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 112,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 113,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 114,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 115,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 116,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 117,
+   "src": "Dup. sentence detection",
+   "vi": "Phát hiện câu trùng lặp",
+   "table": true
+  },
+  {
+   "id": 118,
+   "src": "Grammar correction",
+   "vi": "Sửa lỗi ngữ pháp",
+   "table": true
+  },
+  {
+   "id": 119,
+   "src": "Hate detection",
+   "vi": "Phát hiện thù ghét",
+   "table": true
+  },
+  {
+   "id": 120,
+   "src": "Nat. lang. inference",
+   "vi": "Suy luận ngôn ngữ tự nhiên",
+   "table": true
+  },
+  {
+   "id": 121,
+   "src": "Sentiment analysis",
+   "vi": "Phân tích cảm xúc",
+   "table": true
+  },
+  {
+   "id": 122,
+   "src": "Spam detection",
+   "vi": "Phát hiện spam",
+   "table": true
+  },
+  {
+   "id": 123,
+   "src": "Summarization",
+   "vi": "Tóm tắt",
+   "table": true
+  },
+  {
+   "id": 124,
+   "src": "TABLE 16: FPR and FNR of DataSentinel for each injected-target task combination when the attack is NeuralExec.",
+   "vi": "Bảng 16: FPR và FNR của DataSentinel cho mỗi kết hợp nhiệm vụ mục tiêu bị tiêm khi tấn công là NeuralExec.",
+   "table": false
+  },
+  {
+   "id": 125,
+   "src": "Target Task",
+   "vi": "Nhiệm vụ mục tiêu",
+   "table": true
+  },
+  {
+   "id": 126,
+   "src": "Dup. sentence detection",
+   "vi": "Phát hiện câu trùng lặp",
+   "table": true
+  },
+  {
+   "id": 127,
+   "src": "Grammar correction",
+   "vi": "Sửa lỗi ngữ pháp",
+   "table": true
+  },
+  {
+   "id": 128,
+   "src": "Hate detection",
+   "vi": "Phát hiện thù ghét",
+   "table": true
+  },
+  {
+   "id": 129,
+   "src": "Nat. lang. inference",
+   "vi": "Suy luận ngôn ngữ tự nhiên",
+   "table": true
+  },
+  {
+   "id": 130,
+   "src": "Sentiment analysis",
+   "vi": "Phân tích cảm xúc",
+   "table": true
+  },
+  {
+   "id": 131,
+   "src": "Spam detection",
+   "vi": "Phát hiện spam",
+   "table": true
+  },
+  {
+   "id": 132,
+   "src": "Summarization",
+   "vi": "Tóm tắt",
+   "table": true
+  },
+  {
+   "id": 133,
+   "src": "Injected Task",
+   "vi": "Nhiệm vụ bị tiêm",
+   "table": true
+  },
+  {
+   "id": 134,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 135,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 136,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 137,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 138,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 139,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 140,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 141,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 142,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 143,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 144,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 145,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 146,
+   "src": "FPR",
+   "vi": "FPR",
+   "table": true
+  },
+  {
+   "id": 147,
+   "src": "FNR",
+   "vi": "FNR",
+   "table": true
+  },
+  {
+   "id": 148,
+   "src": "Dup. sentence detection",
+   "vi": "Phát hiện câu trùng lặp",
+   "table": true
+  },
+  {
+   "id": 149,
+   "src": "Grammar correction",
+   "vi": "Sửa lỗi ngữ pháp",
+   "table": true
+  },
+  {
+   "id": 150,
+   "src": "Hate detection",
+   "vi": "Phát hiện thù ghét",
+   "table": true
+  },
+  {
+   "id": 151,
+   "src": "Nat. lang. inference",
+   "vi": "Suy luận ngôn ngữ tự nhiên",
+   "table": true
+  },
+  {
+   "id": 152,
+   "src": "Sentiment analysis",
+   "vi": "Phân tích cảm xúc",
+   "table": true
+  },
+  {
+   "id": 153,
+   "src": "Spam detection",
+   "vi": "Phát hiện spam",
+   "table": true
+  },
+  {
+   "id": 154,
+   "src": "Summarization",
+   "vi": "Tóm tắt",
+   "table": true
+  }
+ ]
+}
