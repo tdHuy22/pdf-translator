@@ -21,6 +21,9 @@ FILES = {
     "purify.min.js": f"{CDN}/dompurify@3.1.6/dist/purify.min.js",     # lọc HTML: câu trả lời LLM là dữ liệu, không tin được
     "katex.min.js": f"{CDN}/{KATEX}/dist/katex.min.js",               # công thức
     "katex.min.css": f"{CDN}/{KATEX}/dist/katex.min.css",
+    # tô màu code trong câu trả lời (bản "common": ~40 ngôn ngữ hay gặp) + bảng màu sáng kiểu GitHub
+    "highlight.min.js": f"{CDN}/@highlightjs/cdn-assets@11.10.0/highlight.min.js",
+    "highlight-github.min.css": f"{CDN}/@highlightjs/cdn-assets@11.10.0/styles/github.min.css",
     # không cần contrib/auto-render: static/render.js tự rút công thức ra TRƯỚC khi chạy Markdown (auto-render
     # chạy sau, lúc Markdown đã ăn mất `\` và `_` trong LaTeX)
 }

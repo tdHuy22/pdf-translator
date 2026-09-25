@@ -7,12 +7,12 @@ const $ = id => document.getElementById(id);
 const FIELDS = ["preset","ocr_preset","chat_preset","base_url","model","temperature","concurrency","glossary",
   "translator","length_ratio","page_span","ocr_mode","ocr_engine","ocr_lang","ocr_vlm_base_url","ocr_vlm_model",
   "ocr_vlm_concurrency","ocr_custom_url","chat_base_url","chat_model","gloss_preset","gloss_base_url","gloss_model",
-  "align_preset","align_base_url","align_model",
+  "align_preset","align_base_url","align_model","see_preset","see_base_url","see_model",
   "font_serif","font_sans","font_mono"];
-const CHECKS = ["glossary_auto","google_fallback","disable_thinking","chat_same","gloss_same","align_llm","align_same","sync_marks"];
+const CHECKS = ["glossary_auto","google_fallback","disable_thinking","chat_same","gloss_same","align_llm","align_same","sync_marks","see_on"];
 // Ô API key → ô Base URL của server dùng key đó ("ocrspace" là dịch vụ cố định, không có base URL)
 const KEY_OF = { api_key:"base_url", ocr_vlm_api_key:"ocr_vlm_base_url", chat_api_key:"chat_base_url", gloss_api_key:"gloss_base_url",
-                 align_api_key:"align_base_url",
+                 align_api_key:"align_base_url", see_api_key:"see_base_url",
                  ocr_custom_api_key:"ocr_custom_url", ocr_api_key:"ocrspace" };
 let doc = null, stopFlag = false;
 
@@ -48,7 +48,8 @@ function loadSettings() {
         ocr_vlm_concurrency:4, ocr_custom_url:"", google_fallback:true, chat_same:true, chat_base_url:"",
         chat_model:"", gloss_preset:"openrouter", gloss_same:true, gloss_base_url:P("openrouter").base_url,
         gloss_model:P("openrouter").gloss, align_llm:true, align_same:false, align_preset:"chatgpt",
-        align_base_url:P("chatgpt").base_url, align_model:P("chatgpt").model, sync_marks:false, font_serif:"auto", font_sans:"auto", font_mono:"auto", ...s };
+        align_base_url:P("chatgpt").base_url, align_model:P("chatgpt").model, sync_marks:false, see_on:true, see_preset:"openrouter",
+        see_base_url:P("openrouter").base_url, see_model:"nex-agi/nex-n2.5-pro:free", font_serif:"auto", font_sans:"auto", font_mono:"auto", ...s };
   const ver = s.settings_v || 1;
   // v2: model OCR mặc định đổi từ qwen3.5 sang PaddleOCR-VL — cập nhật cài đặt cũ còn để mặc định cũ
   if (ver < 2 && s.ocr_vlm_model === "qwen3.5:latest") s.ocr_vlm_model = PADDLE_OCR;
@@ -88,13 +89,14 @@ function toggleOpts() {
   document.querySelectorAll(".ocr-opt").forEach(el => el.style.display = el.dataset.engine.split(" ").includes(eng) ? "" : "none");
   document.querySelectorAll(".tr-llm").forEach(el => el.style.display = useLlm ? "" : "none");
   document.querySelectorAll(".chat-opt").forEach(el => el.style.display = $("chat_same").checked ? "none" : "");
+  document.querySelectorAll(".see-opt").forEach(el => el.style.display = $("see_on").checked ? "" : "none");
   document.querySelectorAll(".gloss-opt").forEach(el => el.style.display = $("gloss_same").checked ? "none" : "");
   const sync = $("sync_marks").checked, align = sync && $("align_llm").checked;
   document.querySelectorAll(".sync-on").forEach(el => el.style.display = sync ? "" : "none");
   document.querySelectorAll(".align-on").forEach(el => el.style.display = align ? "" : "none");
   document.querySelectorAll(".align-opt").forEach(el => el.style.display = align && !$("align_same").checked ? "" : "none");
 }
-["ocr_engine","translator","chat_same","gloss_same","align_llm","align_same","sync_marks"].forEach(f => $(f).addEventListener("change", toggleOpts));
+["ocr_engine","translator","chat_same","gloss_same","align_llm","align_same","sync_marks","see_on"].forEach(f => $(f).addEventListener("change", toggleOpts));
 
 // Bật/tắt đồng bộ vệt tô: vẽ lại mọi trang; bật thì tính nốt phần tương ứng còn thiếu (vệt tô lúc đang tắt)
 $("sync_marks").addEventListener("change", () => {
@@ -128,6 +130,10 @@ function cfg() {
            align_base_url: asame ? "" : $("align_base_url").value,
            align_api_key: asame ? "" : $("align_api_key").value,
            align_model: asame ? "" : $("align_model").value,
+           // model xem ảnh trang (trò chuyện): tắt thì không gửi ảnh
+           see_base_url: $("see_on").checked ? $("see_base_url").value : "",
+           see_api_key: $("see_on").checked ? $("see_api_key").value : "",
+           see_model: $("see_on").checked ? $("see_model").value : "",
            font_serif:$("font_serif").value || "auto", font_sans:$("font_sans").value || "auto",
            font_mono:$("font_mono").value || "auto" };
 }
@@ -178,7 +184,8 @@ async function quickSaveProvider(ids, modelKey) {
   if (!name?.trim()) return;
   const same = own && name.trim() === cur.name;
   const body = { ...(same ? cur : { model: "", vision: "", gloss: "", parallel: 1 }), id: same ? cur.id : "",
-                 name: name.trim(), base_url: $(ids.base).value, [modelKey]: $(ids.model).value };
+                 name: name.trim(), base_url: $(ids.base).value,
+                 [["model", "vision", "gloss"].includes(modelKey) ? modelKey : "model"]: $(ids.model).value };
   if (ids.parallel) body.parallel = parseInt($(ids.parallel).value) || 1;
   const r = await fetch("/api/providers", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) });
   if (!r.ok) { alert("Không lưu được: " + ((await r.json().catch(() => ({}))).detail || r.statusText)); return; }
@@ -338,6 +345,7 @@ bindProvider({ preset:"preset", base:"base_url", key:"api_key", model:"model", b
 bindProvider({ preset:"ocr_preset", base:"ocr_vlm_base_url", key:"ocr_vlm_api_key", model:"ocr_vlm_model", btn:"btnOcrModels", parallel:"ocr_vlm_concurrency" }, "vision");
 bindProvider({ preset:"chat_preset", base:"chat_base_url", key:"chat_api_key", model:"chat_model", btn:"btnChatModels" }, "model");
 bindProvider({ preset:"align_preset", base:"align_base_url", key:"align_api_key", model:"align_model", btn:"btnAlignModels" }, "model");
+bindProvider({ preset:"see_preset", base:"see_base_url", key:"see_api_key", model:"see_model", btn:"btnSeeModels" }, "see");
 bindProvider({ preset:"gloss_preset", base:"gloss_base_url", key:"gloss_api_key", model:"gloss_model", btn:"btnGlossModels", fallback:"model" }, "gloss");
 
 async function loadKeys() {
@@ -367,7 +375,7 @@ $("file").onchange = async e => {
 };
 function resetDocView() {
   window.notesReset?.();                      // ghi chú chung đang chờ lưu được gửi ngay, về đúng bài đã gõ
-  MARKS = {}; chatMsgs = []; $("msgs").innerHTML = ""; dropSel(); GLOSS = []; EXTRA = [];
+  MARKS = {}; newSession(); chatSessions = []; GLOSS = []; EXTRA = [];
   $("gloss").classList.remove("open"); $("gtab").innerHTML = ""; $("gextra").innerHTML = ""; $("gcount").textContent = "";
 }
 
@@ -399,6 +407,7 @@ async function restoreDoc(id) {
   openDoc();
   if (GLOSS.length) drawGlossary();
   window.notesLoad?.(st.notes);
+  restoreChat();
   for (const p of st.done) showTranslated({ page: p, cached: true }, {});
   return true;
 }
@@ -1056,11 +1065,12 @@ $("gSave").onclick = async () => {
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
 
 // ================================================================ Trò chuyện về tài liệu
-let chatMsgs = [], kept = null, streaming = false;
+// Server giữ lịch sử từng phiên (chats.py): giao diện chỉ gửi câu hỏi mới kèm id phiên, và nhận lại id phiên (phiên mới)
+// cùng ngữ cảnh đã gửi (X-Context) để hiện dưới câu trả lời.
+let chatSid = null, chatSessions = [], kept = null, streaming = false, abortCtl = null, editing = false, stick = true;
 // mở khung bên phải ở tab trò chuyện (tab, và nút 💬 / 📝 trên thanh trên cùng: xem notes.js)
 const openChat = () => (window.showTab ? showTab("chat") : document.body.classList.add("chat"));
 $("chatClose").onclick = () => document.body.classList.remove("chat");
-$("chatClear").onclick = () => { chatMsgs = []; $("msgs").innerHTML = ""; dropSel(); };
 $("selDrop").onclick = () => dropSel();
 function keepSel(info) {
   kept = info && { text: info.text, page: info.page, side: info.side, blocks: info.blocks };
@@ -1068,17 +1078,32 @@ function keepSel(info) {
   if (kept) $("seltext").textContent = `Trang ${kept.page + 1} · ${kept.side === "translated" ? "bản dịch" : "bản gốc"}: “${kept.text.slice(0, 220)}”`;
 }
 const dropSel = () => keepSel(null);
+try { $("ctxMode").value = localStorage.getItem("ctx_mode") || "auto"; } catch {}
+$("ctxMode").onchange = () => { try { localStorage.setItem("ctx_mode", $("ctxMode").value); } catch {} };
 
+// ---------------- Cuộn: bám đáy khi đang ở đáy; người dùng cuộn lên đọc thì thôi, hiện nút "↓ Mới nhất"
+$("msgs").addEventListener("scroll", () => {
+  const m = $("msgs");
+  stick = m.scrollHeight - m.scrollTop - m.clientHeight < 60;
+  if (stick) $("toBottom").hidden = true;
+});
+function follow() {
+  if (stick) $("msgs").scrollTop = $("msgs").scrollHeight;
+  else $("toBottom").hidden = false;
+}
+$("toBottom").onclick = () => { stick = true; $("msgs").scrollTop = $("msgs").scrollHeight; $("toBottom").hidden = true; };
+
+// ---------------- Bong bóng
 function bubble(cls, text, quote) {
   const el = document.createElement("div");
   el.className = "msg " + cls;
   if (quote) { const q = document.createElement("span"); q.className = "quote"; q.textContent = quote; el.appendChild(q); }
   el.appendChild(document.createTextNode(text));
   $("msgs").appendChild(el);
-  $("msgs").scrollTop = $("msgs").scrollHeight;
+  follow();
   return el;
 }
-/** Bong bóng trả lời của LLM: chữ được dựng thành HTML (Markdown, bảng, công thức) trong `.body`;
+/** Bong bóng trả lời của LLM: chữ được dựng thành HTML (Markdown, bảng, công thức, code) trong `.body`;
  *  bản Markdown thô giữ ở `el._src` để nút "Chép" chép được đúng LaTeX/bảng chứ không phải chữ đã dựng. */
 function aiBubble() {
   const el = bubble("ai", "");
@@ -1090,7 +1115,11 @@ function aiBubble() {
   el.appendChild(el.body);
   return el;
 }
-function finishAi(el) {
+const ctxLabel = { pair: "gốc + dịch", source: "chữ gốc", translation: "bản dịch", full: "cả bài" };
+/** Thanh dưới câu trả lời: chép, lưu thành ghi chú, trả lời lại; và dòng "ngữ cảnh đã gửi". */
+function finishAi(el, meta = {}) {
+  el.querySelector(".msgbar")?.remove();
+  el.querySelector(".ctxchip")?.remove();
   const bar = document.createElement("div");
   bar.className = "msgbar";
   const copy = document.createElement("button");
@@ -1104,52 +1133,239 @@ function finishAi(el) {
   };
   bar.appendChild(copy);
   window.noteSaveButton?.(el, bar);                    // 📌 Lưu thành ghi chú (notes.js)
+  const again = document.createElement("button");
+  again.type = "button";
+  again.className = "regen";
+  again.textContent = "↻ Trả lời lại";
+  again.title = "Hỏi lại đúng câu hỏi này (cùng đoạn bôi đen), thay câu trả lời này";
+  again.onclick = () => send({ regenerate: true });
+  bar.appendChild(again);
+  if (meta.stopped) bar.insertAdjacentHTML("beforeend", `<span class="hint">(đã dừng giữa chừng)</span>`);
   el.appendChild(bar);
+  const c = meta.ctx;
+  if (c) {
+    const pages = (c.pages || []).map(p => (c.images || []).includes(p) ? `${p} 🖼` : `${p}`);
+    const imgOnly = (c.images || []).filter(p => !(c.pages || []).includes(p)).map(p => `${p} 🖼`);
+    const chip = document.createElement("div");
+    chip.className = "ctxchip";
+    chip.textContent = `📎 ${[...pages, ...imgOnly].length ? "tr. " + [...pages, ...imgOnly].join(", ") + " · " : ""}` +
+                       `${ctxLabel[c.mode] || c.mode}${c.model ? " · " + c.model : ""}`;
+    chip.title = "Ngữ cảnh đã gửi cho LLM" + (c.why ? ": " + c.why : "");
+    el.appendChild(chip);
+  }
+  markLast();
 }
+/** Chỉ lượt cuối mới "trả lời lại" / "sửa câu hỏi" được (server chỉ sửa được lượt cuối của phiên). */
+function markLast() {
+  const all = [...$("msgs").children];
+  all.forEach(x => { x.querySelector(".regen")?.toggleAttribute("hidden", true); x.querySelector(".uact")?.remove(); });
+  const ai = all.filter(x => x.classList.contains("ai")).pop(), me = all.filter(x => x.classList.contains("me")).pop();
+  if (streaming) return;
+  if (ai && all.indexOf(ai) === all.length - 1) ai.querySelector(".regen")?.removeAttribute("hidden");
+  if (me && chatSid) {
+    const u = document.createElement("span");
+    u.className = "uact";
+    u.innerHTML = `<button type="button" title="Sửa câu hỏi này rồi hỏi lại (thay câu trả lời phía sau)">✏️ Sửa</button>`;
+    u.firstChild.onclick = () => {
+      editing = true;
+      $("editbox").hidden = false;
+      $("q").value = me._q ?? me.lastChild.textContent;
+      $("q").focus();
+    };
+    me.appendChild(u);
+  }
+}
+$("editDrop").onclick = () => { editing = false; $("editbox").hidden = true; };
+
+// ---------------- Gửi câu hỏi (mới / sửa câu cuối / trả lời lại), chữ chảy về từng mẩu, bấm Dừng được
+function setSending(on) {
+  streaming = on;
+  $("send").textContent = on ? "■ Dừng" : "Gửi";
+  $("send").type = on ? "button" : "submit";
+  $("send").classList.toggle("primary", !on);
+}
+$("send").addEventListener("click", e => { if (streaming) { e.preventDefault(); abortCtl?.abort(); } });
 $("q").addEventListener("keydown", e => {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("ask").requestSubmit(); }
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (!streaming) $("ask").requestSubmit(); }
+  if (e.key === "Escape" && editing) $("editDrop").click();
 });
-$("ask").onsubmit = async e => {
+$("ask").onsubmit = e => {
   e.preventDefault();
   const q = $("q").value.trim();
   if (!q || !doc || streaming) return;
-  streaming = true;
-  $("q").value = "";
-  const used = kept;                                   // đoạn bôi đen chỉ gửi kèm đúng câu hỏi này
-  const extra = window.noteChatExtra?.() || { note_ids: [], page: null, quote: "" };   // ghi chú "💬 Hỏi lại"
-  bubble("me", q, used ? used.text.slice(0, 300) : extra.quote);
-  chatMsgs.push({ role:"user", content:q });
+  send({ question: q, edit: editing });
+};
+
+async function send({ question = "", regenerate = false, edit = false }) {
+  if (!doc || streaming) return;
+  const mine = doc, all = [...$("msgs").children];
+  const lastMe = all.filter(x => x.classList.contains("me")).pop();
+  let used = null, extra = { note_ids: [], page: null, quote: "" };
+  if (regenerate || edit) {                            // bỏ câu trả lời cuối (sửa: bỏ cả câu hỏi cuối) khỏi màn hình
+    for (let x = $("msgs").lastElementChild; x && x !== lastMe; x = $("msgs").lastElementChild) x.remove();
+    if (edit) lastMe?.remove();
+  }
+  if (!regenerate) {
+    used = kept;                                       // đoạn bôi đen chỉ gửi kèm đúng câu hỏi này
+    extra = window.noteChatExtra?.() || extra;         // ghi chú "💬 Hỏi lại"
+    const me = bubble("me", question, used ? used.text.slice(0, 300) : extra.quote);
+    me._q = question;
+    $("q").value = "";
+  }
+  editing = false; $("editbox").hidden = true;
+  stick = true;
   const out = aiBubble();
-  out._q = q; out._used = used; out._notePage = extra.page;   // cho nút 📌 Lưu thành ghi chú
-  let acc = "";
+  const prev = regenerate ? lastMe : null;
+  out._q = regenerate ? prev?._q : question;
+  out._used = regenerate ? prev?._used : used;
+  out._notePage = extra.page;                          // cho nút 📌 Lưu thành ghi chú
+  if (!regenerate) $("msgs").lastElementChild.previousElementSibling._used = used;
+  setSending(true);
+  markLast();
+  abortCtl = new AbortController();
+  let acc = "", info = null;
   try {
-    const r = await fetch(`/api/${doc.id}/chat`, { method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ cfg: cfg(), messages: chatMsgs, page: used ? used.page : (extra.page ?? visiblePage()),
+    const r = await fetch(`/api/${doc.id}/chat`, { method:"POST", signal: abortCtl.signal,
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ cfg: cfg(), question, session_id: chatSid || "", regenerate, edit,
+                             context: $("ctxMode").value,
+                             page: used ? used.page : (extra.page ?? visiblePage()),
                              selection: used ? used.text : "", side: used ? used.side : "",
                              note_ids: extra.note_ids }) });
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+    if (doc === mine) chatSid = r.headers.get("X-Session-Id") || chatSid;
+    try { info = JSON.parse(r.headers.get("X-Context") || "null"); } catch {}
     const reader = r.body.getReader(), dec = new TextDecoder();
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       acc += dec.decode(value, { stream:true });
       out._src = acc;
-      paintInto(out.body, acc);                        // tiết lưu ~80ms; công thức đã dựng được nhớ lại, không dựng lại
-      $("msgs").scrollTop = $("msgs").scrollHeight;
+      streamInto(out.body, acc);                       // chỉ khối cuối được vẽ lại; công thức đã dựng được nhớ lại
+      follow();
     }
-    paintInto(out.body, acc, true);                    // lần cuối: vẽ đủ, kể cả công thức
-    finishAi(out);
-    $("msgs").scrollTop = $("msgs").scrollHeight;
-    chatMsgs.push({ role:"assistant", content:acc });
+    if (/^\s*⚠️/.test(acc)) throw new Error(acc.trim().replace(/^⚠️\s*/, ""));   // LLM lỗi trước khi ra chữ nào
+    streamInto(out.body, acc, true);                   // lần cuối: dựng cả câu trả lời, tô màu code
+    finishAi(out, { ctx: info });
   } catch (err) {
-    out.className = "msg err";
-    out.textContent = "❌ " + err.message;
-    chatMsgs.pop();
+    if (err.name === "AbortError") {
+      if (acc.trim()) { out._src = acc; streamInto(out.body, acc, true); finishAi(out, { ctx: info, stopped: true }); }
+      else out.remove();
+    } else {
+      out.className = "msg err";
+      out.textContent = "❌ " + err.message;
+      if (!regenerate && !$("q").value) $("q").value = question;   // server đã bỏ câu hỏi này → trả về ô gõ để gửi lại
+    }
   }
-  streaming = false;
+  setSending(false);
+  follow();
+  markLast();
   dropSel();
   window.noteAfterSend?.();
+  if (doc === mine) loadSessions();
+}
+
+// ---------------- Phiên trò chuyện: danh sách, mở, đổi tên, xuất, xoá, tổng hợp thành ghi chú
+async function loadSessions() {
+  if (!doc) return;
+  try { chatSessions = (await (await fetch(`/api/${doc.id}/chats`)).json()).sessions || []; } catch { chatSessions = []; }
+  const cur = chatSessions.find(x => x.id === chatSid);
+  $("sesTitle").textContent = cur ? cur.title : "Phiên mới";
+  $("sesBtn").title = `${chatSessions.length} phiên trò chuyện đã lưu của bài này`;
+  $("sesSum").disabled = !cur;
+  if (!$("sesList").hidden) drawSessions();
+}
+function drawSessions() {
+  $("sesList").innerHTML = chatSessions.length ? chatSessions.map(x => `<div class="ses${x.id === chatSid ? " cur" : ""}" data-id="${esc(x.id)}">
+      <div class="st"><b>${esc(x.title)}</b><span class="hint">${x.n} câu hỏi · ${fmtTime(x.updated)}</span></div>
+      <button type="button" class="sren" title="Đổi tên">✏️</button><button type="button" class="smd" title="Tải về dạng Markdown">⬇</button>
+      <button type="button" class="sdel" title="Xoá phiên này">🗑</button></div>`).join("")
+    : `<div class="mhint">Chưa có phiên nào — hỏi một câu là phiên được lưu lại.</div>`;
+}
+$("sesBtn").onclick = e => {
+  e.stopPropagation();
+  $("sesList").hidden = !$("sesList").hidden;
+  if (!$("sesList").hidden) { drawSessions(); loadSessions(); }
 };
+document.addEventListener("click", e => { if (!e.target.closest?.(".sesbar")) $("sesList").hidden = true; });
+$("sesList").onclick = async e => {
+  const row = e.target.closest(".ses"), id = row?.dataset.id, x = chatSessions.find(s => s.id === id);
+  if (!x) return;
+  if (e.target.closest(".sren")) {
+    const t = prompt("Tên phiên:", x.title);
+    if (!t?.trim()) return;
+    await fetch(`/api/${doc.id}/chats/${id}`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ title: t }) });
+    loadSessions();
+  } else if (e.target.closest(".smd")) {
+    location.href = `/api/${doc.id}/chats/${id}.md`;
+  } else if (e.target.closest(".sdel")) {
+    if (!confirm(`Xoá phiên “${x.title}”? Không hoàn tác được (ghi chú đã lưu từ phiên này vẫn còn).`)) return;
+    await fetch(`/api/${doc.id}/chats/${id}`, { method:"DELETE" });
+    if (id === chatSid) newSession();
+    loadSessions();
+  } else {
+    $("sesList").hidden = true;
+    openSession(id);
+  }
+};
+function newSession() {
+  if (streaming) abortCtl?.abort();
+  chatSid = null;
+  $("msgs").innerHTML = "";
+  $("sesTitle").textContent = "Phiên mới";
+  $("sesSum").disabled = true;
+  editing = false; $("editbox").hidden = true;
+  dropSel();
+}
+$("sesNew").onclick = () => { newSession(); $("q").focus(); };
+async function openSession(id) {
+  if (!doc) return;
+  if (streaming) abortCtl?.abort();
+  const mine = doc;
+  const r = await fetch(`/api/${doc.id}/chats/${id}`);
+  if (!r.ok || doc !== mine) return;
+  const S = await r.json();
+  chatSid = S.id;
+  $("msgs").innerHTML = "";
+  let last = null;
+  for (const m of S.messages) {
+    if (m.role === "user") {
+      last = bubble("me", m.content, m.quote ? m.quote.slice(0, 300) : "");
+      last._q = m.content;
+      last._used = m.quote ? { text: m.quote, page: m.page, side: m.side, blocks: [] } : null;
+      last._page = m.page;
+    } else {
+      const el = aiBubble();
+      el._src = m.content; el._q = last?._q; el._used = last?._used; el._notePage = last?._page ?? null;
+      streamInto(el.body, m.content, true);
+      finishAi(el, { ctx: m.ctx, stopped: m.stopped });
+    }
+  }
+  stick = true; follow();
+  $("sesTitle").textContent = S.title || "Phiên mới";
+  $("sesSum").disabled = !S.messages.some(m => m.role === "assistant");
+  markLast();
+}
+$("sesSum").onclick = async () => {
+  if (!doc || !chatSid) return;
+  const b = $("sesSum"), mine = doc;
+  b.disabled = true; b.textContent = "⏳ Đang tổng hợp…";
+  try {
+    const r = await fetch(`/api/${doc.id}/chats/${chatSid}/summarize`, { method:"POST",
+      headers:{"Content-Type":"application/json"}, body:JSON.stringify(cfg()) });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+    const n = await r.json();
+    if (doc === mine) window.noteAdded?.(n);
+    setStatus("Đã tổng hợp phiên thành ghi chú (tab 📝 Ghi chú, sửa được)");
+  } catch (e) { setStatus("Không tổng hợp được: " + e.message); }
+  b.disabled = false; b.textContent = "📝 Tổng hợp";
+};
+/** Mở tài liệu: nạp danh sách phiên và mở lại phiên gần nhất. */
+async function restoreChat() {
+  await loadSessions();
+  if (chatSessions.length) await openSession(chatSessions[0].id);
+}
+
 // Trang đang xem (để LLM lấy đúng phần tài liệu làm ngữ cảnh khi không bôi đen gì)
 function visiblePage() {
   let best = null, top = Infinity;

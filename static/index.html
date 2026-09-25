@@ -6,6 +6,7 @@
 <title>VietPaper – Dịch bài báo PDF</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📄</text></svg>">
 <link rel="stylesheet" href="/vendor/katex.min.css">
+<link rel="stylesheet" href="/vendor/highlight-github.min.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📄</text></svg>">
 <style>
   :root { --bg:#f3f4f6; --panel:#fff; --line:#d1d5db; --text:#111827; --muted:#6b7280; --accent:#2563eb; }
@@ -140,9 +141,10 @@
   body.resizing { user-select:none; cursor:col-resize; }
   .chead { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid var(--line); font-size:14px; }
   #msgs { flex:1; overflow:auto; padding:10px; display:flex; flex-direction:column; gap:10px; }
-  .msg { font-size:13px; line-height:1.5; white-space:pre-wrap; padding:8px 10px; border-radius:10px; }
+  .msg { font-size:14px; line-height:1.65; white-space:pre-wrap; padding:8px 12px; border-radius:12px; overflow-wrap:anywhere; }
   .msg.me { background:#e0e7ff; align-self:flex-end; max-width:88%; }
-  .msg.ai { background:#f3f4f6; }
+  .msg.ai { background:transparent; padding:2px 4px; }
+  .msg.ai .body { max-width:760px; }
   .msg.err { background:#fee2e2; }
   .msg .quote { display:block; border-left:3px solid var(--accent); padding-left:6px; margin-bottom:5px;
                 font-size:12px; color:var(--muted); max-height:5.6em; overflow:hidden; }
@@ -154,9 +156,18 @@
   .msg.ai .body p, .msg.ai .body ul, .msg.ai .body ol, .msg.ai .body pre { margin:.5em 0; }
   .msg.ai .body ul, .msg.ai .body ol { padding-left:1.3em; }
   .msg.ai .body li { margin:.15em 0; }
-  .msg.ai .body h1, .msg.ai .body h2, .msg.ai .body h3, .msg.ai .body h4 { font-size:1.05em; margin:.7em 0 .3em; }
+  .msg.ai .body h1 { font-size:1.25em; } .msg.ai .body h2 { font-size:1.15em; } .msg.ai .body h3, .msg.ai .body h4 { font-size:1.05em; }
+  .msg.ai .body h1, .msg.ai .body h2, .msg.ai .body h3, .msg.ai .body h4 { margin:.9em 0 .35em; line-height:1.35; }
+  .msg.ai .body hr { border:none; border-top:1px solid var(--line); margin:1em 0; }
+  .msg.ai .body strong { font-weight:650; }
   .msg.ai .body code { background:rgba(0,0,0,.06); padding:.1em .3em; border-radius:4px; font-size:.92em; }
-  .msg.ai .body pre { background:rgba(0,0,0,.06); padding:8px; border-radius:6px; overflow-x:auto; }
+  .msg.ai .body pre { position:relative; background:#f6f8fa; border:1px solid #e5e7eb; padding:30px 10px 10px; border-radius:8px; overflow-x:auto; font-size:12.5px; line-height:1.5; }
+  .msg.ai .body pre code.hljs { background:none; padding:0; }
+  .codebar { position:absolute; top:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center;
+             padding:3px 8px; font:11px system-ui,sans-serif; color:var(--muted); border-bottom:1px solid #e5e7eb; }
+  .codebar button { font-size:11px; padding:0 6px; border:none; background:transparent; color:var(--muted); cursor:pointer; }
+  .codebar button:hover { color:var(--text); }
+  .msg.ai .body tr:nth-child(even) td { background:rgba(0,0,0,.02); }
   .msg.ai .body pre code { background:none; padding:0; }
   .msg.ai .body blockquote { border-left:3px solid var(--line); margin:.5em 0; padding-left:8px; color:var(--muted); }
   /* Khung chat hẹp: bảng phải cuộn ngang được chứ không kéo giãn cả khung */
@@ -166,7 +177,29 @@
   .msg.ai .body > table, .msg.ai .body .tablewrap { display:block; overflow-x:auto; max-width:100%; }
   .msg.ai .body .katex-display { overflow-x:auto; overflow-y:hidden; padding:2px 0; margin:.5em 0; }
   .msg.ai .body pre.plain { white-space:pre-wrap; background:none; padding:0; font:inherit; }
-  .msgbar { display:flex; gap:6px; margin-top:6px; }
+  .msgbar { display:flex; gap:6px; margin-top:6px; flex-wrap:wrap; align-items:center; }
+  .ctxchip { font-size:11px; color:var(--muted); margin-top:4px; cursor:help; }
+  .msg.me .uact { display:block; text-align:right; margin-top:2px; }
+  .msg.me .uact button { font-size:11px; border:none; background:transparent; color:var(--muted); cursor:pointer; padding:0 4px; }
+  /* ---- Phiên trò chuyện ---- */
+  .sesbar { position:relative; display:flex; gap:4px; padding:6px 10px; border-bottom:1px solid var(--line); align-items:center; }
+  .sesbar button { font-size:12px; padding:3px 7px; }
+  #sesBtn { flex:1; min-width:0; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #sesList { position:absolute; top:100%; left:8px; right:8px; z-index:12; max-height:60vh; overflow:auto; background:var(--panel);
+             border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.18); }
+  #sesList[hidden] { display:none; }
+  .ses { display:flex; gap:4px; align-items:center; padding:6px 8px; border-bottom:1px solid #f1f2f4; cursor:pointer; font-size:13px; }
+  .ses:hover { background:#f9fafb; } .ses.cur { background:#eef2ff; }
+  .ses .st { flex:1; min-width:0; } .ses .st b { display:block; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ses button { border:none; background:transparent; cursor:pointer; padding:2px 4px; font-size:12px; }
+  #toBottom { position:absolute; left:50%; transform:translateX(-50%); bottom:110px; z-index:3; font-size:12px;
+              border-radius:14px; box-shadow:0 2px 8px rgba(0,0,0,.2); }
+  #toBottom[hidden] { display:none; }
+  #chatPane { position:relative; }
+  #editbox { font-size:12px; color:var(--muted); padding:5px 10px; border-top:1px solid var(--line); background:#f0fdf4; display:flex; justify-content:space-between; }
+  #editbox[hidden] { display:none; }
+  .askbar { display:flex; flex-direction:column; gap:4px; }
+  #ctxMode { font-size:11px; padding:3px; max-width:110px; }
   .msgbar button { font:inherit; font-size:11px; padding:1px 6px; border:1px solid var(--line);
                    border-radius:5px; background:transparent; color:var(--muted); cursor:pointer; }
   .msgbar button:hover { background:rgba(0,0,0,.05); }
@@ -301,6 +334,14 @@
   <label class="chat-opt">Model
     <div class="mpick"><input id="chat_model" autocomplete="off" spellcheck="false" placeholder="gõ để tìm model…"><button id="btnChatModels" type="button" title="Tải lại danh sách model của server này">↻</button><div class="mlist" hidden></div></div></label>
 
+  <label style="grid-column:1/-1;flex-direction:row;align-items:center;gap:6px" title="Câu hỏi về hình, bảng, biểu đồ, công thức: gửi kèm ảnh trang cho một model đọc được ảnh (chữ trích từ PDF mất hình và làm rối công thức). Model trò chuyện đã đọc được ảnh (theo danh sách model của OpenRouter) thì dùng luôn nó."><input type="checkbox" id="see_on"> Gửi ảnh trang khi hỏi về hình, bảng, công thức — model xem ảnh:</label>
+  <label class="see-opt">Nhà cung cấp
+    <span class="prow"><select id="see_preset" class="provider-sel"></select><button type="button" class="psave" data-for="see_preset" title="Lưu Base URL + model đang nhập thành nhà cung cấp của bạn">💾</button></span></label>
+  <label class="see-opt">Base URL <input id="see_base_url"></label>
+  <label class="see-opt">API key <input id="see_api_key" type="password" placeholder="(để trống nếu local)"></label>
+  <label class="see-opt">Model (phải đọc được ảnh 👁)
+    <div class="mpick"><input id="see_model" autocomplete="off" spellcheck="false" placeholder="gõ để tìm model…"><button id="btnSeeModels" type="button" title="Tải lại danh sách model của server này">↻</button><div class="mlist" hidden></div></div></label>
+
   <h3 class="sec">4. Lập bảng thuật ngữ</h3>
   <label style="flex-direction:row;align-items:center;gap:6px" title="Bảng thuật ngữ chỉ tốn một lượt gọi cho mỗi tài liệu, nên đáng dùng model mạnh hơn model dịch (vd. Nemotron Ultra free trên OpenRouter, ~15 giây)"><input type="checkbox" id="gloss_same"> Dùng đúng server/model đang dịch</label>
   <label class="gloss-opt">Nhà cung cấp
@@ -378,14 +419,25 @@
     <div class="tabs"><button id="tabChat" class="on" type="button">💬 Trò chuyện</button>
       <button id="tabNotes" type="button">📝 Ghi chú <span id="noteCount"></span></button></div>
     <button id="chatWide" title="Mở rộng khung ra nửa màn hình / thu về">⤢</button>
-    <button id="chatClear" title="Xoá hội thoại">🗑</button>
     <button id="chatClose">✕</button></div>
   <div id="chatPane" class="pane">
+    <div class="sesbar">
+      <button id="sesBtn" type="button" title="Các phiên trò chuyện của bài này">🗂 <span id="sesTitle">Phiên mới</span> ▾</button>
+      <button id="sesNew" type="button" title="Bắt đầu phiên trò chuyện mới (phiên cũ vẫn được lưu)">＋ Mới</button>
+      <button id="sesSum" type="button" title="Tổng hợp phiên này thành một ghi chú của bài" disabled>📝 Tổng hợp</button>
+      <div id="sesList" hidden></div>
+    </div>
     <div id="msgs"></div>
+    <button id="toBottom" type="button" hidden>↓ Mới nhất</button>
     <div id="notebox" hidden><span id="notetext"></span><button id="noteDrop" title="Không gửi kèm ghi chú này">✕</button></div>
     <div id="selbox" hidden><span id="seltext"></span><button id="selDrop" title="Bỏ đoạn đang chọn">✕</button></div>
-    <form id="ask"><textarea id="q" rows="2" placeholder="Hỏi về bài báo… (Enter để gửi)"></textarea>
-      <button class="primary" type="submit">Gửi</button></form>
+    <div id="editbox" hidden>✏️ Đang sửa câu hỏi cuối — gửi để hỏi lại <button id="editDrop" type="button" title="Huỷ sửa">✕</button></div>
+    <form id="ask"><textarea id="q" rows="2" placeholder="Hỏi về bài báo… (Enter để gửi, Shift+Enter xuống dòng)"></textarea>
+      <div class="askbar">
+        <select id="ctxMode" title="LLM đọc phần nào của tài liệu. Tự động: bôi đen → đoạn đó + trang của nó; hỏi về hình/bảng/công thức → gửi ảnh trang (nếu có model xem ảnh); hỏi về cả bài → cả bài (vừa ngữ cảnh) hoặc mở đầu + kết luận; còn lại → trang đang xem + trang liên quan">
+          <option value="auto">🎯 Tự động</option><option value="pair">Gốc + dịch</option><option value="source">Chữ gốc</option>
+          <option value="translation">Bản dịch</option><option value="image">🖼 Ảnh trang</option><option value="full">📄 Cả bài</option></select>
+        <button class="primary" id="send" type="submit">Gửi</button></div></form>
   </div>
   <div id="notesPane" class="pane" hidden>
     <div class="nhead"><span class="hint" id="nsum"></span><a id="notesMd" href="#">⬇ Xuất .md</a></div>
@@ -423,6 +475,7 @@
 <script src="/vendor/marked.min.js"></script>
 <script src="/vendor/purify.min.js"></script>
 <script src="/vendor/katex.min.js"></script>
+<script src="/vendor/highlight.min.js"></script>
 <script src="/render.js"></script>
 <script src="/app.js"></script>
 <script src="/notes.js"></script>

@@ -43,7 +43,7 @@ def upsert(notes: list[dict], n: Note, pages: int) -> dict | None:
     note = {"id": n.id if n.id == GENERAL else uuid.uuid4().hex[:10], "text": n.text[:MAX_TEXT],
             "page": None if n.id == GENERAL else page, "mark_id": None if n.id == GENERAL else n.mark_id,
             "quote": n.quote[:2000], "source": "llm" if n.source == "llm" else "user",
-            "meta": {k: str(v)[:2000] for k, v in (n.meta or {}).items() if k in ("question", "model")},
+            "meta": {k: str(v)[:2000] for k, v in (n.meta or {}).items() if k in ("question", "model", "session")},
             "created": now, "updated": now}
     notes.append(note)
     return note

@@ -32,6 +32,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import chats as C
 import notes as N
 import store
 
@@ -94,6 +95,11 @@ class Config(BaseModel):
     align_base_url: str = ""
     align_api_key: str = ""
     align_model: str = ""
+    # Model xem ảnh trang khi trò chuyện (câu hỏi về hình, bảng, công thức): để trống model = không gửi ảnh.
+    # Proxy ChatGPT không nhận ảnh (25/09/2026) → mặc định giao diện là OpenRouter nex-agi/nex-n2.5-pro:free.
+    see_base_url: str = ""
+    see_api_key: str = ""
+    see_model: str = ""
 
 
 SYSTEM_PROMPT = """You are an expert academic translator. Translate research paper text (usually English or Chinese) into natural, precise Vietnamese.
@@ -357,6 +363,8 @@ def resolve_keys(cfg: "Config") -> "Config":
         cfg.gloss_api_key = remember(cfg.gloss_base_url, cfg.gloss_api_key)
     if cfg.align_base_url:
         cfg.align_api_key = remember(cfg.align_base_url, cfg.align_api_key)
+    if cfg.see_base_url:
+        cfg.see_api_key = remember(cfg.see_base_url, cfg.see_api_key)
     return cfg
 
 
@@ -3366,18 +3374,51 @@ def doc_outline(doc: pymupdf.Document, limit: int = 60) -> list[str]:
     return out
 
 
-def page_pair(d: dict, n: int) -> str:
-    """Chữ gốc và bản dịch tiếng Việt của một trang, ghép theo từng đoạn. Trang chưa trích khối (chưa dịch,
-    chưa mở lớp chữ) thì lấy thẳng chữ của trang — hỏi về trang nào cũng có nội dung để LLM đọc."""
+def formula_text(page: pymupdf.Page, f: dict) -> str:
+    """Chữ của một công thức lấy thẳng từ glyph trong PDF (vùng cắt đã bó sát nét mực). Không đẹp như LaTeX — chỉ số
+    trên/dưới nằm ngang hàng, căn thức mất dấu — nhưng LLM còn thấy công thức nói về cái gì, thay vì chỗ giữ {v1}."""
+    r = pymupdf.Rect(f["clip"]) + (-0.5, -0.5, 0.5, 0.5)
+    # clip lấy cả ký tự chỉ chạm mép vùng (chữ dòng trên chạm đỉnh dấu căn) → chỉ giữ đúng các glyph của công thức,
+    # nhận ra theo toạ độ chân chữ đã ghi lúc trích (f["chars"])
+    mine = f.get("chars") or []
+    ours = lambda o: not mine or any(abs(o[0] - x) < 0.6 and abs(o[1] - y) < 0.6 for x, y in mine)  # noqa: E731
+    out = []
+    for blk in page.get_text("rawdict", clip=r)["blocks"]:
+        for ln in blk.get("lines", ()):
+            for sp in ln["spans"]:
+                out += [c["c"] for c in sp["chars"] if ours(c["origin"])]
+            out.append(" ")
+    return " ".join("".join(out).split())
+
+
+def page_pair(d: dict, n: int, mode: str = "pair") -> str:
+    """Chữ của một trang để gửi LLM, ghép theo từng đoạn. `mode`: "pair" = chữ gốc kèm bản dịch tiếng Việt,
+    "source" = chỉ chữ gốc (đỡ nửa số token), "translation" = chỉ bản dịch (đoạn chưa dịch thì chữ gốc).
+    Công thức ({vN} trong chữ đã trích) được thay bằng chữ của công thức đặt trong ⟦…⟧.
+    Trang chưa trích khối (chưa dịch, chưa mở lớp chữ) thì lấy thẳng chữ của trang — hỏi về trang nào cũng có nội
+    dung để LLM đọc."""
     blocks = (d["blocks"].get(n) or (None, d.get(("layer", n)) or []))[1]
     if not blocks:
         return pymupdf.open(d["src"])[n].get_text().strip()
     tr = d["trans"].get(n, {})
+    ftext = d.setdefault("ftext", {})         # (trang, đoạn) → [chữ từng công thức]: đọc glyph một lần thôi
+    page = None
     parts = []
     for i, b in enumerate(blocks):
-        src = untag(b["text"])
-        vi = untag(tr.get(i, ""))
-        parts.append(f"[{i}] {src}" + (f"\n    → {vi}" if vi and vi != src else ""))
+        src, vi = untag(b["text"]), untag(tr.get(i, ""))
+        if b.get("formulas") and "{v" in src + vi:
+            if (n, i) not in ftext:
+                page = page or pymupdf.open(d["src"])[n]
+                ftext[n, i] = [formula_text(page, f) for f in b["formulas"]]
+            fs = ftext[n, i]
+            put = lambda m: f"⟦{fs[int(m[1]) - 1]}⟧" if 0 < int(m[1]) <= len(fs) else ""  # noqa: E731
+            src, vi = PLACEHOLDER.sub(put, src), PLACEHOLDER.sub(put, vi)
+        if mode == "source":
+            parts.append(f"[{i}] {src}")
+        elif mode == "translation":
+            parts.append(f"[{i}] {vi or src}")
+        else:
+            parts.append(f"[{i}] {src}" + (f"\n    → {vi}" if vi and vi != src else ""))
     return "\n".join(parts)
 
 
@@ -3400,19 +3441,148 @@ def chat_cfg(cfg: Config) -> Config:
     return side_cfg(cfg, cfg.chat_base_url, cfg.chat_api_key, cfg.chat_model)
 
 
+def see_cfg(cfg: Config) -> Config | None:
+    """Server/model xem ảnh trang: model trò chuyện nếu đã biết nó đọc được ảnh (danh sách model của OpenRouter
+    cho biết), không thì model "xem ảnh trang" riêng; chưa cấu hình thì None (không gửi ảnh)."""
+    c = chat_cfg(cfg)
+    if (MODEL_META.get(c.base_url.rstrip("/"), {}).get(c.model) or {}).get("vision"):
+        return c
+    return side_cfg(cfg, cfg.see_base_url, cfg.see_api_key, cfg.see_model) if cfg.see_model else None
+
+
+CONTEXT_MODES = ("auto", "pair", "source", "translation", "image", "full")
+CHAT_BUDGET = 12000   # token ngữ cảnh tối đa khi không hỏi về cả bài (≈ 5–8 trang gốc + dịch)
+
+
 class ChatAsk(BaseModel):
     cfg: Config
-    messages: list[dict]          # lịch sử hội thoại [{"role": "user"|"assistant", "content": ...}]
+    question: str = ""            # câu hỏi mới
+    session_id: str = ""          # phiên trò chuyện; rỗng = phiên mới
+    messages: list[dict] = []     # cách gọi cũ (giao diện gửi cả lịch sử): chỉ lấy câu hỏi cuối
     page: int | None = None       # trang đang xem
     selection: str = ""           # chữ người dùng bôi đen
     side: str = ""                # bôi đen ở bản nào: "original" | "translated"
     note_ids: list[str] = []      # ghi chú gửi kèm ("💬 Hỏi lại" một ghi chú)
+    context: str = "auto"         # nguồn ngữ cảnh, xem CONTEXT_MODES và chat_plan
+    regenerate: bool = False      # trả lời lại câu hỏi cuối của phiên
+    edit: bool = False            # thay câu hỏi cuối bằng `question` rồi hỏi lại
 
 
-def chat_context(d: dict, ask: ChatAsk, budget: int) -> str:
-    """Phần tài liệu gửi kèm câu hỏi, cắt theo `budget` token: ghi chú được chọn ("Hỏi lại"), đoạn bôi đen, rồi trang đang xem,
-    rồi lan dần sang các trang bên cạnh."""
-    parts, used = [], 0
+# ---------------- Chọn ngữ cảnh cho câu hỏi
+# Luật cố định (không hỏi thêm LLM → không chậm thêm), giải thích được: giao diện hiện lý do dưới câu trả lời.
+_Q_PAGE = re.compile(r"(?:\btrang|\btr\.|\bpage|\bp\.)\s*(\d{1,4})\b", re.I)
+_Q_FIG = re.compile(r"(?:\bhình|\bfigure|\bfig\.?)\s*(\d{1,3})\b", re.I)
+_Q_TAB = re.compile(r"(?:\bbảng|\btable|\btab\.)\s*(\d{1,3})\b", re.I)
+_Q_VISUAL = re.compile(r"\b(?:hình|biểu đồ|đồ thị|sơ đồ|bảng|figure|fig|table|chart|plot|graph|diagram|công thức|"
+                       r"phương trình|equation|ký hiệu|kí hiệu|trục|đường cong|màu)\b", re.I)
+_Q_GLOBAL = re.compile(r"tóm tắt|tổng quan|tổng kết|cả bài|toàn bài|toàn bộ|cả tài liệu|đóng góp|kết luận|hạn chế|"
+                       r"ý chính|nội dung chính|bài (?:này|báo) (?:nói|đề xuất|làm|giải quyết)|summar|overview|"
+                       r"contribution|conclusion|limitation", re.I)
+_Q_TRANS = re.compile(r"bản dịch|dịch (?:sai|đúng|lại|là|thế nào|sao|như vậy)|thuật ngữ|tiếng anh|nguyên văn", re.I)
+_WORD = re.compile(r"[a-z][a-z0-9\-]{2,}")
+_VI_WORD = re.compile(r"[^\W\d_]+")
+
+
+def page_texts(d: dict) -> list[str]:
+    """Chữ gốc từng trang (một lần cho mỗi tài liệu): tìm chú thích hình/bảng và tìm trang liên quan."""
+    if "ptext" not in d:
+        d["ptext"] = [p.get_text() for p in pymupdf.open(d["src"])]
+    return d["ptext"]
+
+
+def _terms(text: str, vi: bool) -> list[str]:
+    """Từ khoá để so trang với câu hỏi: từ tiếng Anh (bỏ từ chức năng), và cặp âm tiết tiếng Việt liền nhau."""
+    low = text.lower()
+    out = [w for w in _WORD.findall(low) if w not in _STOP]
+    if vi:
+        syl = _VI_WORD.findall(low)
+        out += [f"{a} {b}" for a, b in zip(syl, syl[1:])]
+    return out
+
+
+def related_pages(d: dict, question: str, k: int = 3) -> list[int]:
+    """Trang nói về điều câu hỏi hỏi (kiểu BM25 thu gọn), tìm trên chữ gốc và bản dịch đã có. Câu hỏi tiếng Việt thì
+    thuật ngữ trong bảng thuật ngữ được đổi ngược sang tiếng Anh để khớp được chữ gốc."""
+    texts = page_texts(d)
+    q = question
+    for en, vi in (d.get("glossary") or {}).items():
+        if vi and vi.lower() in question.lower():
+            q += " " + en
+    qt = set(_terms(q, True))
+    if not qt:
+        return []
+    docs = []
+    for n, t in enumerate(texts):
+        tr = " ".join(d["trans"].get(n, {}).values())
+        docs.append(collections.Counter(_terms(t, False) + _terms(untag(tr), True)))
+    N_ = len(docs)
+    df = collections.Counter(w for c in docs for w in qt if c[w])
+    score = [(sum(math.log(1 + N_ / df[w]) * (1 + math.log(c[w])) for w in qt if c[w]), n) for n, c in enumerate(docs)]
+    best = sorted((x for x in score if x[0] > 0), reverse=True)[:k]
+    return [n for _, n in best]
+
+
+def caption_page(d: dict, kind: str, num: str) -> int | None:
+    """Trang có chú thích "Figure 2:" / "Table 3." (chỗ hình/bảng đó nằm)."""
+    word = r"Figure|Fig\." if kind == "fig" else "Table"
+    pat = re.compile(rf"^\s*(?:{word})\s*{num}\s*[:.|]", re.I | re.M)
+    return next((n for n, t in enumerate(page_texts(d)) if pat.search(t)), None)
+
+
+def chat_plan(d: dict, ask: ChatAsk, question: str, budget: int, see: bool) -> dict:
+    """Chọn nguồn ngữ cảnh cho câu hỏi. Trả về {"mode", "pages" (trang gửi chữ, quan trọng trước), "images" (trang
+    gửi ảnh), "why"}. `see` = có model xem được ảnh trang."""
+    n_pages = d["out"].page_count
+    q = f"{question} {ask.selection}"
+    main, why = [], []
+    if ask.selection.strip() and ask.page is not None:
+        main.append(ask.page)
+        why.append("đoạn đang bôi đen")
+    for m in _Q_PAGE.finditer(question):
+        if 1 <= int(m[1]) <= n_pages and int(m[1]) - 1 not in main:
+            main.append(int(m[1]) - 1)
+            why.append(f"câu hỏi nhắc trang {m[1]}")
+    figs = [("fig", m[1]) for m in _Q_FIG.finditer(q)] + [("tab", m[1]) for m in _Q_TAB.finditer(q)]
+    for kind, num in figs:
+        if (p := caption_page(d, kind, num)) is not None and p not in main:
+            main.append(p)
+            why.append(f"{'Hình' if kind == 'fig' else 'Bảng'} {num} ở trang {p + 1}")
+    if not main and ask.page is not None:
+        main.append(ask.page)
+    visual = bool(figs) or bool(_Q_VISUAL.search(q))
+    mode = ask.context if ask.context in CONTEXT_MODES else "auto"
+    if mode == "auto":
+        if _Q_GLOBAL.search(question) and not ask.selection.strip() and not figs:
+            src_tokens = sum(est_tokens(t) for t in page_texts(d))
+            mode = "full" if src_tokens <= budget else "pair"
+            why.append("câu hỏi về cả bài" + ("" if mode == "full" else " (bài dài: phần mở đầu, kết luận, trang liên quan)"))
+            if mode == "pair":
+                concl = next((int(x.split("·")[0][3:]) - 1 for x in d.get("outline", [])
+                              if re.search(r"conclusion|discussion", x, re.I)), n_pages - 1)
+                main = [0, concl] + [p for p in main if p not in (0, concl)]
+        elif _Q_TRANS.search(question):
+            mode = "pair"
+            why.append("hỏi về bản dịch → chữ gốc + bản dịch")
+        else:
+            mode = "pair" if budget >= 6000 else "source"
+    images = []
+    if see and main and (ask.context == "image" or (ask.context == "auto" and visual)):
+        images = main[:2]
+        why.append("hỏi về hình/bảng/công thức → gửi ảnh trang")
+    elif ask.context == "image":
+        why.append("chưa cấu hình model xem ảnh trang → chỉ gửi chữ")
+    if mode == "image":
+        mode = "pair"
+    rel = [p for p in related_pages(d, q) if p not in main] if mode != "full" else []
+    if rel:
+        why.append("trang liên quan: " + ", ".join(str(p + 1) for p in rel))
+    return {"mode": mode, "pages": main + rel, "images": images, "why": "; ".join(why)}
+
+
+def chat_context(d: dict, ask: ChatAsk, plan: dict, budget: int) -> tuple[str, list[int]]:
+    """Phần tài liệu gửi kèm câu hỏi, cắt theo `budget` token: ghi chú được chọn ("Hỏi lại"), đoạn bôi đen, rồi các
+    trang theo kế hoạch (chat_plan), rồi lan dần sang các trang bên cạnh trang chính. Trả kèm các trang đã gửi."""
+    parts, used, sent = [], 0, []
     if ask.note_ids and (txt := N.context(d.get("notes", []), ask.note_ids, budget)):
         # ghi chú người đọc chọn gửi kèm: tối đa `budget` ký tự ≈ 1/4–2/5 ngân sách token (2,5–4 ký tự/token),
         # phần còn lại cho đoạn bôi đen và các trang
@@ -3423,17 +3593,32 @@ def chat_context(d: dict, ask: ChatAsk, budget: int) -> str:
         where = "bản dịch tiếng Việt" if ask.side == "translated" else "bản gốc"
         parts.append(f"[Đoạn người dùng đang bôi đen, lấy từ {where}]\n{sel}")
         used += est_tokens(sel) + 20
-    if ask.page is not None:
-        order = [ask.page] + [p for k in range(1, d["out"].page_count)
-                              for p in (ask.page + k, ask.page - k) if 0 <= p < d["out"].page_count]
-        for n in order:
-            if not (text := page_pair(d, n)):
-                continue
-            if used + (t := est_tokens(text)) > budget:
+    total = d["out"].page_count
+    if plan["mode"] == "full":
+        order = list(range(total))
+    else:
+        first = plan["pages"][0] if plan["pages"] else None
+        near = [] if first is None else [p for k in range(1, total) for p in (first + k, first - k) if 0 <= p < total]
+        order = list(dict.fromkeys(plan["pages"] + near))
+    label = {"pair": "chữ gốc + bản dịch", "source": "chữ gốc", "translation": "bản dịch", "full": "chữ gốc"}
+    fmt = "source" if plan["mode"] == "full" else plan["mode"]
+    for n in order:
+        if not (text := page_pair(d, n, fmt)):
+            continue
+        if used + (t := est_tokens(text)) > budget:
+            if plan["mode"] == "full" or n not in plan["pages"]:
                 break
-            parts.append(f"[Trang {n + 1}]\n{text}")
-            used += t
-    return "\n\n".join(parts)
+            continue                      # trang theo kế hoạch quá dài: bỏ trang đó, thử trang sau
+        parts.append(f"[Trang {n + 1} · {label[plan['mode']]}]\n{text}")
+        used += t
+        sent.append(n)
+    return "\n\n".join(parts), sent
+
+
+def page_image(d: dict, n: int) -> str:
+    """Ảnh trang gốc (PNG, base64) cho model xem ảnh: ×1,5 đủ đọc chữ và công thức (đo 25/09/2026)."""
+    png = pymupdf.open(d["src"])[n].get_pixmap(matrix=pymupdf.Matrix(1.5, 1.5)).tobytes("png")
+    return base64.b64encode(png).decode()
 
 
 async def chat_stream(cfg: Config, system: str, messages: list[dict], num_ctx: int = 0):
@@ -3444,7 +3629,18 @@ async def chat_stream(cfg: Config, system: str, messages: list[dict], num_ctx: i
         headers["Authorization"] = f"Bearer {cfg.api_key}"
     if "openrouter.ai" in cfg.base_url:
         headers |= {"HTTP-Referer": "http://localhost", "X-Title": "PDF Paper Translator"}
-    msgs = [{"role": "system", "content": system}, *messages]
+    # Tin nhắn có ảnh (`images`: PNG base64): API gốc của Ollama nhận thẳng "images", API kiểu OpenAI thì chữ và ảnh
+    # thành các phần của `content`
+    msgs = [{"role": "system", "content": system}]
+    for m in messages:
+        imgs = m.get("images") or []
+        if not imgs:
+            msgs.append({"role": m["role"], "content": m["content"]})
+        elif kind == "ollama":
+            msgs.append({"role": m["role"], "content": m["content"], "images": imgs})
+        else:
+            msgs.append({"role": m["role"], "content": [{"type": "text", "text": m["content"]}] + [
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64," + b64}} for b64 in imgs]})
     if kind == "ollama":  # API kiểu OpenAI của Ollama bỏ qua num_ctx (luôn 4096) → dùng API gốc
         url = re.sub(r"/v1/?$", "", cfg.base_url.rstrip("/")) + "/api/chat"
         body = {"model": cfg.model, "messages": msgs, "stream": True,
@@ -3502,42 +3698,198 @@ async def chat_stream(cfg: Config, system: str, messages: list[dict], num_ctx: i
             raise LLMError(f"Không kết nối được LLM tại {url}: {e!r}")
 
 
+def doc_chats(d: dict) -> list[dict]:
+    """Các phiên trò chuyện của tài liệu (nạp từ chats.json lần đầu cần tới)."""
+    if "chats" not in d:
+        d["chats"] = C.load(store.folder(d["id"]))
+    return d["chats"]
+
+
+def find_chat(d: dict, sid: str) -> dict:
+    if not (s := next((x for x in doc_chats(d) if x["id"] == sid), None)):
+        raise HTTPException(404, "Không tìm thấy phiên trò chuyện")
+    return s
+
+
 @app.post("/api/{doc_id}/chat")
 async def doc_chat(doc_id: str, ask: ChatAsk):
-    """Hỏi LLM về tài liệu (kèm đoạn đang bôi đen). Trả lời chảy về từng mẩu để hiện dần trên giao diện."""
+    """Hỏi LLM về tài liệu (kèm đoạn đang bôi đen) trong một phiên trò chuyện. Server giữ lịch sử phiên: ghi câu hỏi,
+    trả lời chảy về từng mẩu, xong (hoặc người dùng bấm Dừng) thì ghi câu trả lời. Header trả về: X-Session-Id (phiên,
+    mới tạo nếu chưa có) và X-Context (JSON: ngữ cảnh đã gửi — chế độ, trang, ảnh, model, lý do)."""
     d = get_doc(doc_id)
-    cfg = chat_cfg(resolve_keys(ask.cfg))
-    if not [m for m in ask.messages if m.get("role") == "user"]:
+    cfg0 = resolve_keys(ask.cfg)
+    question = ask.question.strip() or next((m.get("content", "") for m in reversed(ask.messages)
+                                             if m.get("role") == "user"), "").strip()
+    sessions = doc_chats(d)
+    sess = next((x for x in sessions if x["id"] == ask.session_id), None) if ask.session_id else None
+    if ask.session_id and not sess:
+        raise HTTPException(404, "Không tìm thấy phiên trò chuyện")
+    if sess is None:
+        sess = C.new()
+        sessions.append(sess)
+    msgs = sess["messages"]
+    if ask.regenerate or ask.edit:
+        while msgs and msgs[-1]["role"] == "assistant":
+            msgs.pop()
+        if ask.regenerate:
+            if not msgs:
+                raise HTTPException(400, "Phiên chưa có câu hỏi nào")
+            last = msgs[-1]           # hỏi lại đúng như lần trước: cùng đoạn bôi đen, cùng trang
+            question = last["content"]
+            ask = ask.model_copy(update={"selection": last.get("quote", ""), "page": last.get("page"),
+                                         "side": last.get("side", ""), "note_ids": last.get("note_ids", [])})
+        elif msgs:
+            msgs.pop()
+    if not question:
         raise HTTPException(400, "Chưa có câu hỏi")
-    _, n_ctx, _ = await server_info(cfg.base_url, cfg.model)
-    ctx = min(n_ctx, 16384)
+    if not ask.regenerate:
+        msgs.append(C.message("user", question, quote=ask.selection.strip()[:4000], page=ask.page,
+                              side=ask.side, note_ids=ask.note_ids, context=ask.context))
+    sess["title"] = sess.get("title") or C.title_of(question)
+    user_msg = msgs[-1]
+
+    see = see_cfg(cfg0)
+    cfg = chat_cfg(cfg0)
+    kind, n_ctx, _ = await server_info(cfg.base_url, cfg.model)
+    # server tự host: num_ctx lớn là tốn RAM/VRAM → 16k; API ngoài thì theo ngữ cảnh thật của model (tối đa 128k)
+    ctx = min(n_ctx, 16384) if kind in ("ollama", "llamacpp") else min(n_ctx, 131072)
     if "outline" not in d:
         src = pymupdf.open(d["src"])
         d["outline"] = await asyncio.to_thread(doc_outline, src)
         # Tên bài vốn chỉ được đặt khi lập bảng thuật ngữ; tắt bảng tự lập thì phần trò chuyện mất luôn tên bài
         d.setdefault("title", await asyncio.to_thread(doc_title, src))
-    gloss, outline = glossary_text(ask.cfg, d), d["outline"]
+    gloss, outline = glossary_text(cfg0, d), d["outline"]
     system = "\n\n".join(x for x in (
         CHAT_PROMPT,
         f'Tên bài: "{d["title"]}"' if d.get("title") else "",
         "Bảng thuật ngữ (dùng đúng cách dịch này):\n" + gloss if gloss else "",
         "Mục lục bài:\n" + "\n".join(outline) if outline else "",
     ) if x)
-    history = [m for m in ask.messages if m.get("role") in ("user", "assistant") and m.get("content")][-8:]
     budget = max(int(0.55 * ctx) - est_tokens(system), 400)
-    if ctxt := chat_context(d, ask, budget):
-        last = dict(history[-1])
-        last["content"] = f"{ctxt}\n\n[Câu hỏi]\n{last['content']}"
-        history = history[:-1] + [last]
+    plan = await asyncio.to_thread(chat_plan, d, ask, question, budget, see is not None)
+    if plan["images"]:              # trả lời bằng model xem ảnh; ngữ cảnh chữ theo ngữ cảnh của model đó
+        cfg = see
+        kind2, n2, _ = await server_info(cfg.base_url, cfg.model)
+        ctx = min(n2, 16384) if kind2 in ("ollama", "llamacpp") else min(n2, 131072)
+        budget = max(int(0.55 * ctx) - est_tokens(system) - 1500 * len(plan["images"]), 400)
+    if plan["mode"] != "full":        # không phải hỏi cả bài: trang chính + liên quan + lân cận là đủ, gửi cả bài chỉ
+        budget = min(budget, CHAT_BUDGET)   # làm chậm và loãng câu trả lời (model 128k+ sẽ nhận nguyên bài)
+    ctxt, sent = await asyncio.to_thread(chat_context, d, ask, plan, budget)
+    history = C.history(sess)
+    if ctxt:
+        history[-1] = {**history[-1], "content": f"{ctxt}\n\n[Câu hỏi]\n{history[-1]['content']}"}
+    if plan["images"]:
+        history[-1]["images"] = [await asyncio.to_thread(page_image, d, n) for n in plan["images"]]
+        system += ("\n\nKèm theo câu hỏi là ảnh các trang: " + ", ".join(str(n + 1) for n in plan["images"])
+                   + ". Đọc hình, bảng, công thức trực tiếp trên ảnh.")
+    else:
+        system += "\n\nCông thức trong chữ trích từ PDF nằm trong ⟦…⟧ (chép từ glyph nên có thể lộn xộn)."
+    info = {"mode": plan["mode"], "pages": [n + 1 for n in sent], "images": [n + 1 for n in plan["images"]],
+            "model": cfg.model, "why": plan["why"]}
+    C.save(store.folder(doc_id), sessions)
 
     async def gen():
+        acc, stopped, failed = "", True, False
         try:
             async for piece in chat_stream(cfg, system, history, ctx):
+                acc += piece
                 yield piece
+            stopped = False
         except LLMError as e:
+            failed = True
             yield f"\n\n⚠️ {e}"
+        finally:                      # cả khi người dùng bấm Dừng (kết nối bị ngắt): giữ phần đã trả lời
+            if acc.strip():
+                msgs.append(C.message("assistant", acc, model=cfg.model, ctx=info, stopped=stopped and not failed))
+            elif not ask.regenerate and failed and user_msg in msgs:
+                msgs.remove(user_msg)  # LLM lỗi, chưa ra chữ nào: bỏ câu hỏi (giao diện trả câu hỏi về ô gõ)
+            sess["updated"] = time.time()
+            C.save(store.folder(doc_id), sessions)
 
-    return StreamingResponse(gen(), media_type="text/plain; charset=utf-8")
+    return StreamingResponse(gen(), media_type="text/plain; charset=utf-8", headers={
+        "X-Session-Id": sess["id"], "X-Context": json.dumps(info), "Cache-Control": "no-store"})
+
+
+@app.get("/api/{doc_id}/chats")
+def list_chats(doc_id: str):
+    return {"sessions": C.listing(doc_chats(get_doc(doc_id)))}
+
+
+@app.get("/api/{doc_id}/chats/{sid}.md")
+def chat_md(doc_id: str, sid: str):
+    d = get_doc(doc_id)
+    s = find_chat(d, sid)
+    name = re.sub(r'[\\/:*?"<>|]+', " ", s.get("title") or "tro-chuyen").strip()[:60] or "tro-chuyen"
+    return Response(C.markdown(s, d.get("title") or d["name"]), media_type="text/markdown; charset=utf-8",
+                    headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}.md"})
+
+
+@app.get("/api/{doc_id}/chats/{sid}")
+def get_chat(doc_id: str, sid: str):
+    return find_chat(get_doc(doc_id), sid)
+
+
+class ChatRename(BaseModel):
+    title: str
+
+
+@app.patch("/api/{doc_id}/chats/{sid}")
+def rename_chat(doc_id: str, sid: str, body: ChatRename):
+    d = get_doc(doc_id)
+    s = find_chat(d, sid)
+    s["title"] = " ".join(body.title.split())[:120]
+    C.save(store.folder(doc_id), doc_chats(d))
+    return C.summary(s)
+
+
+@app.delete("/api/{doc_id}/chats/{sid}")
+def delete_chat(doc_id: str, sid: str):
+    d = get_doc(doc_id)
+    find_chat(d, sid)
+    d["chats"] = [x for x in doc_chats(d) if x["id"] != sid]
+    C.save(store.folder(doc_id), d["chats"])
+    return {"deleted": sid}
+
+
+SUMMARY_PROMPT = """Bạn tổng hợp một cuộc trò chuyện giữa người đọc và trợ giảng về một bài báo khoa học thành GHI CHÚ học tập bằng tiếng Việt, để người đọc xem lại sau.
+Viết Markdown, ngắn gọn, chỉ giữ điều đáng nhớ; theo đúng các mục sau (bỏ mục không có gì):
+## Câu hỏi chính
+## Điều rút ra
+(các ý đã được giải thích/kết luận, mỗi ý một gạch đầu dòng; ghi số trang (tr. N) nếu cuộc trò chuyện có nhắc)
+## Khái niệm, công thức
+(công thức viết bằng LaTeX trong $...$ hoặc $$...$$)
+## Còn bỏ ngỏ
+(câu hỏi chưa được trả lời rõ, việc cần đọc thêm)
+Không bịa thêm điều cuộc trò chuyện không nói. Không mở bài, không kết bài."""
+
+
+@app.post("/api/{doc_id}/chats/{sid}/summarize")
+async def summarize_chat(doc_id: str, sid: str, cfg: Config):
+    """Tổng hợp một phiên trò chuyện thành một ghi chú của bài (nguồn LLM, sửa được như ghi chú thường)."""
+    d = get_doc(doc_id)
+    s = find_chat(d, sid)
+    if not any(m["role"] == "assistant" for m in s["messages"]):
+        raise HTTPException(400, "Phiên chưa có câu trả lời nào để tổng hợp")
+    c = chat_cfg(resolve_keys(cfg))
+    kind, n_ctx, _ = await server_info(c.base_url, c.model)
+    ctx = min(n_ctx, 16384) if kind in ("ollama", "llamacpp") else min(n_ctx, 131072)
+    text = C.transcript(s, limit_chars=int(0.5 * ctx * 3))
+    title = d.get("title") or d["name"]
+    out = ""
+    try:
+        async for piece in chat_stream(c, SUMMARY_PROMPT, [{"role": "user", "content":
+                                       f'Bài báo: "{title}"\n\nCuộc trò chuyện:\n\n{text}'}], ctx):
+            out += piece
+    except LLMError as e:
+        raise HTTPException(502, str(e))
+    if not out.strip():
+        raise HTTPException(502, "LLM không trả lời")
+    note = N.upsert(d.setdefault("notes", []), N.Note(
+        text=out.strip(), source="llm",
+        meta={"question": f"Tổng hợp phiên trò chuyện: {s.get('title') or ''}", "model": c.model, "session": sid}),
+        d["out"].page_count)
+    store.save_state(d)
+    return note
 
 
 @app.get("/api/{doc_id}/download")

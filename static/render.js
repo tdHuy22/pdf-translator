@@ -111,6 +111,78 @@ function paintInto(el, text, done = false) {
   el._rdAt = now;
 }
 
+// ---------------- Chữ đang chảy: vẽ lại từng khối, không vẽ lại cả câu trả lời
+// Vẽ lại cả câu trả lời mỗi lần có chữ mới thì càng dài càng chậm (Markdown + KaTeX chạy lại từ đầu), và bôi đen
+// để chép giữa chừng là mất vùng chọn. Chia câu trả lời thành các khối cấp cao (ngăn bởi dòng trống, không cắt
+// trong ``` hay $$): khối đã xong giữ nguyên trên trang, chỉ khối cuối (đang chảy) được vẽ lại. Xong hẳn thì vẽ lại
+// cả câu trả lời một lần — vài cấu trúc Markdown trải qua dòng trống (danh sách có dòng trống giữa các mục) chỉ
+// đúng hẳn khi dựng cả bài.
+function splitBlocks(text) {
+  const out = [];
+  let cur = [], fence = false, math = false;
+  for (const line of text.split("\n")) {
+    if (/^\s*(```|~~~)/.test(line)) fence = !fence;
+    else if (!fence && (line.match(/\$\$/g) || []).length % 2) math = !math;
+    if (!fence && !math && !line.trim()) {
+      if (cur.length) { out.push(cur.join("\n")); cur = []; }
+      continue;
+    }
+    cur.push(line);
+  }
+  if (cur.length) out.push(cur.join("\n"));
+  return out;
+}
+
+/** Vẽ chữ đang chảy vào `el`, tiết lưu ~50ms. `done`: vẽ lần cuối cả câu trả lời (và tô màu code, nút chép). */
+function streamInto(el, text, done = false) {
+  if (done) {
+    el.innerHTML = renderMarkdown(text);
+    el._blocks = null;
+    enhance(el);
+    return;
+  }
+  const now = performance.now();
+  if (now - (el._rdAt || 0) < 50) return;
+  el._rdAt = now;
+  const blocks = splitBlocks(text);
+  if (!el._blocks) { el.innerHTML = ""; el._blocks = []; }
+  const have = el._blocks;
+  let i = 0;
+  while (i < blocks.length - 1 && i < have.length && have[i].src === blocks[i]) i++;
+  while (have.length > i) have.pop().node.remove();
+  for (; i < blocks.length; i++) {
+    const node = document.createElement("div");
+    node.className = "mdb";
+    node.innerHTML = renderMarkdown(blocks[i]);
+    if (i < blocks.length - 1) enhance(node);          // khối đã xong: tô màu code luôn
+    el.appendChild(node);
+    have.push({ src: blocks[i], node });
+  }
+}
+
+// ---------------- Khối code: tô màu (highlight.js), tên ngôn ngữ và nút chép
+if (window.hljs) window.hljs.configure({ ignoreUnescapedHTML: true });
+function enhance(root) {
+  for (const pre of root.querySelectorAll("pre:not(.plain)")) {
+    const code = pre.querySelector("code");
+    if (!code || pre.dataset.done) continue;
+    pre.dataset.done = "1";
+    if (window.hljs) try { window.hljs.highlightElement(code); } catch {}
+    const lang = (code.className.match(/language-([\w+#.-]+)/) || [])[1] || "";
+    const bar = document.createElement("div");
+    bar.className = "codebar";
+    bar.innerHTML = `<span>${esc(lang)}</span><button type="button">📋 Chép</button>`;
+    const btn = bar.querySelector("button");
+    btn.onclick = async () => {
+      try { await navigator.clipboard.writeText(code.textContent); btn.textContent = "✓ Đã chép"; }
+      catch { btn.textContent = "✗"; }
+      setTimeout(() => { btn.textContent = "📋 Chép"; }, 1500);
+    };
+    pre.prepend(bar);
+  }
+}
+
 window.renderMarkdown = renderMarkdown;
 window.paintInto = paintInto;
+window.streamInto = streamInto;
 })();

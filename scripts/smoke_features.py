@@ -6,6 +6,7 @@ lưu xuống đĩa rồi mở lại sau khi khởi động lại app (dùng thư
 
 In ✓/✗ cho từng mục; dùng sau khi sửa app.py để biết có làm hỏng đường nào không."""
 import asyncio
+import json
 import pathlib
 import sys
 import tempfile
@@ -44,7 +45,9 @@ async def fi(b, m=""): return ("other", 32768, 4)
 A.server_info = fi
 seen = {}
 async def fs(cfg, system, messages, num_ctx=0):
-    seen.update(system=system, msg=messages[-1]["content"]); yield "Trả lời thử."
+    seen.update(system=system, msg=messages[-1]["content"], images=messages[-1].get("images"), model=cfg.model,
+                n=len(messages))
+    yield "Trả lời thử."
 A.chat_stream = fs
 FAIL = []
 
@@ -106,7 +109,7 @@ with TestClient(A.app) as c:
     c.post(f"/api/{did}/marks", json={"page": 0, "add": [mark]})
     c.post(f"/api/{did}/chat", json={"cfg":cfg,"messages":[{"role":"user","content":"Hỏi?"}],"page":0,
                                      "selection":"BERT is designed to","side":"original"})
-    ok("Mục lục bài:" in seen["system"] and "bôi đen" in seen["msg"] and "[Trang 1]" in seen["msg"], "ngữ cảnh chat đủ (mục lục + đoạn chọn + trang)")
+    ok("Mục lục bài:" in seen["system"] and "bôi đen" in seen["msg"] and "[Trang 1 ·" in seen["msg"], "ngữ cảnh chat đủ (mục lục + đoạn chọn + trang)")
 
     print("3b. Căn vệt tô bằng LLM (LLM giả)")
     src = "We call our particular attention [[X]] (Figure 2)."
@@ -250,6 +253,55 @@ with TestClient(A.app) as c:
        "xoá tài liệu → không mở lại được nữa")
     A.store.save_state(d_live)                      # một việc của bài (đang dịch / lập thuật ngữ) xong SAU khi bài bị xoá
     ok(not A.store.folder(did).exists(), "việc còn chạy của bài đã xoá không lỗi, không làm bài sống lại")
+
+print("10. Phiên trò chuyện, chọn ngữ cảnh")
+with TestClient(A.app) as c:
+    with open(ROOT / "data/attention-is-all-you-need.pdf", "rb") as f:
+        aid = c.post("/api/upload", files={"file": ("att.pdf", f, "application/pdf")}).json()["id"]
+    c.post(f"/api/{aid}/translate/3?span=1", json=cfg)
+    r = c.post(f"/api/{aid}/chat", json={"cfg": cfg, "question": "Giải thích đoạn này", "page": 3})
+    sid, info = r.headers["x-session-id"], json.loads(r.headers["x-context"])
+    ok(r.text == "Trả lời thử." and sid and info["pages"][0] == 4, f"phiên mới + ngữ cảnh bắt đầu từ trang đang xem ({info['pages'][:3]})")
+    ok("⟦" in seen["msg"] and "{v1}" not in seen["msg"], "công thức trong ngữ cảnh là chữ của công thức, không phải {v1}")
+    c.post(f"/api/{aid}/chat", json={"cfg": cfg, "question": "Còn gì nữa?", "session_id": sid, "page": 3})
+    ok(seen["n"] == 3, "câu hỏi thứ hai: server tự ghép lịch sử phiên (3 tin nhắn)")
+    S = c.get(f"/api/{aid}/chats/{sid}").json()
+    ok([m["role"] for m in S["messages"]] == ["user", "assistant"] * 2 and S["messages"][1]["ctx"]["mode"] == "pair",
+       "phiên lưu cả câu hỏi và câu trả lời (kèm ngữ cảnh đã gửi)")
+    c.post(f"/api/{aid}/chat", json={"cfg": cfg, "session_id": sid, "regenerate": True})
+    c.post(f"/api/{aid}/chat", json={"cfg": cfg, "session_id": sid, "edit": True, "question": "Hỏi khác", "page": 3})
+    S = c.get(f"/api/{aid}/chats/{sid}").json()
+    ok(len(S["messages"]) == 4 and S["messages"][2]["content"] == "Hỏi khác", "trả lời lại / sửa câu hỏi cuối: không nhân đôi tin nhắn")
+    c.patch(f"/api/{aid}/chats/{sid}", json={"title": "Phiên thử"})
+    A.DOCS.clear()                                    # như khởi động lại app
+    L = c.get(f"/api/{aid}/chats").json()["sessions"]
+    ok(L[0]["title"] == "Phiên thử" and L[0]["n"] == 2, "đổi tên; danh sách phiên còn sau khi khởi động lại")
+    md = c.get(f"/api/{aid}/chats/{sid}.md").text
+    ok("# Phiên thử" in md and "Hỏi khác" in md, "xuất phiên ra Markdown")
+    n = c.post(f"/api/{aid}/chats/{sid}/summarize", json=cfg).json()
+    ok(n["source"] == "llm" and n["meta"].get("session") == sid and "Phiên thử" in n["meta"]["question"],
+       "tổng hợp phiên → ghi chú nguồn LLM")
+    d = A.DOCS[aid]
+    ask = lambda q, **k: A.ChatAsk(cfg=A.Config(**cfg), question=q, **k)
+    P = A.chat_plan(d, ask("Tóm tắt đóng góp chính của bài", page=3), "Tóm tắt đóng góp chính của bài", 9000, False)
+    ok(P["mode"] == "full" or P["pages"][:1] == [0], f"câu hỏi về cả bài → cả bài / phần mở đầu ({P['mode']})")
+    P = A.chat_plan(d, ask("Hình 2 nói gì?", page=0), "Hình 2 nói gì?", 9000, True)
+    ok(P["pages"][0] == 3 and P["images"] == [3], f"“Hình 2” → trang có chú thích Figure 2 (tr.4), gửi ảnh: {P['why']}")
+    P = A.chat_plan(d, ask("Hình 2 nói gì?", page=0), "Hình 2 nói gì?", 9000, False)
+    ok(not P["images"], "chưa có model xem ảnh → không gửi ảnh")
+    P = A.chat_plan(d, ask("multi-head attention là gì", page=0), "multi-head attention là gì", 9000, False)
+    ok(3 in P["pages"] or 4 in P["pages"], f"trang liên quan theo từ khoá: {[p + 1 for p in P['pages']]}")
+    P = A.chat_plan(d, ask("trang 7 nói gì", page=0), "trang 7 nói gì", 9000, False)
+    ok(P["pages"][0] == 6, "“trang 7” → trang 7 trước")
+    P = A.chat_plan(d, ask("x", page=0, context="source"), "x", 9000, False)
+    ok(P["mode"] == "source", "chọn tay chế độ ngữ cảnh")
+    A.MODEL_META["https://see/v1"] = {}
+    ok(A.see_cfg(A.Config(**cfg)) is None and A.see_cfg(A.Config(**cfg, see_base_url="https://see/v1", see_model="v")).model == "v",
+       "model xem ảnh: chưa cấu hình → không có")
+    c2 = {**cfg, "see_base_url": "https://see/v1", "see_model": "eye"}
+    r = c.post(f"/api/{aid}/chat", json={"cfg": c2, "question": "Hình 2 vẽ gì?", "page": 0})
+    ok(seen["model"] == "eye" and seen["images"] and len(seen["images"]) == 1 and json.loads(r.headers["x-context"])["images"] == [4],
+       "hỏi về hình → model xem ảnh nhận ảnh trang 4")
 
 print("9. Nhà cung cấp, thông tin model")
 with TestClient(A.app) as c:

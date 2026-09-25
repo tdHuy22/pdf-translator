@@ -6,7 +6,7 @@
 // Bọc trong một hàm như render.js: file nạp chung phạm vi toàn cục với app.js, trùng một tên `const` là
 // SyntaxError. Dùng biến của app.js (doc, MARKS, $, esc, pageOf, marksHit, addMarks, fmtTime…) và chỉ đưa ra
 // ngoài các hàm móc nối mà app.js gọi: notesReset, notesLoad, paintNoteDots, noteSaveButton, noteChatExtra,
-// noteAfterSend, notesMarksChanged, showTab.
+// noteAfterSend, notesMarksChanged, showTab, noteAdded.
 (() => {
 const GEN = "general";
 let NOTES = [], attached = [], draft = null, genTimer = null, genPending = null;
@@ -26,7 +26,6 @@ function showTab(which) {
   $("tabNotes").classList.toggle("on", which === "notes");
   $("chatPane").hidden = which !== "chat";
   $("notesPane").hidden = which !== "notes";
-  $("chatClear").hidden = which !== "chat";
 }
 const tabOpen = which => document.body.classList.contains("chat") && !$(which === "chat" ? "chatPane" : "notesPane").hidden;
 $("tabChat").onclick = () => showTab("chat");
@@ -322,6 +321,14 @@ function notesMarksChanged(p) {
   if (NOTES.some(n => n.page === p && n.mark_id)) drawNotes();
 }
 
+/** Ghi chú vừa được server tạo ở chỗ khác (📝 Tổng hợp phiên trò chuyện): thêm vào danh sách và mở ra xem. */
+function noteAdded(n) {
+  upsertLocal(n);
+  drawNotes();
+  paintNoteDots(n.page);
+  focusNote(n);
+}
+
 Object.assign(window, { notesReset, notesLoad, paintNoteDots, noteSaveButton, noteChatExtra, noteAfterSend,
-                        notesMarksChanged, showTab });
+                        notesMarksChanged, showTab, noteAdded });
 })();
