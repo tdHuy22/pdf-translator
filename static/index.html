@@ -469,9 +469,9 @@
     <div id="editbox" hidden>✏️ Đang sửa câu hỏi cuối — gửi để hỏi lại <button id="editDrop" type="button" title="Huỷ sửa">✕</button></div>
     <form id="ask"><textarea id="q" rows="2" placeholder="Hỏi về bài báo… (Enter để gửi, Shift+Enter xuống dòng)"></textarea>
       <div class="askbar">
-        <select id="ctxMode" title="LLM đọc phần nào của tài liệu. Tự động: bôi đen → đoạn đó + trang của nó; hỏi về hình/bảng/công thức → gửi ảnh trang (nếu có model xem ảnh); hỏi về cả bài → cả bài (vừa ngữ cảnh) hoặc mở đầu + kết luận; còn lại → trang đang xem + trang liên quan">
+        <select id="ctxMode" title="LLM đọc phần nào của tài liệu. Tự động: bôi đen → đoạn đó + trang của nó; hỏi về hình/bảng/công thức → gửi ảnh trang (nếu có model xem ảnh); hỏi về cả bài → cả bài (vừa ngữ cảnh) hoặc mở đầu + kết luận; còn lại → trang đang xem + trang liên quan. Nguyên PDF: gửi cả file PDF gốc mỗi câu hỏi (chỉ OpenRouter / OpenAI; tốn token hơn — hợp model ngữ cảnh lớn; server khác thì gửi chữ cả bài)">
           <option value="auto">🎯 Tự động</option><option value="pair">Gốc + dịch</option><option value="source">Chữ gốc</option>
-          <option value="translation">Bản dịch</option><option value="image">🖼 Ảnh trang</option><option value="full">📄 Cả bài</option></select>
+          <option value="translation">Bản dịch</option><option value="image">🖼 Ảnh trang</option><option value="full">📄 Cả bài</option><option value="pdf">📎 Nguyên PDF</option></select>
         <button class="primary" id="send" type="submit">Gửi</button></div></form>
   </div>
   <div id="notesPane" class="pane" hidden>

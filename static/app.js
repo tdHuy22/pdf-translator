@@ -1216,7 +1216,14 @@ function keepSel(info) {
 }
 const dropSel = () => keepSel(null);
 try { $("ctxMode").value = localStorage.getItem("ctx_mode") || "auto"; } catch {}
-$("ctxMode").onchange = () => { try { localStorage.setItem("ctx_mode", $("ctxMode").value); } catch {} };
+$("ctxMode").onchange = () => {
+  try { localStorage.setItem("ctx_mode", $("ctxMode").value); } catch {}
+  // Chỉ OpenRouter / OpenAI nhận file PDF (proxy ChatGPT lặng lẽ bỏ file, llama.cpp/Ollama từ chối): server khác thì
+  // app gửi chữ cả bài — báo trước để người dùng khỏi tưởng model đã đọc file
+  const c = cfg(), base = c.chat_base_url || c.base_url;
+  if ($("ctxMode").value === "pdf" && !/openrouter\.ai|api\.openai\.com/i.test(base))
+    setStatus("Server trò chuyện này không nhận file PDF → sẽ gửi chữ cả bài thay thế (file PDF chỉ gửi được qua OpenRouter / OpenAI)");
+};
 
 // ---------------- Cuộn: bám đáy khi đang ở đáy; người dùng cuộn lên đọc thì thôi, hiện nút "↓ Mới nhất"
 $("msgs").addEventListener("scroll", () => {
@@ -1252,7 +1259,7 @@ function aiBubble() {
   el.appendChild(el.body);
   return el;
 }
-const ctxLabel = { pair: "gốc + dịch", source: "chữ gốc", translation: "bản dịch", full: "cả bài" };
+const ctxLabel = { pair: "gốc + dịch", source: "chữ gốc", translation: "bản dịch", full: "cả bài", pdf: "nguyên PDF" };
 /** Thanh dưới câu trả lời: chép, lưu thành ghi chú, trả lời lại; và dòng "ngữ cảnh đã gửi". */
 function finishAi(el, meta = {}) {
   el.querySelector(".msgbar")?.remove();
@@ -1286,7 +1293,7 @@ function finishAi(el, meta = {}) {
     const chip = document.createElement("div");
     chip.className = "ctxchip";
     chip.textContent = `📎 ${[...pages, ...imgOnly].length ? "tr. " + [...pages, ...imgOnly].join(", ") + " · " : ""}` +
-                       `${ctxLabel[c.mode] || c.mode}${c.model ? " · " + c.model : ""}`;
+                       `${ctxLabel[c.mode] || c.mode}${c.pdf ? ` (${c.pdf})` : ""}${c.model ? " · " + c.model : ""}`;
     chip.title = "Ngữ cảnh đã gửi cho LLM" + (c.why ? ": " + c.why : "");
     el.appendChild(chip);
   }
@@ -1493,7 +1500,8 @@ $("sesSum").onclick = async () => {
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
     const n = await r.json();
     if (doc === mine) window.noteAdded?.(n);
-    setStatus("Đã tổng hợp phiên thành ghi chú (tab 📝 Ghi chú, sửa được)");
+    setStatus(n.updated > n.created ? "Đã cập nhật ghi chú tổng hợp của phiên này (tab 📝 Ghi chú)"
+                                    : "Đã tổng hợp phiên thành ghi chú (tab 📝 Ghi chú, sửa được)");
   } catch (e) { setStatus("Không tổng hợp được: " + e.message); }
   b.disabled = false; b.textContent = "📝 Tổng hợp";
 };

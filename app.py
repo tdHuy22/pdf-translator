@@ -2141,6 +2141,37 @@ def doc_title(doc: pymupdf.Document) -> str:
 
 _REFS_HEAD = re.compile(r"(?:\d+\.?|[IVX]+\.)?\s*(?:references|bibliography|literature cited)", re.I)
 _APPX_HEAD = re.compile(r"(?:appendix|appendices|supplementary material)\b|[A-H](?:\.\d+)?\s+[A-Z][a-z]", re.I)
+_CAPTION = re.compile(r"(?:figure|fig\.|table)\s*[A-Z]?\d+\s*[:.]", re.I)
+
+
+def block_style(b: dict) -> tuple[float, bool]:
+    """(cỡ chữ, in đậm?) của span đầu tiên có chữ trong khối — để nhận ra tiêu đề mục."""
+    for ln in b.get("lines", []):
+        for sp in ln["spans"]:
+            if sp["text"].strip():
+                return sp["size"], bool(sp["flags"] & 16 or _BOLD.search(sp["font"]))
+    return 0.0, False
+
+
+class RefsScan:
+    """Đi qua các khối chữ theo thứ tự đọc, cho biết khối nào thuộc phần Tài liệu tham khảo: từ tiêu đề References tới
+    mục kế tiếp — tiêu đề Phụ lục ("Appendix", "A  Details…"), tiêu đề cùng kiểu chữ với tiêu đề References (in đậm,
+    không nhỏ hơn: phụ lục không đánh số như "Attention Visualizations" của bài Attention), hay chú thích hình/bảng —
+    hoặc tới hết bài."""
+
+    def __init__(self):
+        self.on, self.head = False, None
+
+    def step(self, first: str, style: tuple[float, bool]) -> str:
+        """"head" (tiêu đề References), "ref" (khối trong danh mục) hay "" (không thuộc)."""
+        if len(first) < 40 and _REFS_HEAD.fullmatch(first):
+            self.on, self.head = True, style
+            return "head"
+        if self.on and len(first) < 80 and (_APPX_HEAD.match(first) or _CAPTION.match(first) or (
+                style[1] and self.head and self.head[1] and style[0] >= self.head[0] - 0.5
+                and not re.search(r"\b(?:19|20)\d\d\b", first))):
+            self.on = False
+        return "ref" if self.on else ""
 _TOK = re.compile(r"[A-Za-z0-9]+(?:[-.'][A-Za-z0-9]+)*")
 # Tên riêng/ký hiệu: có chữ hoa ở giữa (RoPE, FlashAttention), hai chữ hoa liền (GQA, LLMs), chữ đi với số (A100, GPT-3.5)
 _SYM = re.compile(r"[A-Za-z]*(?:[a-z][A-Z]|[A-Z]{2}|[A-Za-z]\d)[A-Za-z0-9.\-]*")
@@ -2210,16 +2241,13 @@ def paper_text(doc: pymupdf.Document) -> PaperText:
                         run = []
             if text := join_lines(lines, keep).strip():
                 bold = bool(spans) and all(sp["flags"] & 16 or _BOLD.search(sp["font"]) for sp in spans)
-                blocks.append((pno, text, lines[0].strip(), bold, italic))
+                blocks.append((pno, text, lines[0].strip(), bold, italic, block_style(b)))
     start = next((i for i, (p, t, *_) in enumerate(blocks) if p == 0 and re.match(r"abstract\b", t, re.I)), 0)
-    body, refs, heads, italic, pages, in_refs = [], [], [], set(), collections.defaultdict(list), False
-    for pno, text, first, bold, it in blocks[start:]:
-        if len(first) < 40 and _REFS_HEAD.fullmatch(first):
-            in_refs = True
-            text = text[len(first):].strip()
-        elif in_refs and len(first) < 80 and _APPX_HEAD.match(first):
-            in_refs = False
-        if in_refs:
+    body, refs, heads, italic, pages, scan = [], [], [], set(), collections.defaultdict(list), RefsScan()
+    for pno, text, first, bold, it, style in blocks[start:]:
+        if k := scan.step(first, style):
+            if k == "head":
+                text = text[len(first):].strip()
             refs.append(text)
             continue
         toks = _TOK.findall(text)
@@ -2959,29 +2987,46 @@ def refs_boxes(d: dict) -> dict[int, list[pymupdf.Rect]]:
     """Khung các khối chữ thuộc phần Tài liệu tham khảo (từ tiêu đề References tới Phụ lục hoặc hết bài), theo thứ tự
     đọc của MuPDF — nên đúng cả khi danh mục chảy qua hai cột. Tiêu đề "References" đứng riêng một khối thì vẫn dịch."""
     if "refs" not in d:
-        out, on = collections.defaultdict(list), False
+        out, scan = collections.defaultdict(list), RefsScan()
         for pno, page in enumerate(pymupdf.open(d["src"])):
             for b in page.get_text("dict", flags=pymupdf.TEXT_MEDIABOX_CLIP)["blocks"]:
                 lines = [" ".join("".join(sp["text"] for sp in ln["spans"]).split()) for ln in b.get("lines", [])]
                 first = next((x for x in lines if x), "")
                 if not first:
                     continue
-                if len(first) < 40 and _REFS_HEAD.fullmatch(first):
-                    on = True
-                    if len([x for x in lines if x]) == 1:
-                        continue
-                elif on and len(first) < 80 and _APPX_HEAD.match(first):
-                    on = False
-                if on:
+                if (k := scan.step(first, block_style(b))) == "head" and len([x for x in lines if x]) == 1:
+                    continue
+                if k:
                     out[pno].append(pymupdf.Rect(b["bbox"]))
         d["refs"] = dict(out)
     return d["refs"]
 
 
+def user_skips(d: dict, n: int, blocks: list[dict], heal: bool = True) -> set[int]:
+    """Đoạn của trang n người dùng đánh dấu "không dịch" (⛔). Trích lại khối (đổi OCR/layout) thì số hiệu đoạn có thể
+    đổi: tìm lại đoạn theo dấu chữ và ghi số hiệu mới; đoạn không còn (chữ trích khác đi) thì bỏ dấu. `heal=False`:
+    `blocks` không phải khối dùng để dịch (lớp chữ tạm của trang chưa dịch) → chỉ tìm, không sửa dấu đã lưu."""
+    marks = d.get("skip", {}).get(n)
+    if not marks or not blocks:
+        return set()
+    if any(i >= len(blocks) or block_hash(blocks[i]) != h for i, h in marks.items()):
+        where = {block_hash(b): i for i, b in enumerate(blocks)}
+        fixed = {where[h]: h for h in marks.values() if h in where}
+        if not heal:
+            return set(fixed)
+        if len(fixed) < len(marks):
+            print(f"[skip] trang {n + 1}: {len(marks) - len(fixed)} đoạn ⛔ không còn sau khi trích lại → bỏ dấu")
+        marks.clear()
+        marks.update(fixed)
+        if not marks:
+            d["skip"].pop(n, None)
+        store.save_state(d)
+    return set(marks)
+
+
 def skipped(d: dict, n: int, blocks: list[dict], cfg: Config) -> set[int]:
     """Đoạn của trang n KHÔNG dịch (giữ nguyên chữ gốc): người dùng đánh dấu (⛔), và phần Tài liệu tham khảo."""
-    marks = d.get("skip", {}).get(n, {})
-    out = {i for i, h in marks.items() if i < len(blocks) and block_hash(blocks[i]) == h}
+    out = user_skips(d, n, blocks)
     if cfg.skip_refs and (boxes := refs_boxes(d).get(n)):
         for i, b in enumerate(blocks):
             c = pymupdf.Rect(b["bbox"])
@@ -3113,6 +3158,7 @@ async def skip_blocks(doc_id: str, n: int, ask: SkipAsk):
     lưu (không gọi LLM); bỏ đánh dấu một đoạn chưa từng được dịch thì dịch riêng các đoạn đó."""
     d, cfg = get_doc(doc_id), resolve_keys(ask.cfg)
     blocks, _ = await page_blocks(d, n, cfg)
+    user_skips(d, n, blocks)
     marks = d.setdefault("skip", {}).setdefault(n, {})
     for i in ask.blocks:
         if 0 <= i < len(blocks):
@@ -3309,8 +3355,7 @@ async def page_layer(doc_id: str, n: int, kind: str = "original", refs: bool = T
     lines = reading_order(lines)
     # đoạn không dịch: người dùng đánh dấu (⛔) và phần tài liệu tham khảo (nếu đang bật `refs`)
     src_blocks = (d["blocks"].get(n) or (None, d.get(("layer", n)) or []))[1]
-    user = sorted(i for i, h in d.get("skip", {}).get(n, {}).items()
-                  if i < len(src_blocks) and block_hash(src_blocks[i]) == h)
+    user = sorted(user_skips(d, n, src_blocks, heal=bool(d["blocks"].get(n))))
     auto = sorted(skipped(d, n, src_blocks, Config(skip_refs=True)) - set(user)) if refs else []
     return {"w": round(page.rect.width, 1), "h": round(page.rect.height, 1), "ready": True,
             "lines": lines, "blocks": {str(i): [round(v, 1) for v in r] for i, r in rects.items()},
@@ -3679,8 +3724,26 @@ def see_cfg(cfg: Config) -> Config | None:
     return side_cfg(cfg, cfg.see_base_url, cfg.see_api_key, cfg.see_model) if cfg.see_model else None
 
 
-CONTEXT_MODES = ("auto", "pair", "source", "translation", "image", "full", "near")  # near: chỉ để bench so sánh
+CONTEXT_MODES = ("auto", "pair", "source", "translation", "image", "full", "pdf", "near")  # near: chỉ để bench so sánh
 CHAT_BUDGET = 12000   # token ngữ cảnh tối đa khi không hỏi về cả bài (≈ 5–8 trang gốc + dịch)
+PDF_MAX_MB = 20       # "Nguyên PDF": file lớn hơn thì gửi chữ (OpenRouter/OpenAI nhận file base64 trong JSON)
+
+
+def pdf_input(c: Config) -> str:
+    """Server nhận thẳng file PDF trong tin nhắn (`{"type": "file"}`) không, và đọc bằng cách nào:
+    - OpenRouter: plugin file-parser — "native" với model tự đọc được PDF (Claude, Gemini, GPT-4o trở lên: thấy cả
+      hình, tính token như ảnh trang), còn lại "pdf-text" (trích chữ, miễn phí; đo 25/09/2026 với nex-n2.5-pro:free:
+      BERT 18,8k token, 5 giây, đúng cả số liệu trong bảng). Không dùng "mistral-ocr" (tính tiền theo trang).
+    - OpenAI (api.openai.com): model đọc thẳng file.
+    - "" = không nhận: proxy ChatGPT trả 200 nhưng lặng lẽ bỏ file, llama.cpp trả 400, Ollama/LM Studio không có kiểu
+      nội dung này."""
+    url = c.base_url.lower()
+    if "openrouter.ai" in url:
+        return "native" if re.match(r"(anthropic/|google/gemini|openai/(gpt-4o|gpt-4\.1|gpt-5|o\d))", c.model) \
+            else "pdf-text"
+    if "api.openai.com" in url:
+        return "native"
+    return ""
 
 
 class ChatAsk(BaseModel):
@@ -3803,6 +3866,10 @@ def chat_plan(d: dict, ask: ChatAsk, question: str, budget: int, see: bool) -> d
             why.append(f"công thức ({num}) ở trang {p + 1}")
     if not main and ask.page is not None:
         main.append(ask.page)
+    if ask.context == "pdf":   # cả file PDF gốc đi kèm; hỏi về bản dịch thì thêm bản dịch của trang liên quan
+        trans = bool(_Q_TRANS.search(question)) or ask.side == "translated"
+        return {"mode": "pdf", "pages": main if trans else [], "images": [],
+                "why": "gửi nguyên file PDF gốc" + (" + bản dịch trang liên quan" if trans else "")}
     visual = bool(figs) or bool(_Q_VISUAL.search(q))
     mode = ask.context if ask.context in CONTEXT_MODES else "auto"
     if mode == "auto":
@@ -3850,17 +3917,20 @@ def chat_context(d: dict, ask: ChatAsk, plan: dict, budget: int) -> tuple[str, l
     total = d["out"].page_count
     if plan["mode"] == "full":
         order = list(range(total))
+    elif plan["mode"] == "pdf":       # chữ gốc đã có trong file PDF: chỉ thêm bản dịch (nếu hỏi về bản dịch)
+        order = plan["pages"]
     else:
         first = plan["pages"][0] if plan["pages"] else None
         near = [] if first is None else [p for k in range(1, total) for p in (first + k, first - k) if 0 <= p < total]
         order = list(dict.fromkeys(plan["pages"] + near))
-    label = {"pair": "chữ gốc + bản dịch", "source": "chữ gốc", "translation": "bản dịch", "full": "chữ gốc"}
-    fmt = "source" if plan["mode"] == "full" else plan["mode"]
+    label = {"pair": "chữ gốc + bản dịch", "source": "chữ gốc", "translation": "bản dịch", "full": "chữ gốc",
+             "pdf": "bản dịch"}
+    fmt = {"full": "source", "pdf": "translation"}.get(plan["mode"], plan["mode"])
     for n in order:
         if not (text := page_pair(d, n, fmt)):
             continue
         if used + (t := est_tokens(text)) > budget:
-            if plan["mode"] == "full" or n not in plan["pages"]:
+            if plan["mode"] in ("full", "pdf") or n not in plan["pages"]:
                 break
             continue                      # trang theo kế hoạch quá dài: bỏ trang đó, thử trang sau
         parts.append(f"[Trang {n + 1} · {label[plan['mode']]}]\n{text}")
@@ -3885,16 +3955,22 @@ async def chat_stream(cfg: Config, system: str, messages: list[dict], num_ctx: i
         headers |= {"HTTP-Referer": "http://localhost", "X-Title": "PDF Paper Translator"}
     # Tin nhắn có ảnh (`images`: PNG base64): API gốc của Ollama nhận thẳng "images", API kiểu OpenAI thì chữ và ảnh
     # thành các phần của `content`
-    msgs = [{"role": "system", "content": system}]
+    # File PDF (`pdf`: {"name", "data": base64}, chỉ gửi khi pdf_input(cfg) nhận): một phần `{"type": "file"}`
+    msgs, engine = [{"role": "system", "content": system}], ""
     for m in messages:
-        imgs = m.get("images") or []
-        if not imgs:
+        imgs, pdf = m.get("images") or [], m.get("pdf")
+        if not imgs and not pdf:
             msgs.append({"role": m["role"], "content": m["content"]})
         elif kind == "ollama":
             msgs.append({"role": m["role"], "content": m["content"], "images": imgs})
         else:
-            msgs.append({"role": m["role"], "content": [{"type": "text", "text": m["content"]}] + [
-                {"type": "image_url", "image_url": {"url": "data:image/png;base64," + b64}} for b64 in imgs]})
+            parts = [{"type": "text", "text": m["content"]}] + [
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64," + b64}} for b64 in imgs]
+            if pdf:
+                engine = pdf_input(cfg)
+                parts.append({"type": "file", "file": {"filename": pdf["name"],
+                                                       "file_data": "data:application/pdf;base64," + pdf["data"]}})
+            msgs.append({"role": m["role"], "content": parts})
     if kind == "ollama":  # API kiểu OpenAI của Ollama bỏ qua num_ctx (luôn 4096) → dùng API gốc
         url = re.sub(r"/v1/?$", "", cfg.base_url.rstrip("/")) + "/api/chat"
         body = {"model": cfg.model, "messages": msgs, "stream": True,
@@ -3904,6 +3980,8 @@ async def chat_stream(cfg: Config, system: str, messages: list[dict], num_ctx: i
     else:
         url = cfg.base_url.rstrip("/") + "/chat/completions"
         body = no_think(cfg, url, {"model": cfg.model, "messages": msgs, "stream": True, "temperature": 0.3})
+        if engine and "openrouter.ai" in url:
+            body["plugins"] = [{"id": "file-parser", "pdf": {"engine": engine}}]
     got = False           # đã nhận được chữ nào chưa (chưa thì hỏi lại được mà người dùng không thấy gì lạ)
     dropped = None        # tham số đã bỏ để hỏi lại; hỏi lại được thì nhớ cho lần sau
     for attempt in range(2):
@@ -4033,7 +4111,12 @@ async def doc_chat(doc_id: str, ask: ChatAsk):
         if ctxt:
             hist[-1] = {**hist[-1], "content": f"{ctxt}\n\n[Câu hỏi]\n{hist[-1]['content']}"}
         system_ = base_system
-        if plan["images"]:
+        if plan["mode"] == "pdf":
+            data = await asyncio.to_thread(lambda: base64.b64encode(Path(d["src"]).read_bytes()).decode())
+            hist[-1]["pdf"] = {"name": Path(d["name"] or "paper.pdf").stem + ".pdf", "data": data}
+            system_ += ("\n\nKèm theo câu hỏi là file PDF gốc của cả bài: trả lời dựa trên file đó (chữ, hình, bảng, "
+                        "công thức). Bảng thuật ngữ và bản dịch (nếu có) ở trên là của app dịch — dùng đúng cách dịch đó.")
+        elif plan["images"]:
             hist[-1]["images"] = [await asyncio.to_thread(page_image, d, n) for n in plan["images"]]
             system_ += ("\n\nKèm theo câu hỏi là ảnh các trang: " + ", ".join(str(n + 1) for n in plan["images"])
                         + ". Đọc hình, bảng, công thức trực tiếp trên ảnh.")
@@ -4041,11 +4124,26 @@ async def doc_chat(doc_id: str, ask: ChatAsk):
             system_ += "\n\nCông thức trong chữ trích từ PDF nằm trong ⟦…⟧ (chép từ glyph nên có thể lộn xộn)."
         info_ = {"mode": plan["mode"], "pages": [n + 1 for n in sent], "images": [n + 1 for n in plan["images"]],
                  "model": c.model, "why": plan["why"]}
+        if plan["mode"] == "pdf":
+            info_["pdf"] = pdf_input(c)
         return system_, hist, ctx_, info_
 
     cfg = chat_cfg(cfg0)
-    _, budget0 = await limits(cfg)
-    plan = await asyncio.to_thread(chat_plan, d, ask, question, budget0, see is not None)
+    ctx0, budget0 = await limits(cfg)
+
+    def as_text(why: str) -> dict:
+        """Không gửi được file PDF: gửi chữ cả bài (chế độ "Cả bài": vừa ngữ cảnh thì cả bài, không thì cắt)."""
+        p = chat_plan(d, ask.model_copy(update={"context": "full"}), question, budget0, see is not None)
+        return {**p, "why": f"{why} → gửi chữ cả bài" + (f"; {p['why']}" if p["why"] else "")}
+
+    if ask.context == "pdf" and not pdf_input(cfg):
+        plan = await asyncio.to_thread(as_text, "server trò chuyện không nhận file PDF")
+    elif ask.context == "pdf" and Path(d["src"]).stat().st_size > PDF_MAX_MB * 2**20:
+        plan = await asyncio.to_thread(as_text, f"file PDF lớn hơn {PDF_MAX_MB} MB")
+    elif ask.context == "pdf" and sum(est_tokens(t) for t in page_texts(d)) > 0.8 * ctx0 - est_tokens(base_system):
+        plan = await asyncio.to_thread(as_text, f"bài dài hơn ngữ cảnh của model ({ctx0} token)")
+    else:
+        plan = await asyncio.to_thread(chat_plan, d, ask, question, budget0, see is not None)
     if plan["images"]:              # trả lời bằng model xem ảnh; ngữ cảnh chữ theo ngữ cảnh của model đó
         cfg = see
     system, history, ctx, info = await prepare(plan, cfg)
@@ -4060,9 +4158,12 @@ async def doc_chat(doc_id: str, ask: ChatAsk):
         pass
     except LLMError as e:
         error = e
-    if error is not None and plan["images"]:
+    if error is not None and (plan["images"] or plan["mode"] == "pdf"):
         await stream.aclose()
-        plan = {**plan, "images": [], "why": f"{plan['why']}; model xem ảnh lỗi ({str(error)[:120]}) → chỉ gửi chữ"}
+        if plan["mode"] == "pdf":    # server từ chối file (model không đọc được PDF, file quá lớn…) → gửi chữ
+            plan = await asyncio.to_thread(as_text, f"{plan['why']}: server lỗi ({str(error)[:120]})")
+        else:
+            plan = {**plan, "images": [], "why": f"{plan['why']}; model xem ảnh lỗi ({str(error)[:120]}) → chỉ gửi chữ"}
         cfg = chat_cfg(cfg0)
         system, history, ctx, info = await prepare(plan, cfg)
         stream, first, error = chat_stream(cfg, system, history, ctx), "", None
@@ -4174,10 +4275,14 @@ async def summarize_chat(doc_id: str, sid: str, cfg: Config):
         raise HTTPException(502, str(e))
     if not out.strip():
         raise HTTPException(502, "LLM không trả lời")
-    note = N.upsert(d.setdefault("notes", []), N.Note(
-        text=out.strip(), source="llm",
-        meta={"question": f"Tổng hợp phiên trò chuyện: {s.get('title') or ''}", "model": c.model, "session": sid}),
-        d["out"].page_count)
+    notes = d.setdefault("notes", [])
+    meta = {"question": f"Tổng hợp phiên trò chuyện: {s.get('title') or ''}", "model": c.model, "session": sid}
+    # tổng hợp lại một phiên (đã hỏi thêm) → thay ghi chú tổng hợp cũ của phiên đó, không thêm bản trùng
+    old = next((x for x in notes if x.get("meta", {}).get("session") == sid), None)
+    note = N.upsert(notes, N.Note(id=old["id"] if old else "", text=out.strip(), source="llm", meta=meta),
+                    d["out"].page_count)
+    if old:
+        note["meta"] = meta
     store.save_state(d)
     return note
 
@@ -4236,11 +4341,36 @@ async def list_models(cfg: Config):
     presets = [m for m in data if "--model" in ((m.get("status") or {}).get("args") or [])]
     out = [model_meta(m) for m in (presets or data) if m.get("id")]
     MODEL_META[cfg.base_url.rstrip("/")] = {m["id"]: m for m in out}
+    save_model_meta()
     return {"models": sorted(out, key=lambda m: m["id"])}
 
 
-# base_url → {model id → model_meta}: lần gần nhất tải danh sách model (để biết model nào đọc được ảnh)
+# base_url → {model id → model_meta}: lần gần nhất tải danh sách model (để biết model nào đọc được ảnh, ngữ cảnh bao
+# nhiêu). Lưu ra đĩa: giao diện nhớ danh sách model 24 giờ nên sau khi khởi động lại app có thể chưa hỏi lại server
+MODEL_META_FILE = DATA / "model_meta.json"
 MODEL_META: dict[str, dict[str, dict]] = {}
+
+
+def load_model_meta() -> None:
+    try:
+        MODEL_META.update({b: v for b, v in json.loads(MODEL_META_FILE.read_text()).items() if isinstance(v, dict)})
+    except (OSError, ValueError):
+        pass
+
+
+def save_model_meta() -> None:
+    """Chỉ giữ model có thông tin (ngữ cảnh / đọc ảnh): OpenRouter liệt kê vài trăm model."""
+    keep = {b: {k: {"id": k, "ctx": m.get("ctx"), "vision": m.get("vision")} for k, m in ms.items()
+                if m.get("ctx") or m.get("vision") is not None} for b, ms in MODEL_META.items()}
+    try:
+        tmp = MODEL_META_FILE.with_name(MODEL_META_FILE.name + ".tmp")
+        tmp.write_text(json.dumps({b: v for b, v in keep.items() if v}))
+        os.replace(tmp, MODEL_META_FILE)
+    except OSError as e:
+        print(f"[models] không lưu được {MODEL_META_FILE.name}: {e!r}")
+
+
+load_model_meta()
 
 
 def model_meta(m: dict) -> dict:

@@ -1,0 +1,61 @@
+{
+ "model": "nex-agi/nex-n2.5-pro:free",
+ "rows": [
+  {
+   "n": 5,
+   "paper": "attention-is-all-you-need",
+   "kind": "formula",
+   "mode": "pdf",
+   "q": "Viết lại công thức (1) của bài và giải thích ngắn.",
+   "score": 1.0,
+   "pages": [],
+   "images": [],
+   "why": "gửi nguyên file PDF gốc",
+   "model": "nex-agi/nex-n2.5-pro:free",
+   "secs": 11.9,
+   "answer": "$$\n\\operatorname{Attention}(Q,K,V)\n=\n\\operatorname{softmax}\\!\\left(\\frac{QK^T}{\\sqrt{d_k}}\\right)V\n\\tag{1}\n$$\n\n- $Q$: ma trận các **queries**; $K$: ma trận các **keys**; $V$: ma trận các **values**.\n- $QK^T$: tính độ tương hợp giữa từng query với từng key bằng tích vô hướng.\n- $\\sqrt{d_k}$: chuẩn hóa để tích vô hướng không quá lớn; $d_k$ là số chiều của query/key.\n- $\\operatorname{softmax}$: biến các điểm tương hợp thành trọng số cộng.\n- Phép nhân với $V$: tạo đầu ra bằng tổng có trọng số của các values.\n- **Vai trò:** đây là công thức nền của Scaled Dot-Product Attention, được dùng trong các attention head của Transformer."
+  },
+  {
+   "n": 9,
+   "paper": "attention-is-all-you-need",
+   "kind": "table",
+   "mode": "pdf",
+   "q": "Theo Bảng 2, Transformer (big) đạt BLEU bao nhiêu trên EN-DE và EN-FR?",
+   "score": 1.0,
+   "pages": [],
+   "images": [],
+   "why": "gửi nguyên file PDF gốc",
+   "model": "nex-agi/nex-n2.5-pro:free",
+   "secs": 8.2,
+   "answer": "Theo **Bảng 2**, Transformer (big) đạt:\n\n- **EN-DE:** **28.4 BLEU**\n- **EN-FR:** **41.8 BLEU**"
+  },
+  {
+   "n": 16,
+   "paper": "bert",
+   "kind": "table",
+   "mode": "pdf",
+   "q": "Bảng 1 cho biết điểm GLUE trung bình của BERT-large là bao nhiêu?",
+   "score": 1.0,
+   "pages": [],
+   "images": [],
+   "why": "gửi nguyên file PDF gốc",
+   "model": "nex-agi/nex-n2.5-pro:free",
+   "secs": 6.8,
+   "answer": "- **82,1 điểm** (tương ứng 82,1% theo quy ước điểm GLUE).\n- Bảng 1, hàng `BERTLARGE`, cột `Average` = `82.1`.\n- Lưu ý: đây không phải điểm GLUE chính thức. Bảng ghi rằng cột `Average` loại trừ tập WNLI nên hơi khác official GLUE score."
+  },
+  {
+   "n": 19,
+   "paper": "bert",
+   "kind": "retrieval",
+   "mode": "pdf",
+   "q": "Pre-train bao nhiêu bước, với batch size bao nhiêu?",
+   "score": 1.0,
+   "pages": [],
+   "images": [],
+   "why": "gửi nguyên file PDF gốc",
+   "model": "nex-agi/nex-n2.5-pro:free",
+   "secs": 31.4,
+   "answer": "- **Pre-training:** **1.000.000 bước**, batch size **256 sequences**.\n  - Mỗi sequence tối đa 512 tokens, tương đương tối đa **128.000 tokens/batch**.\n  - Khoảng **40 epochs** trên corpus 3,3 tỷ từ.\n- **Fine-tuning:** số bước không cố định; bài báo quy định theo **epochs** và **batch size theo task**:\n  - GLUE: batch size 32, 3 epochs.\n  - SQuAD v1.1: batch size 32, 3 epochs.\n  - SQuAD v2.0: batch size 48, 2 epochs.\n  - SWAG: batch size 16, 3 epochs.\n\nVì bài không nêu số ví dụ/batch cho từng task, **không thể suy ra số bước fine-tuning chính xác** chỉ từ thông tin trong bài."
+  }
+ ]
+}

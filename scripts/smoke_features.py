@@ -24,6 +24,7 @@ A.store.ROOT = pathlib.Path(tempfile.mkdtemp(prefix="vietpaper-smoke-"))
 A.KEYS_FILE, A._keys = A.store.ROOT / "keys.json", {}   # không đụng key thật trong data/keys.json
 A.USER_TERMS_FILE = A.store.ROOT / "user_terms.json"    # …và thuật ngữ người dùng đã dạy (data/user_terms.json)
 A.PROVIDERS_FILE = A.store.ROOT / "providers.json"      # …và nhà cung cấp người dùng đã lưu (data/providers.json)
+A.MODEL_META_FILE = A.store.ROOT / "model_meta.json"    # …và nhãn model đã tải (data/model_meta.json)
 A._uterms.clear()
 A._uterms.update(blocked={}, prefer={})
 A.load_keys = lambda: None
@@ -44,9 +45,10 @@ A.chat_json = fj
 async def fi(b, m=""): return ("other", 32768, 4)
 A.server_info = fi
 seen = {}
+REAL_STREAM = A.chat_stream
 async def fs(cfg, system, messages, num_ctx=0):
     seen.update(system=system, msg=messages[-1]["content"], images=messages[-1].get("images"), model=cfg.model,
-                n=len(messages))
+                n=len(messages), pdf=messages[-1].get("pdf"))
     yield "Trả lời thử."
 A.chat_stream = fs
 FAIL = []
@@ -393,6 +395,75 @@ with TestClient(A.app) as c:
     A.DOCS.clear()                                     # khởi động lại app: khối nạp từ state.json (toạ độ dạng list)
     r = c.post(f"/api/{aid}/translate/3?span=1&force=true", json=cfg)
     ok(r.status_code == 200, "dịch lại trang có công thức sau khi khởi động lại app (trước đây lỗi 500)")
+
+print("13. Gửi nguyên PDF, tài liệu tham khảo, ⛔ khi trích lại, tổng hợp lại phiên")
+OR = "https://openrouter.ai/api/v1"
+ok(A.pdf_input(A.Config(base_url=OR, model="nex-agi/nex-n2.5-pro:free")) == "pdf-text"
+   and A.pdf_input(A.Config(base_url=OR, model="google/gemini-2.5-flash")) == "native"
+   and A.pdf_input(A.Config(base_url="https://api.openai.com/v1", model="gpt-5")) == "native"
+   and not A.pdf_input(A.Config(base_url="http://192.168.1.10:10531/v1", model="gpt-6-luna"))
+   and not A.pdf_input(A.Config(base_url="http://localhost:11434/v1", model="q")),
+   "server nhận file PDF: OpenRouter (pdf-text / native), OpenAI; proxy ChatGPT, Ollama thì không")
+with TestClient(A.app) as c:
+    with open(ROOT / "data/attention-is-all-you-need.pdf", "rb") as f:
+        aid = c.post("/api/upload", files={"file": ("att3.pdf", f, "application/pdf")}).json()["id"]
+    d = A.DOCS[aid]
+    ok(sorted(A.refs_boxes(d)) == [9, 10, 11], "phụ lục không có chữ “Appendix” (Attention Visualizations, tr.13–15) vẫn dịch")
+    ok(sorted(A.refs_boxes({"src": ROOT / "data/bert.pdf"})) == [9, 10, 11], "BERT: tài liệu tham khảo tr.10–12, phụ lục dịch")
+    cor = {**cfg, "chat_base_url": OR, "chat_model": "nex-agi/nex-n2.5-pro:free"}
+    r = c.post(f"/api/{aid}/chat", json={"cfg": cor, "question": "Bảng 2 có gì?", "page": 0, "context": "pdf"})
+    info = json.loads(r.headers["x-context"])
+    ok(info["mode"] == "pdf" and info["pdf"] == "pdf-text" and seen["pdf"] and seen["pdf"]["name"].endswith(".pdf")
+       and A.base64.b64decode(seen["pdf"]["data"])[:5] == b"%PDF-" and "[Trang" not in seen["msg"] and "file PDF gốc" in seen["system"],
+       "OpenRouter: gửi nguyên file PDF, không kèm chữ các trang")
+    r = c.post(f"/api/{aid}/chat", json={"cfg": cfg, "question": "Bảng 2 có gì?", "page": 0, "context": "pdf"})
+    info = json.loads(r.headers["x-context"])
+    ok(info["mode"] == "full" and not seen["pdf"] and "không nhận file PDF" in info["why"] and "[Trang 1 ·" in seen["msg"],
+       "server không nhận file → gửi chữ cả bài, lý do trong header")
+    async def no_pdf(cfg_, system, messages, num_ctx=0):
+        if messages[-1].get("pdf"):
+            raise A.LLMError("Lỗi LLM 400: file input not supported")
+        async for x in fs(cfg_, system, messages, num_ctx):
+            yield x
+    A.chat_stream = no_pdf
+    r = c.post(f"/api/{aid}/chat", json={"cfg": cor, "question": "Bảng 2 có gì?", "page": 0, "context": "pdf"})
+    info = json.loads(r.headers["x-context"])
+    ok(r.text == "Trả lời thử." and info["mode"] == "full" and "server lỗi" in info["why"], "server từ chối file → tự hỏi lại bằng chữ")
+    A.chat_stream = fs
+    # chat_stream thật: phần file + plugin file-parser trong body gửi OpenRouter
+    BODY = {}
+    def handler(req):
+        BODY.update(json.loads(req.content))
+        return A.httpx.Response(200, text='data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n')
+    RealClient = A.httpx.AsyncClient
+    class Mock(RealClient):
+        def __init__(self, *a, **k):
+            super().__init__(*a, transport=A.httpx.MockTransport(handler), **k)
+    A.httpx.AsyncClient = Mock
+    async def run():
+        return "".join([x async for x in REAL_STREAM(A.Config(base_url=OR, model="x/y:free"), "sys",
+                                                        [{"role": "user", "content": "hỏi", "pdf": {"name": "a.pdf", "data": "JVBE"}}])])
+    out = asyncio.run(run())
+    A.httpx.AsyncClient = RealClient
+    part = BODY["messages"][-1]["content"][-1]
+    ok(out == "ok" and part["type"] == "file" and part["file"]["file_data"].startswith("data:application/pdf;base64,")
+       and BODY["plugins"] == [{"id": "file-parser", "pdf": {"engine": "pdf-text"}}], "body gửi OpenRouter: phần file + plugin pdf-text")
+    # ⛔ khi trích lại khối: số hiệu đổi → tìm lại theo dấu chữ
+    blocks = [{"text": "a"}, {"text": "b"}, {"text": "c"}]
+    d["skip"] = {0: {1: A.block_hash(blocks[1]), 2: A.block_hash({"text": "mất"})}}
+    ok(A.user_skips(d, 0, [{"text": "x"}] + blocks, heal=False) == {2} and d["skip"][0].get(1),
+       "không sửa dấu khi chỉ là lớp chữ tạm")
+    ok(A.user_skips(d, 0, [{"text": "x"}] + blocks) == {2} and d["skip"][0] == {2: A.block_hash(blocks[1])},
+       "đoạn ⛔ đổi số hiệu → theo đúng đoạn; đoạn không còn → bỏ dấu")
+    d["skip"] = {}
+    # tổng hợp lại một phiên → sửa ghi chú cũ, không thêm bản mới
+    r = c.post(f"/api/{aid}/chat", json={"cfg": cfg, "question": "Transformer là gì?", "page": 0})
+    sid = r.headers["x-session-id"]
+    n1 = c.post(f"/api/{aid}/chats/{sid}/summarize", json=cfg).json()
+    c.post(f"/api/{aid}/chat", json={"cfg": cfg, "question": "Còn gì nữa?", "session_id": sid, "page": 0})
+    n2 = c.post(f"/api/{aid}/chats/{sid}/summarize", json=cfg).json()
+    ok(n1["id"] == n2["id"] and sum(x.get("meta", {}).get("session") == sid for x in d["notes"]) == 1,
+       "tổng hợp lại phiên: cập nhật đúng ghi chú cũ")
 
 print("9. Nhà cung cấp, thông tin model")
 with TestClient(A.app) as c:
