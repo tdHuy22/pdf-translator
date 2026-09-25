@@ -1,7 +1,9 @@
 .venv/
 data/
 __pycache__/
-fonts/
+.ruff_cache/
+# font tải bằng scripts/download_fonts.py (chỉ ở gốc: static/vendor/fonts/ là font KaTeX, phải commit)
+/fonts/
 models/
 .DS_Store
 *.log
