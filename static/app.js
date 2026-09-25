@@ -459,7 +459,7 @@ async function alignMark(p, m, srcText, dstText, pr) {
   } catch {}
   WAIT.delete(m.id);
   const cur = doc === mine && (MARKS[p] || []).find(x => x.id === m.id);  // vệt đã bị bỏ trong lúc chờ → thôi
-  if (!cur) return;
+  if (!cur || cur.side !== m.side) return;   // hoặc đã chuyển sang neo ở bản gốc (dịch lại trang, xem reanchorMarks)
   const el = pageOf(p, otherSide(m.side));
   if (res?.s != null && el) {
     const rects = offsetRects(el, m.block, ps + res.s, ps + res.e);
@@ -624,7 +624,34 @@ function idleBox(i) {
 }
 const trBox = i => document.querySelector(`.page[data-p="${i}"][data-kind="translated"]`);
 
+/** Trước khi dịch lại một trang: vệt tô ở bản dịch neo theo vị trí ký tự trong chữ bản dịch CŨ, dịch xong chữ đổi
+ *  thì vệt lệch sang chỗ khác. Chuyển neo của chúng sang phần tương ứng ở bản gốc (đã căn bằng LLM nếu có, không
+ *  thì câu tương ứng) — bản gốc không đổi; dịch xong fillPeer tính lại phần tương ứng trong bản dịch MỚI (và hỏi LLM
+ *  đúng cụm nếu bật). Id giữ nguyên nên ghi chú gắn với vệt vẫn theo vệt. */
+async function reanchorMarks(p) {
+  const ms = (MARKS[p] || []).filter(m => m.side === "translated");
+  const tr = pageOf(p, "translated"), org = pageOf(p, "original");
+  if (!ms.length || !org) return;
+  await loadLayer(org);
+  const add = [];
+  for (const m of ms) {
+    const a = blockText(org, m.block);
+    let [s, e] = [m.ps, m.pe];
+    if (!m.peer?.length) {            // chưa có phần tương ứng ở bản gốc → tính ngay từ chữ hai bản
+      const b = tr?.dataset.loaded === "1" ? blockText(tr, m.block) : null;
+      if (!a.text || !b?.text) continue;
+      [s, e] = peerRange(b.text, a.text, m.s, m.e);
+    }
+    const rects = offsetRects(org, m.block, s, e);
+    if (!rects.length) continue;
+    WAIT.delete(m.id);
+    add.push({ ...m, side: "original", s, e, text: a.text.slice(s, e).trim(), rects, peer: [], ps: 0, pe: 0, via: "" });
+  }
+  if (add.length) await sendMarks(p, add, add.map(m => m.id));
+}
+
 async function translatePages(pages, force = false) {
+  if (force) for (const i of pages) await reanchorMarks(i);
   pages.forEach(i => { trBox(i).innerHTML = busyBox(i, pages.length); trBox(i).dataset.loaded = ""; });
   const mine = doc;           // trong lúc chờ mà người dùng mở tài liệu khác: bỏ kết quả, đừng vẽ nhầm sang bài kia
   let res;
