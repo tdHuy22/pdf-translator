@@ -9,7 +9,7 @@ const FIELDS = ["preset","ocr_preset","chat_preset","base_url","model","temperat
   "ocr_vlm_concurrency","ocr_custom_url","chat_base_url","chat_model","gloss_preset","gloss_base_url","gloss_model",
   "align_preset","align_base_url","align_model","see_preset","see_base_url","see_model",
   "font_serif","font_sans","font_mono"];
-const CHECKS = ["glossary_auto","google_fallback","disable_thinking","chat_same","gloss_same","align_llm","align_same","sync_marks","see_on"];
+const CHECKS = ["glossary_auto","google_fallback","disable_thinking","chat_same","gloss_same","align_llm","align_same","sync_marks","see_on","skip_refs"];
 // Ô API key → ô Base URL của server dùng key đó ("ocrspace" là dịch vụ cố định, không có base URL)
 const KEY_OF = { api_key:"base_url", ocr_vlm_api_key:"ocr_vlm_base_url", chat_api_key:"chat_base_url", gloss_api_key:"gloss_base_url",
                  align_api_key:"align_base_url", see_api_key:"see_base_url",
@@ -110,7 +110,7 @@ function cfg() {
   const same = $("chat_same").checked, gsame = $("gloss_same").checked, asame = $("align_same").checked;
   return { base_url:$("base_url").value, api_key:$("api_key").value, model:$("model").value,
            temperature: parseFloat($("temperature").value) || 0.2, glossary:$("glossary").value,
-           glossary_auto: $("glossary_auto").checked,
+           glossary_auto: $("glossary_auto").checked, skip_refs: $("skip_refs").checked,
            translator:$("translator").value, google_fallback:$("google_fallback").checked,
            disable_thinking:$("disable_thinking").checked,
            length_ratio: parseFloat($("length_ratio").value) || 1.3,
@@ -367,7 +367,7 @@ $("file").onchange = async e => {
     setStatus($("status").textContent + " · đã mở lại bản lưu trước (cùng file)");
     return;
   }
-  doc = up; doc.done = new Set();
+  doc = up; doc.done = new Set(); doc.keep = new Set(); doc.instr = {};
   resetDocView();
   openDoc();
   try { localStorage.setItem("last_doc", doc.id); } catch {}
@@ -399,7 +399,8 @@ async function restoreDoc(id) {
   }
   const st = await r.json();
   stopFlag = true;                            // đang "Dịch tất cả" bài khác thì dừng, đừng dịch lẫn sang bài này
-  doc = { id, pages: st.pages, name: st.name, scanned_pages: 0, done: new Set(st.done) };
+  doc = { id, pages: st.pages, name: st.name, scanned_pages: 0, done: new Set(st.done),
+          keep: new Set(st.keep || []), instr: st.instr || {} };
   resetDocView();
   try { localStorage.setItem("last_doc", id); } catch {}
   for (const [p, ms] of Object.entries(st.marks)) MARKS[+p] = ms;
@@ -477,7 +478,7 @@ async function loadLayer(el, force = false) {
   if (kind === "translated" && !doc.done.has(p)) return;
   el.dataset.loaded = "1";
   try {
-    const data = await (await fetch(`/api/${doc.id}/page/${p}/layer?kind=${kind}`)).json();
+    const data = await (await fetch(`/api/${doc.id}/page/${p}/layer?kind=${kind}&refs=${$("skip_refs").checked}`)).json();
     if (!data.ready || !data.lines.length) { el.dataset.loaded = ""; return; }
     buildLayer(el, data);
   } catch { el.dataset.loaded = ""; }
@@ -490,7 +491,10 @@ function buildLayer(el, data) {
   layer.style.height = data.h + "px";
   for (const [i, r] of Object.entries(data.blocks)) {
     const b = document.createElement("div");
-    b.className = "blk"; b.dataset.b = i;
+    b.className = "blk" + (data.skip?.includes(+i) ? " skip" : data.refs?.includes(+i) ? " refskip" : "");
+    b.dataset.b = i;
+    if (data.skip?.includes(+i)) b.title = "Đoạn không dịch (⛔) — bản dịch giữ chữ gốc";
+    else if (data.refs?.includes(+i)) b.title = "Tài liệu tham khảo — không dịch (tắt trong ⚙️ Cấu hình)";
     b.style.cssText = `left:${r[0]-2}px;top:${r[1]-2}px;width:${r[2]-r[0]+4}px;height:${r[3]-r[1]+4}px`;
     frag.appendChild(b);
   }
@@ -777,6 +781,12 @@ document.addEventListener("selectionchange", () => {
   sel = info;
   $("selMark").textContent = marksHit(info).length ? "🖍 Bỏ tô vàng" : "🖍 Tô vàng";
   $("selMark").disabled = !info.blocks.length;
+  const pgEl = pageOf(info.page, info.side);
+  const allSkip = info.blocks.length && info.blocks.every(b => pgEl.querySelector(`.blk[data-b="${b}"]`)?.classList.contains("skip"));
+  $("selSkip").textContent = allSkip ? "↩ Dịch đoạn này" : "⛔ Không dịch";
+  $("selSkip").title = allSkip ? "Bỏ đánh dấu không dịch: dịch lại đoạn này" : "Không dịch đoạn này: bản dịch giữ nguyên chữ gốc (tránh vỡ định dạng)";
+  $("selSkip").disabled = !info.blocks.length;
+  $("selRe").hidden = !doc?.done.has(info.page) || doc.keep.has(info.page) || allSkip;
   bar.classList.add("on");
   bar.style.left = Math.max(8, info.rect.left + window.scrollX) + "px";
   bar.style.top = (info.rect.bottom + window.scrollY + 6) + "px";
@@ -802,16 +812,18 @@ function busyBox(i, n) {
 }
 function idleBox(i) {
   return `<span class="num">${i+1}</span><div class="ph"><span>Chưa dịch</span>
-    <button onclick="translatePages([${i}])">Dịch trang này</button></div><div class="layer"></div>`;
+    <button onclick="translatePages([${i}])">Dịch trang này</button>
+    <button onclick="keepPage(${i}, true)" title="Không dịch trang này: bản dịch dùng nguyên trang gốc (không gọi LLM)">⤳ Giữ bản gốc</button></div><div class="layer"></div>`;
 }
 const trBox = i => document.querySelector(`.page[data-p="${i}"][data-kind="translated"]`);
 
 /** Trước khi dịch lại một trang: vệt tô ở bản dịch neo theo vị trí ký tự trong chữ bản dịch CŨ, dịch xong chữ đổi
  *  thì vệt lệch sang chỗ khác. Chuyển neo của chúng sang phần tương ứng ở bản gốc (đã căn bằng LLM nếu có, không
  *  thì câu tương ứng) — bản gốc không đổi; dịch xong fillPeer tính lại phần tương ứng trong bản dịch MỚI (và hỏi LLM
- *  đúng cụm nếu bật). Id giữ nguyên nên ghi chú gắn với vệt vẫn theo vệt. */
-async function reanchorMarks(p) {
-  const ms = (MARKS[p] || []).filter(m => m.side === "translated");
+ *  đúng cụm nếu bật). Id giữ nguyên nên ghi chú gắn với vệt vẫn theo vệt.
+ *  `blocks`: chỉ các đoạn này đổi chữ (dịch lại / không dịch một vài đoạn) → chỉ chuyển vệt tô trên các đoạn đó. */
+async function reanchorMarks(p, blocks = null) {
+  const ms = (MARKS[p] || []).filter(m => m.side === "translated" && (!blocks || blocks.includes(m.block)));
   const tr = pageOf(p, "translated"), org = pageOf(p, "original");
   if (!ms.length || !org) return;
   await loadLayer(org);
@@ -835,33 +847,44 @@ async function reanchorMarks(p) {
   }
 }
 
-async function translatePages(pages, force = false) {
-  if (force) for (const i of pages) await reanchorMarks(i);
+/** Dịch (lại) các trang. `opts`: {blocks: chỉ dịch lại các đoạn này của trang đầu, instruction: yêu cầu thêm,
+ *  scope: "once" | "page" | "doc" — nhớ yêu cầu cho trang / cả bài}. */
+async function translatePages(pages, force = false, opts = {}) {
+  if (force) for (const i of pages) await reanchorMarks(i, opts.blocks || null);
   pages.forEach(i => { trBox(i).innerHTML = busyBox(i, pages.length); trBox(i).dataset.loaded = ""; });
   const mine = doc;           // trong lúc chờ mà người dùng mở tài liệu khác: bỏ kết quả, đừng vẽ nhầm sang bài kia
   let res;
   try {
-    const r = await fetch(`/api/${doc.id}/translate/${pages[0]}?force=${force}&span=${pages.length}`, {
-      method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(cfg()) });
+    const q = `force=${force}&span=${pages.length}` + (opts.blocks ? `&blocks=${opts.blocks.join(",")}` : "");
+    const r = await fetch(`/api/${doc.id}/translate/${pages[0]}?${q}`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ ...cfg(), instruction: opts.instruction || "", instruction_scope: opts.scope || "once" }) });
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
     res = await r.json();
   } catch (e) {
     if (doc !== mine) return [];
     trBox(pages[0]).innerHTML = `<span class="num">${pages[0]+1}</span><div class="ph">
-      <span style="color:#b91c1c">❌ ${e.message}</span>
-      <button onclick="translatePages([${pages[0]}])">Thử lại</button></div><div class="layer"></div>`;
+      <span style="color:#b91c1c">❌ ${esc(e.message)}</span>
+      <button onclick="translatePages([${pages[0]}], ${doc.done.has(pages[0])})">Thử lại</button></div><div class="layer"></div>`;
     pages.slice(1).forEach(restoreBox);
     throw e;
   }
   if (doc !== mine) return [];
+  if (opts.scope === "page" || opts.scope === "doc") {        // server đã nhớ yêu cầu → nhớ theo ở đây để hiện nhãn ✎
+    const k = opts.scope === "doc" ? "*" : pages[0];
+    if (opts.instruction) doc.instr[k] = opts.instruction; else delete doc.instr[k];
+  }
   if (force) {                // dịch lại: bản dịch đổi chữ và bố cục → tính lại khung bên dịch của các vệt tô ở bản gốc
     for (const pg of res.pages) {
-      for (const m of MARKS[pg.page] || []) if (m.side === "original") Object.assign(m, { peer: [], ps: 0, pe: 0, via: "" });
+      for (const m of MARKS[pg.page] || []) {
+        if (m.side === "original" && (!opts.blocks || opts.blocks.includes(m.block))) Object.assign(m, { peer: [], ps: 0, pe: 0, via: "" });
+      }
     }
   }
   const done = [];
   for (const pg of res.pages) {
     doc.done.add(pg.page);
+    doc.keep.delete(pg.page);
     done.push(pg.page);
     showTranslated(pg, res);
   }
@@ -874,25 +897,139 @@ function restoreBox(i) {
   else trBox(i).innerHTML = idleBox(i);
 }
 
+/** Nút trên góc trang bản dịch: dịch lại (kèm yêu cầu), giữ bản gốc; nhãn ✎ khi có yêu cầu đã nhớ. */
+function pageTools(i, tags = [], errTitle = "") {
+  const ins = [doc.instr["*"] && `Cả bài: ${doc.instr["*"]}`, doc.instr[i] && `Trang này: ${doc.instr[i]}`].filter(Boolean);
+  if (doc.keep.has(i)) {
+    return `<div class="tools"><button class="kept" disabled title="Trang này giữ nguyên bản gốc, không dịch">📄 bản gốc</button>
+      <button onclick="translatePages([${i}], true)">Dịch trang này</button></div>`;
+  }
+  return `<div class="tools">${tags.map(x => `<button disabled title="${esc(errTitle)}">${x}</button>`).join("")}` +
+    (ins.length ? `<button disabled title="${esc("Yêu cầu dịch đã nhớ — " + ins.join(" · "))}">✎</button>` : "") +
+    `<button onclick="keepPage(${i}, true)" title="Bỏ bản dịch, dùng nguyên trang gốc (không gọi LLM)">⤳ Giữ gốc</button>` +
+    `<button onclick="openRetranslate({ page: ${i}, anchor: this })" title="Dịch lại trang này, có thể kèm yêu cầu">↻ Dịch lại</button></div>`;
+}
+
 function showTranslated(pg, res) {
   const i = pg.page, box = trBox(i);
-  if (pg.cached) { box.innerHTML = `<span class="num">${i+1}</span>
-      <div class="tools"><button onclick="translatePages([${i}], true)">↻ Dịch lại</button></div>
+  if (pg.cached) { box.innerHTML = `<span class="num">${i+1}</span>${pageTools(i)}
       <img src="/api/${doc.id}/page/${i}/translated.png?t=${Date.now()}"><div class="layer"></div>`; }
   else {
-    const tags = [pg.ocr && "OCR", res.group > 1 && `nhóm ${res.group} trang`,
+    const tags = [pg.ocr && "OCR", res.group > 1 && `nhóm ${res.group} trang`, pg.skipped && `⛔ ${pg.skipped}`,
                   res.via_google && `Google: ${res.via_google}`, res.errors?.length && "⚠️ LLM lỗi"].filter(Boolean);
     const t = res.tokens || {};
-    const title = `${pg.translated}/${pg.blocks} đoạn đã dịch` +
+    const title = `${pg.translated}/${pg.blocks} đoạn đã dịch` + (pg.skipped ? `, ${pg.skipped} đoạn giữ nguyên` : "") +
       (t.calls ? ` · cả nhóm: ${t.calls} lượt gọi, ${(t.prompt||0)+(t.completion||0)} token (lượt lớn nhất ${t.max_call}/${t.num_ctx})` : "");
-    box.innerHTML = `<span class="num">${i+1}</span>
-      <div class="tools">${tags.map(x => `<button disabled title="${(res.errors||[]).join(" ").replace(/"/g,"'")}">${x}</button>`).join("")}<button onclick="translatePages([${i}], true)">↻ Dịch lại</button></div>
+    box.innerHTML = `<span class="num">${i+1}</span>${pageTools(i, tags, (res.errors || []).join(" "))}
       <img src="/api/${doc.id}/page/${i}/translated.png?t=${Date.now()}" title="${title}"><div class="layer"></div>`;
   }
   box.dataset.loaded = "";
   loadLayer(box);
   loadLayer(document.querySelector(`.page[data-p="${i}"][data-kind="original"]`), true);
 }
+
+// ---------------- Giữ bản gốc cả trang / không dịch một vài đoạn
+async function keepPage(i, keep) {
+  if (keep && doc.done.has(i)) await reanchorMarks(i);   // chữ bản dịch sắp thành chữ gốc
+  const r = await fetch(`/api/${doc.id}/page/${i}/keep`, { method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ keep }) });
+  if (!r.ok) { setStatus("Không đổi được: " + r.statusText); return; }
+  if (keep) {
+    doc.done.add(i); doc.keep.add(i);
+    for (const m of MARKS[i] || []) if (m.side === "original") Object.assign(m, { peer: [], ps: 0, pe: 0, via: "" });
+    showTranslated({ page: i, cached: true }, {});
+    setStatus(`Trang ${i + 1} giữ nguyên bản gốc`);
+  } else {
+    doc.done.delete(i); doc.keep.delete(i);
+    trBox(i).innerHTML = idleBox(i);
+  }
+}
+/** Đánh dấu / bỏ đánh dấu "không dịch" cho các đoạn của trang p. Trang đã dịch được dựng lại ngay ở server. */
+async function setSkip(p, blocks, skip) {
+  if (doc.done.has(p)) await reanchorMarks(p, blocks);   // chữ các đoạn đó ở bản dịch sắp đổi
+  setStatus(skip ? "Đang đánh dấu không dịch…" : "Đang dịch lại đoạn…");
+  const r = await fetch(`/api/${doc.id}/page/${p}/skip`, { method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ cfg: cfg(), blocks, skip }) });
+  if (!r.ok) { setStatus("Không đổi được: " + ((await r.json().catch(() => ({}))).detail || r.statusText)); return; }
+  const j = await r.json();
+  for (const m of MARKS[p] || []) if (m.side === "original" && blocks.includes(m.block)) Object.assign(m, { peer: [], ps: 0, pe: 0, via: "" });
+  if (j.rendered) showTranslated({ page: p, cached: true }, {});
+  else loadLayer(pageOf(p, "original"), true);
+  setStatus(`Trang ${p + 1}: ${j.user.length} đoạn bạn chọn không dịch` + (j.skip.length > j.user.length ? `, ${j.skip.length - j.user.length} đoạn tài liệu tham khảo` : "") +
+            (doc.done.has(p) ? "" : " — áp dụng khi dịch trang này"));
+}
+$("skipMode").onclick = () => {
+  const on = document.body.classList.toggle("skipmode");
+  $("skipMode").classList.toggle("on", on);
+  setStatus(on ? "Chọn đoạn không dịch: bấm vào đoạn trên trang (bấm lại để bỏ). Bấm “⛔ Chọn đoạn” lần nữa để thôi." : "");
+};
+$("cols").addEventListener("click", e => {
+  if (!document.body.classList.contains("skipmode")) return;
+  const b = e.target.closest(".blk"), pg = b?.closest(".page");
+  if (!b || !doc) return;
+  e.preventDefault();
+  setSkip(+pg.dataset.p, [+b.dataset.b], !b.classList.contains("skip"));
+});
+$("selSkip").onclick = () => {
+  const info = sel;
+  $("selbar").classList.remove("on");
+  if (!info?.blocks.length) return;
+  const el = pageOf(info.page, info.side), all = info.blocks.every(b => el.querySelector(`.blk[data-b="${b}"]`)?.classList.contains("skip"));
+  window.getSelection().removeAllRanges();
+  setSkip(info.page, info.blocks, !all);
+};
+$("selRe").onclick = () => {
+  const info = sel;
+  $("selbar").classList.remove("on");
+  if (!info?.blocks.length) return;
+  openRetranslate({ page: info.page, blocks: info.blocks, rect: info.rect });
+  window.getSelection().removeAllRanges();
+};
+
+// ---------------- Dịch lại kèm yêu cầu
+const RT_PRESETS = ["Dịch sát nghĩa hơn", "Văn phong tự nhiên, dễ đọc hơn", "Giữ nguyên thuật ngữ tiếng Anh",
+                    "Ngắn gọn hơn", "Giữ nguyên tên phương pháp, mô hình, bộ dữ liệu"];
+let rtJob = null;
+const rtRecent = () => { try { return JSON.parse(localStorage.getItem("rt_recent") || "[]"); } catch { return []; } };
+function openRetranslate({ page, blocks = null, anchor = null, rect = null }) {
+  rtJob = { page, blocks };
+  const pop = $("rtPop"), llm = $("translator").value === "llm";
+  $("rtWhat").textContent = blocks ? `Dịch lại ${blocks.length} đoạn · trang ${page + 1}` : `Dịch lại trang ${page + 1}`;
+  $("rtText").value = doc.instr[page] || "";
+  $("rtText").disabled = !llm;
+  document.querySelector(`input[name=rtScope][value="${doc.instr[page] ? "page" : "once"}"]`).checked = true;
+  $("rtHint").textContent = !llm ? "Google / model chuyên dịch không làm theo yêu cầu được — chỉ dịch lại." :
+    doc.instr["*"] ? `Đang nhớ cho cả bài: “${doc.instr["*"]}” (chọn “Nhớ cho cả bài” với ô trống để bỏ)` : "";
+  const chips = [...new Set([...rtRecent(), ...RT_PRESETS])].slice(0, 9);
+  $("rtChips").innerHTML = chips.map(c => `<button type="button" class="gchip">${esc(c)}</button>`).join("");
+  const r = rect || anchor.getBoundingClientRect();
+  pop.hidden = false;
+  pop.style.left = Math.max(8, Math.min(r.right + scrollX - pop.offsetWidth, scrollX + innerWidth - pop.offsetWidth - 8)) + "px";
+  pop.style.top = (r.bottom + scrollY + 6) + "px";
+  $("rtText").focus();
+}
+const closeRt = () => { $("rtPop").hidden = true; rtJob = null; };
+$("rtClose").onclick = $("rtCancel").onclick = closeRt;
+$("rtChips").onclick = e => {
+  const b = e.target.closest(".gchip");
+  if (!b || $("rtText").disabled) return;
+  const t = $("rtText").value.trim();
+  $("rtText").value = t ? `${t}; ${b.textContent}` : b.textContent;
+  $("rtText").focus();
+};
+$("rtText").addEventListener("keydown", e => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $("rtGo").click(); }
+  if (e.key === "Escape") closeRt();
+});
+$("rtGo").onclick = async () => {
+  if (!rtJob || !doc) return;
+  const { page, blocks } = rtJob, instruction = $("rtText").disabled ? "" : $("rtText").value.trim();
+  const scope = document.querySelector("input[name=rtScope]:checked").value;
+  if (instruction) try { localStorage.setItem("rt_recent", JSON.stringify([instruction, ...rtRecent().filter(x => x !== instruction)].slice(0, 6))); } catch {}
+  closeRt();
+  try { await translatePages([page], true, { blocks, instruction, scope }); }
+  catch (e) { setStatus("Dịch lại lỗi: " + e.message); }
+};
 
 /** "1, 3, 5, 9 - 13", "10-" (tới hết), "-5" (từ đầu) → số trang (đếm từ 0), đã sắp xếp, không trùng.
  *  Trống = cả bài. Sai cú pháp hay vượt số trang → ném lỗi có lời nhắn cho người dùng. */

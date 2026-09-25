@@ -69,6 +69,9 @@ class Config(BaseModel):
     google_fallback: bool = True   # dùng Google Translate khi LLM lỗi / bỏ sót đoạn
     length_ratio: float = 1.3      # bản dịch tối đa ≈ ratio × độ dài bản gốc
     page_span: int = 0             # số trang gộp vào một lượt gọi LLM; 0 = tự động theo ngữ cảnh còn trống
+    skip_refs: bool = True         # không dịch phần Tài liệu tham khảo (giữ nguyên chữ gốc, đỡ token)
+    instruction: str = ""          # yêu cầu thêm của người đọc cho lượt dịch (lại) này, ghép vào CUỐI system prompt
+    instruction_scope: str = "once"  # "once" | "page" (nhớ cho các trang này) | "doc" (nhớ cho cả bài)
     # OCR
     ocr_mode: str = "auto"         # "auto" (trang không có chữ) | "force" | "off"
     ocr_engine: str = "rapidocr"   # "rapidocr" | "tesseract" | "ocrspace" | "vlm" | "custom"
@@ -2940,13 +2943,82 @@ async def ensure_glossary(d: dict, cfg: Config, src: pymupdf.Document) -> None:
                   + ", ".join(f"{a} → {b}" for a, b in list(d["glossary"].items())[:6]))
 
 
+def block_hash(b: dict) -> str:
+    """Dấu của một đoạn: đoạn người dùng đánh dấu "không dịch" chỉ còn hiệu lực khi đoạn cùng số hiệu vẫn là đoạn đó
+    (trích lại khối với cấu hình OCR/layout khác thì số hiệu có thể trỏ sang đoạn khác)."""
+    return hashlib.sha1(b["text"].encode()).hexdigest()[:10]
+
+
+def refs_boxes(d: dict) -> dict[int, list[pymupdf.Rect]]:
+    """Khung các khối chữ thuộc phần Tài liệu tham khảo (từ tiêu đề References tới Phụ lục hoặc hết bài), theo thứ tự
+    đọc của MuPDF — nên đúng cả khi danh mục chảy qua hai cột. Tiêu đề "References" đứng riêng một khối thì vẫn dịch."""
+    if "refs" not in d:
+        out, on = collections.defaultdict(list), False
+        for pno, page in enumerate(pymupdf.open(d["src"])):
+            for b in page.get_text("dict", flags=pymupdf.TEXT_MEDIABOX_CLIP)["blocks"]:
+                lines = [" ".join("".join(sp["text"] for sp in ln["spans"]).split()) for ln in b.get("lines", [])]
+                first = next((x for x in lines if x), "")
+                if not first:
+                    continue
+                if len(first) < 40 and _REFS_HEAD.fullmatch(first):
+                    on = True
+                    if len([x for x in lines if x]) == 1:
+                        continue
+                elif on and len(first) < 80 and _APPX_HEAD.match(first):
+                    on = False
+                if on:
+                    out[pno].append(pymupdf.Rect(b["bbox"]))
+        d["refs"] = dict(out)
+    return d["refs"]
+
+
+def skipped(d: dict, n: int, blocks: list[dict], cfg: Config) -> set[int]:
+    """Đoạn của trang n KHÔNG dịch (giữ nguyên chữ gốc): người dùng đánh dấu (⛔), và phần Tài liệu tham khảo."""
+    marks = d.get("skip", {}).get(n, {})
+    out = {i for i, h in marks.items() if i < len(blocks) and block_hash(blocks[i]) == h}
+    if cfg.skip_refs and (boxes := refs_boxes(d).get(n)):
+        for i, b in enumerate(blocks):
+            c = pymupdf.Rect(b["bbox"])
+            if any(r.contains((c.tl + c.br) / 2) for r in boxes):
+                out.add(i)
+    return out
+
+
+def instruction_text(cfg: Config, d: dict, n: int) -> str:
+    """Yêu cầu thêm của người đọc (cả bài, trang n, lượt này) — đặt SAU phần prompt giống nhau ở mọi lượt gọi, để
+    server vẫn tái dùng được KV cache của phần đầu."""
+    ins = d.get("instr", {})
+    parts = list(dict.fromkeys(x.strip() for x in (ins.get("*", ""), ins.get(n, ""), cfg.instruction) if x and x.strip()))
+    if not parts:
+        return ""
+    return ("Extra instructions from the reader for this translation. Follow them, unless they conflict with the rules "
+            "above — the JSON format, max_len, placeholders and <b>/<i> tags are still mandatory:\n"
+            + "\n".join(f"- {x[:500]}" for x in parts))
+
+
+def rerender_page(d: dict, m: int, blocks: list[dict], cfg: Config, src: pymupdf.Document) -> None:
+    """Dựng lại trang m của bản dịch từ bản dịch đã lưu (không gọi LLM): khôi phục trang gốc rồi đặt lại các đoạn đã
+    dịch, trừ đoạn đang "không dịch". Gọi khi đang giữ d["lock"]."""
+    if m in d["done"]:
+        d["out"].delete_page(m)
+        d["out"].insert_pdf(src, from_page=m, to_page=m, start_at=m)
+    skip = skipped(d, m, blocks, cfg)
+    tr = {i: t for i, t in d["trans"].get(m, {}).items() if i not in skip}
+    d["placed"][m] = render_translation(d["out"][m], blocks, tr, cfg, src)
+    d["done"].add(m)
+
+
 @app.post("/api/{doc_id}/translate/{n}")
-async def translate_page(doc_id: str, n: int, cfg: Config, force: bool = False, span: int = 1):
+async def translate_page(doc_id: str, n: int, cfg: Config, force: bool = False, span: int = 1, blocks: str = ""):
     """Dịch trang n, và gộp thêm tối đa `span - 1` trang liền sau vào cùng một lượt gọi LLM nếu ngữ cảnh còn chỗ
-    (`span` = số trang giao diện đã giữ chỗ cho lượt này). Trả về kết quả của từng trang đã dịch."""
+    (`span` = số trang giao diện đã giữ chỗ cho lượt này). Trả về kết quả của từng trang đã dịch.
+    `blocks` ("1,3,5"): chỉ dịch lại các đoạn đó của trang n, các đoạn khác giữ bản dịch cũ.
+    Đoạn "không dịch" (⛔, Tài liệu tham khảo) không gửi LLM, chữ gốc giữ nguyên trên bản dịch."""
     d, cfg = get_doc(doc_id), resolve_keys(cfg)
-    if n in d["done"] and not force:
+    only = {int(x) for x in blocks.split(",") if x.strip().isdigit()}
+    if n in d["done"] and not force and not only:
         return {"pages": [{"page": n, "cached": True}]}
+    d.setdefault("keep_pages", set()).discard(n)       # trang đang "giữ bản gốc" mà dịch lại → thôi giữ
     got: dict[int, tuple] = {n: await page_blocks(d, n, cfg)}
     src = pymupdf.open(d["src"])
     if "num_ctx" not in d:  # một giá trị cho cả tài liệu: đổi num_ctx giữa các trang là Ollama nạp lại model
@@ -2954,35 +3026,111 @@ async def translate_page(doc_id: str, n: int, cfg: Config, force: bool = False, 
         d["num_ctx"] = min(doc_num_ctx(src, cfg), top) if kind == "ollama" else 0
     run = {"num_ctx": cfg.num_ctx or d["num_ctx"] or 8192, "tokens": collections.Counter()}
     token = _run.set(run)
+    if cfg.instruction_scope in ("page", "doc"):       # nhớ yêu cầu (rỗng = bỏ yêu cầu đã nhớ)
+        ins, key = d.setdefault("instr", {}), "*" if cfg.instruction_scope == "doc" else n
+        if cfg.instruction.strip():
+            ins[key] = cfg.instruction.strip()[:500]
+        else:
+            ins.pop(key, None)
+        cfg = cfg.model_copy(update={"instruction": ""})
     try:
         if cfg.translator == "llm" and cfg.glossary_auto:
             await ensure_glossary(d, cfg, src)
         cfg = cfg.model_copy(update={"glossary": glossary_text(cfg, d)})  # để model chuyên dịch cũng theo bảng
         system = system_prompt(cfg, d)
-        pages = [n] + await grow_group(d, n, cfg, span, system, got, force)
-        flat = [b for p_ in pages for b in got[p_][0]]
-        context = await block_context(d, pages, cfg, flat) if cfg.translator == "llm" else {}
-        translations, stats = await translate_blocks(cfg, flat, context, system)
+        pages = [n] if only else [n] + await grow_group(d, n, cfg, span, system, got, force)
+        if extra := instruction_text(cfg, d, n):
+            system += "\n" + extra
+        # (trang, số hiệu đoạn) của từng mục gửi đi: bỏ đoạn "không dịch", dịch lại một phần thì chỉ các đoạn đã chọn
+        skip = {m: skipped(d, m, got[m][0], cfg) for m in pages}
+        where = [(m, i) for m in pages for i in range(len(got[m][0])) if i not in skip[m] and (not only or i in only)]
+        flat = [got[m][0][i] for m, i in where]
+        context = await block_context(d, pages, cfg, flat) if cfg.translator == "llm" and flat else {}
+        translations, stats = await translate_blocks(cfg, flat, context, system) if flat else \
+            ({}, {"llm": 0, "google": 0, "errors": []})
     finally:
         _run.reset(token)
-    out, base = [], 0
+    out = []
     for m in pages:
-        blocks, ocr = got[m]
-        tr = {i: translations[base + i] for i in range(len(blocks)) if base + i in translations}
+        blocks_m, ocr = got[m]
+        new = {i: translations[k] for k, (p, i) in enumerate(where) if p == m and k in translations}
         async with d["lock"]:
-            if m in d["done"]:  # dịch lại: khôi phục trang gốc
-                d["out"].delete_page(m)
-                d["out"].insert_pdf(src, from_page=m, to_page=m, start_at=m)
-            d["placed"][m] = render_translation(d["out"][m], blocks, tr, cfg, src)
-            d["trans"][m] = tr
-            d["done"].add(m)
-        out.append({"page": m, "ocr": ocr, "blocks": len(blocks), "translated": len(tr)})
-        base += len(blocks)
+            d["trans"][m] = {**d["trans"].get(m, {}), **new} if only else new
+            rerender_page(d, m, blocks_m, cfg, src)
+        out.append({"page": m, "ocr": ocr, "blocks": len(blocks_m), "translated": len(d["trans"][m]),
+                    "skipped": len(skipped(d, m, blocks_m, cfg))})
     async with d["lock"]:     # ghi bản dịch xuống đĩa: một lần cho cả nhóm trang (xem store.py)
         await asyncio.to_thread(store.save_pdf, d)
     store.save_state(d)
     return {"pages": out, "group": len(pages), "via_llm": stats["llm"], "via_google": stats["google"],
             "errors": stats["errors"][:1], "tokens": {**run["tokens"], "num_ctx": run["num_ctx"]}}
+
+
+class KeepAsk(BaseModel):
+    keep: bool = True
+
+
+@app.post("/api/{doc_id}/page/{n}/keep")
+async def keep_page(doc_id: str, n: int, ask: KeepAsk):
+    """Giữ nguyên trang n như bản gốc (không dịch, không gọi LLM): trang bản dịch = trang gốc. keep=False: thôi giữ,
+    trang về "chưa dịch"."""
+    d = get_doc(doc_id)
+    if not 0 <= n < d["out"].page_count:
+        raise HTTPException(404)
+    src = pymupdf.open(d["src"])
+    keep = d.setdefault("keep_pages", set())
+    async with d["lock"]:
+        d["out"].delete_page(n)
+        d["out"].insert_pdf(src, from_page=n, to_page=n, start_at=n)
+        d["trans"].pop(n, None)
+        d["placed"].pop(n, None)
+        if ask.keep:
+            keep.add(n)
+            d["done"].add(n)
+        else:
+            keep.discard(n)
+            d["done"].discard(n)
+        await asyncio.to_thread(store.save_pdf, d)
+    store.save_state(d)
+    return {"page": n, "keep": ask.keep}
+
+
+class SkipAsk(BaseModel):
+    cfg: Config
+    blocks: list[int]
+    skip: bool = True
+
+
+@app.post("/api/{doc_id}/page/{n}/skip")
+async def skip_blocks(doc_id: str, n: int, ask: SkipAsk):
+    """Đánh dấu / bỏ đánh dấu "không dịch" cho các đoạn của trang n. Trang đã dịch thì dựng lại ngay từ bản dịch đã
+    lưu (không gọi LLM); bỏ đánh dấu một đoạn chưa từng được dịch thì dịch riêng các đoạn đó."""
+    d, cfg = get_doc(doc_id), resolve_keys(ask.cfg)
+    blocks, _ = await page_blocks(d, n, cfg)
+    marks = d.setdefault("skip", {}).setdefault(n, {})
+    for i in ask.blocks:
+        if 0 <= i < len(blocks):
+            if ask.skip:
+                marks[i] = block_hash(blocks[i])
+            else:
+                marks.pop(i, None)
+    if not marks:
+        d["skip"].pop(n, None)
+    missing = [i for i in ask.blocks if not ask.skip and 0 <= i < len(blocks) and i not in d["trans"].get(n, {})
+               and i not in skipped(d, n, blocks, cfg)]
+    rendered = False
+    if n in d["done"] and n not in d.get("keep_pages", ()):
+        if missing:                      # đoạn chưa từng dịch → dịch riêng (translate_page tự dựng lại trang)
+            await translate_page(doc_id, n, cfg.model_copy(update={"instruction": "", "instruction_scope": "once"}),
+                                 blocks=",".join(map(str, missing)))
+        else:
+            async with d["lock"]:
+                rerender_page(d, n, blocks, cfg, pymupdf.open(d["src"]))
+                await asyncio.to_thread(store.save_pdf, d)
+        rendered = True
+    store.save_state(d)
+    return {"page": n, "skip": sorted(skipped(d, n, blocks, cfg)), "user": sorted(d.get("skip", {}).get(n, {})),
+            "rendered": rendered}
 
 
 @app.post("/api/{doc_id}/glossary")
@@ -3124,7 +3272,7 @@ def reading_order(lines: list[dict]) -> list[dict]:
 
 
 @app.get("/api/{doc_id}/page/{n}/layer")
-async def page_layer(doc_id: str, n: int, kind: str = "original"):
+async def page_layer(doc_id: str, n: int, kind: str = "original", refs: bool = True):
     """Lớp chữ + khung từng đoạn của một trang. Số hiệu đoạn GIỐNG NHAU ở bản gốc và bản dịch, nên tô vàng một
     đoạn bên này là bên kia sáng đúng đoạn tương ứng."""
     d = get_doc(doc_id)
@@ -3134,7 +3282,10 @@ async def page_layer(doc_id: str, n: int, kind: str = "original"):
         if n not in d["done"]:
             return {"lines": [], "blocks": {}, "ready": False}
         page = d["out"][n]
-        rects = {i: v["rect"] for i, v in d["placed"].get(n, {}).items()}
+        # đoạn không dịch (⛔, tài liệu tham khảo, trang giữ bản gốc) vẫn nằm đúng chỗ cũ trên bản dịch
+        base = (d["blocks"].get(n) or (None, d.get(("layer", n)) or []))[1]
+        rects = {i: tuple(b["bbox"]) for i, b in enumerate(base)}
+        rects.update({i: v["rect"] for i, v in d["placed"].get(n, {}).items()})
     else:
         page = pymupdf.open(d["src"])[n]
         cached = d["blocks"].get(n)
@@ -3150,8 +3301,14 @@ async def page_layer(doc_id: str, n: int, kind: str = "original"):
     for ln in lines:
         ln["b"] = line_owner(ln["bbox"], rects)
     lines = reading_order(lines)
+    # đoạn không dịch: người dùng đánh dấu (⛔) và phần tài liệu tham khảo (nếu đang bật `refs`)
+    src_blocks = (d["blocks"].get(n) or (None, d.get(("layer", n)) or []))[1]
+    user = sorted(i for i, h in d.get("skip", {}).get(n, {}).items()
+                  if i < len(src_blocks) and block_hash(src_blocks[i]) == h)
+    auto = sorted(skipped(d, n, src_blocks, Config(skip_refs=True)) - set(user)) if refs else []
     return {"w": round(page.rect.width, 1), "h": round(page.rect.height, 1), "ready": True,
-            "lines": lines, "blocks": {str(i): [round(v, 1) for v in r] for i, r in rects.items()}}
+            "lines": lines, "blocks": {str(i): [round(v, 1) for v in r] for i, r in rects.items()},
+            "skip": user, "refs": auto, "keep": n in d.get("keep_pages", ())}
 
 
 @app.get("/api/{doc_id}/state")
@@ -3162,7 +3319,10 @@ def doc_state(doc_id: str):
     return {"id": doc_id, "name": d["name"], "pages": d["out"].page_count, "done": sorted(d["done"]),
             "marks": {str(p): v for p, v in d["marks"].items() if v},
             "terms": d.get("gloss", []), "extra": d.get("gloss_extra", []), "title": d.get("title", ""),
-            "notes": N.ordered(d.get("notes", []))}
+            "notes": N.ordered(d.get("notes", [])),
+            "skip": {str(p): sorted(v) for p, v in d.get("skip", {}).items() if v},
+            "keep": sorted(d.get("keep_pages", ())),
+            "instr": {str(k): v for k, v in d.get("instr", {}).items()}}
 
 
 # ---------------- Ghi chú (xem notes.py)

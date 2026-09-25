@@ -137,6 +137,10 @@ def save_state(d: dict) -> None:
     for k in ("title", "gloss", "gloss_extra", "num_ctx", "notes"):
         if k in d:
             st[k] = list(d[k]) if isinstance(d[k], list) else d[k]
+    # đoạn "không dịch" {trang: {đoạn: dấu}}, trang giữ bản gốc, yêu cầu dịch đã nhớ {"*" | trang: chữ}
+    st["skip"] = {str(p): {str(i): h for i, h in v.items()} for p, v in list(d.get("skip", {}).items()) if v}
+    st["keep_pages"] = sorted(p for p in d.get("keep_pages", ()) if p in done)
+    st["instr"] = {str(k): v for k, v in list(d.get("instr", {}).items())}
     with _locks.setdefault(d["id"], threading.Lock()):
         if _gone(d):
             return
@@ -167,6 +171,9 @@ def load(doc_id: str) -> dict | None:
     for k in ("title", "gloss", "gloss_extra", "num_ctx", "notes"):
         if k in st:
             d[k] = st[k]
+    d["skip"] = {int(p): {int(i): h for i, h in v.items()} for p, v in st.get("skip", {}).items()}
+    d["keep_pages"] = set(st.get("keep_pages", [])) & done
+    d["instr"] = {(k if k == "*" else int(k)): v for k, v in st.get("instr", {}).items()}
     return d
 
 

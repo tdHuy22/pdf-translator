@@ -303,6 +303,58 @@ with TestClient(A.app) as c:
     ok(seen["model"] == "eye" and seen["images"] and len(seen["images"]) == 1 and json.loads(r.headers["x-context"])["images"] == [4],
        "hỏi về hình → model xem ảnh nhận ảnh trang 4")
 
+print("11. Không dịch đoạn/trang, dịch lại kèm yêu cầu")
+SYS = []
+_fc = A.chat
+async def fc2(cfg_, system, payload, max_out=0, est_in=0):
+    SYS.append((system, [it["id"] for it in payload["items"]]))
+    return await _fc(cfg_, system, payload, max_out, est_in)
+A.chat = fc2
+with TestClient(A.app) as c:
+    with open(ROOT / "data/bert.pdf", "rb") as f:
+        bid = c.post("/api/upload", files={"file": ("b.pdf", f, "application/pdf")}).json()["id"]
+    c1 = {**cfg, "glossary_auto": False}
+    r = c.post(f"/api/{bid}/translate/10?span=1", json=c1).json()["pages"][0]
+    ok(r["skipped"] > 10 and r["translated"] < r["blocks"] - 10, f"trang tài liệu tham khảo: {r['skipped']}/{r['blocks']} đoạn giữ nguyên")
+    r = c.post(f"/api/{bid}/translate/10?span=1&force=true", json={**c1, "skip_refs": False}).json()["pages"][0]
+    ok(r["skipped"] == 0, "tắt “không dịch tài liệu tham khảo” → dịch cả")
+    c.post(f"/api/{bid}/translate/0?span=1", json=c1)
+    D = A.DOCS[bid]
+    before = dict(D["trans"][0])
+    SYS.clear()
+    r = c.post(f"/api/{bid}/page/0/skip", json={"cfg": c1, "blocks": [4, 5], "skip": True}).json()
+    ok(r["skip"] == [4, 5] and r["rendered"] and not SYS, "⛔ hai đoạn trên trang đã dịch → dựng lại ngay, không gọi LLM")
+    L = c.get(f"/api/{bid}/page/0/layer?kind=translated").json()
+    txt = " ".join(l["text"] for l in L["lines"] if l["b"] == 4)
+    ok(txt and "DỊCH" not in txt and "4" in L["blocks"], "đoạn không dịch: bản dịch giữ chữ gốc, lớp chữ vẫn có khung đoạn đó")
+    SYS.clear()
+    c.post(f"/api/{bid}/translate/0?span=1&force=true", json=c1)
+    n0 = len(D["blocks"][0][1])
+    ok(SYS and sum(len(x[1]) for x in SYS) <= n0 - 2 and 4 not in D["trans"][0] and 5 not in D["trans"][0],
+       "dịch lại trang: đoạn ⛔ không gửi LLM")
+    SYS.clear()
+    r = c.post(f"/api/{bid}/page/0/skip", json={"cfg": c1, "blocks": [4], "skip": False}).json()
+    ok(r["skip"] == [5] and SYS and len(SYS[0][1]) == 1 and 4 in D["trans"][0], "bỏ ⛔ đoạn chưa từng dịch → dịch riêng đoạn đó")
+    SYS.clear()
+    c.post(f"/api/{bid}/translate/0?blocks=2,3", json={**c1, "instruction": "Dịch sát nghĩa hơn"})
+    ok(SYS and len(SYS[0][1]) == 2 and "Dịch sát nghĩa hơn" in SYS[0][0] and SYS[0][0].index("Glossary") < SYS[0][0].index("Dịch sát")
+       if "Glossary" in SYS[0][0] else "Dịch sát nghĩa hơn" in SYS[0][0].split("\n")[-1],
+       "dịch lại hai đoạn kèm yêu cầu: chỉ hai đoạn đó, yêu cầu ở cuối system prompt")
+    ok(len(D["trans"][0]) >= len(before) - 2, "dịch lại một phần giữ bản dịch các đoạn khác")
+    SYS.clear()
+    c.post(f"/api/{bid}/translate/1?span=1&force=true", json={**c1, "instruction": "Giữ thuật ngữ tiếng Anh", "instruction_scope": "doc"})
+    c.post(f"/api/{bid}/translate/2?span=1", json=c1)
+    ok(all("Giữ thuật ngữ tiếng Anh" in x[0] for x in SYS), "yêu cầu “áp dụng cả bài” được nhớ cho trang sau")
+    r = c.post(f"/api/{bid}/page/3/keep", json={"keep": True}).json()
+    st = c.get(f"/api/{bid}/state").json()
+    ok(3 in st["done"] and st["keep"] == [3] and st["instr"].get("*") == "Giữ thuật ngữ tiếng Anh", "giữ bản gốc trang 4: đã xong, không gọi LLM")
+    A.DOCS.clear()                                     # khởi động lại app
+    st = c.get(f"/api/{bid}/state").json()
+    ok(st["keep"] == [3] and st["skip"] == {"0": [5]} and st["instr"].get("*"), "⛔ / giữ bản gốc / yêu cầu còn sau khi khởi động lại")
+    c.post(f"/api/{bid}/page/3/keep", json={"keep": False})
+    ok(3 not in c.get(f"/api/{bid}/state").json()["done"], "thôi giữ bản gốc → trang về chưa dịch")
+A.chat = _fc
+
 print("9. Nhà cung cấp, thông tin model")
 with TestClient(A.app) as c:
     ps = c.get("/api/providers").json()["providers"]

@@ -91,6 +91,25 @@
   #pvtab td, #pvtab th { padding:3px 6px; border-bottom:1px solid #f1f2f4; text-align:left; }
   #pvtab th { color:var(--muted); font-weight:600; }
 
+  /* ---- Đoạn không dịch, dịch lại kèm yêu cầu ---- */
+  .blk.skip { background:repeating-linear-gradient(45deg, rgba(220,38,38,.10) 0 5px, transparent 5px 10px);
+              outline:1px dashed rgba(220,38,38,.55); }
+  .blk.refskip { background:repeating-linear-gradient(45deg, rgba(107,114,128,.07) 0 5px, transparent 5px 10px); }
+  body.skipmode .page .ln { pointer-events:none; }
+  body.skipmode .page .blk { pointer-events:auto; cursor:pointer; }
+  body.skipmode .page .blk:hover { outline:2px solid rgba(220,38,38,.7); }
+  #skipMode.on { background:#fee2e2; border-color:#fca5a5; font-weight:600; }
+  #rtPop { position:absolute; z-index:25; width:360px; background:var(--panel); border:1px solid var(--line); border-radius:10px;
+           box-shadow:0 8px 28px rgba(0,0,0,.22); padding:10px; display:flex; flex-direction:column; gap:6px; font-size:13px; }
+  #rtPop[hidden] { display:none; }
+  .rthead { display:flex; justify-content:space-between; align-items:center; }
+  .rthead button { border:none; background:none; cursor:pointer; }
+  #rtText { font:inherit; font-size:13px; padding:6px; border:1px solid var(--line); border-radius:6px; resize:vertical; }
+  #rtChips { display:flex; flex-wrap:wrap; gap:4px; }
+  .rtscope { display:flex; flex-wrap:wrap; gap:4px 10px; font-size:12px; }
+  .rtbar { display:flex; gap:6px; justify-content:flex-end; }
+  .tools .kept { background:#ecfdf5; }
+
   /* ---- Bảng thuật ngữ ---- */
   #gloss { display:none; background:var(--panel); border-bottom:1px solid var(--line); padding:8px 12px; }
   #gloss.open { display:block; }
@@ -293,6 +312,7 @@
       <option value="2">Tối đa 2 trang</option>
       <option value="3">Tối đa 3 trang</option>
     </select></label>
+  <label style="flex-direction:row;align-items:center;gap:6px" title="Phần Tài liệu tham khảo (từ tiêu đề References tới Phụ lục) giữ nguyên chữ gốc: dịch danh mục trích dẫn vô ích mà tốn token, dễ vỡ định dạng"><input type="checkbox" id="skip_refs"> Không dịch phần Tài liệu tham khảo</label>
   <label class="tr-llm" style="flex-direction:row;align-items:center;gap:6px" title="Trước khi dịch trang đầu, app hỏi LLM một lượt để chốt cách dịch các thuật ngữ của bài, rồi dùng thống nhất cho mọi trang"><input type="checkbox" id="glossary_auto"> Tự lập bảng thuật ngữ cho mỗi tài liệu</label>
   <label style="grid-column:1/-1">Thuật ngữ dùng cho <b>MỌI tài liệu</b> (mỗi dòng: English = Tiếng Việt) — thuật ngữ riêng của từng bài thì sửa trong 📒 Thuật ngữ
     <textarea id="glossary" rows="3" style="font:inherit;font-size:13px;padding:5px;border:1px solid var(--line);border-radius:6px"></textarea></label>
@@ -411,6 +431,21 @@
   <button id="selAsk">💬 Giải thích đoạn này</button>
   <button id="selMark">🖍 Tô vàng</button>
   <button id="selNote" title="Tô vàng đoạn này (nếu chưa tô) và viết ghi chú cho nó">📝 Ghi chú</button>
+  <button id="selSkip" title="Không dịch đoạn này: bản dịch giữ nguyên chữ gốc (tránh vỡ định dạng)">⛔ Không dịch</button>
+  <button id="selRe" title="Dịch lại riêng đoạn này, có thể kèm yêu cầu">↻ Dịch lại đoạn</button>
+</div>
+
+<div id="rtPop" hidden>
+  <div class="rthead"><b id="rtWhat">Dịch lại</b><button id="rtClose" type="button">✕</button></div>
+  <textarea id="rtText" rows="3" placeholder="Yêu cầu thêm (tuỳ chọn), vd. dịch sát nghĩa hơn, giữ nguyên tên phương pháp, văn phong tự nhiên… (Ctrl+Enter để dịch)"></textarea>
+  <div id="rtChips"></div>
+  <div class="rtscope">
+    <label><input type="radio" name="rtScope" value="once" checked> Chỉ lần này</label>
+    <label id="rtPageLbl"><input type="radio" name="rtScope" value="page"> Nhớ cho trang này</label>
+    <label><input type="radio" name="rtScope" value="doc"> Nhớ cho cả bài</label>
+  </div>
+  <div class="hint" id="rtHint"></div>
+  <div class="rtbar"><button id="rtGo" class="primary" type="button">↻ Dịch lại</button><button id="rtCancel" type="button">Huỷ</button></div>
 </div>
 
 <aside id="chat">
@@ -462,6 +497,8 @@
   <button id="zoomPct" title="Bấm: về vừa khung">100%</button>
   <button id="zoomIn" title="Phóng to (⌘/Ctrl + lăn chuột)">+</button>
   <button id="zoomFit" title="Vừa bề rộng khung">⤢</button>
+  <span class="sep"></span>
+  <button id="skipMode" title="Bấm vào đoạn trên trang để đánh dấu / bỏ đánh dấu KHÔNG DỊCH (bản dịch giữ nguyên chữ gốc). Bấm lại nút này để thôi">⛔ Chọn đoạn</button>
   <span class="sep"></span>
   <span class="hint" title="Giữ phím ⌥ Option / Alt và rê chuột trên trang để soi chữ nhỏ">⌥ kính lúp</span>
 </div>
