@@ -3679,7 +3679,7 @@ def see_cfg(cfg: Config) -> Config | None:
     return side_cfg(cfg, cfg.see_base_url, cfg.see_api_key, cfg.see_model) if cfg.see_model else None
 
 
-CONTEXT_MODES = ("auto", "pair", "source", "translation", "image", "full")
+CONTEXT_MODES = ("auto", "pair", "source", "translation", "image", "full", "near")  # near: chỉ để bench so sánh
 CHAT_BUDGET = 12000   # token ngữ cảnh tối đa khi không hỏi về cả bài (≈ 5–8 trang gốc + dịch)
 
 
@@ -3706,6 +3706,8 @@ _Q_PAGE = re.compile(r"(?:\btrang|\btr\.|\bpage|\bp\.)\s*(\d{1,4})\b", re.I)
 _NOT_FIG = r"(?<!mô )(?<!tình )(?<!định )(?<!địa )(?<!điển )(?<!mẫu )(?<!hữu )(?<!vô )"
 _Q_FIG = re.compile(rf"(?:{_NOT_FIG}\bhình|\bfigure|\bfig\.?)\s*(\d{{1,3}})\b", re.I)
 _Q_TAB = re.compile(r"(?:\bbảng|\btable|\btab\.)\s*(\d{1,3})\b", re.I)
+_Q_EQ = re.compile(r"(?:công thức|phương trình|biểu thức|equation|eq\.?)\s*\(\s*(\d{1,3})\s*\)|(?:equation|eq\.)\s*(\d{1,3})\b",
+                   re.I)
 _Q_VISUAL = re.compile(
     r"\b(?:biểu đồ|đồ thị|sơ đồ|công thức|phương trình|ký hiệu|kí hiệu|đường cong|trục (?:x|y|hoành|tung)|"
     r"figures?|fig|tables?|charts?|plots?|graphs?|diagrams?|equations?|eq|formulas?|axis|axes)\b"
@@ -3730,6 +3732,8 @@ def _terms(text: str, vi: bool) -> list[str]:
     """Từ khoá để so trang với câu hỏi: từ tiếng Anh (bỏ từ chức năng), và cặp âm tiết tiếng Việt liền nhau."""
     low = text.lower()
     out = [w for w in _WORD.findall(low) if w not in _STOP]
+    # "BERT-large" trong câu hỏi, "BERTLARGE" (chữ in nhỏ) hay "BERT large" trong bài: thêm dạng viết liền và từng phần
+    out += [x for w in out if "-" in w for x in (w.replace("-", ""), *w.split("-")) if len(x) > 2 and x not in _STOP]
     if vi:
         syl = _VI_WORD.findall(low)
         out += [f"{a} {b}" for a, b in zip(syl, syl[1:])]
@@ -3765,10 +3769,19 @@ def caption_page(d: dict, kind: str, num: str) -> int | None:
     return next((n for n, t in enumerate(page_texts(d)) if pat.search(t)), None)
 
 
+def equation_page(d: dict, num: str) -> int | None:
+    """Trang có công thức mang số hiệu "(num)" (số hiệu đứng riêng một dòng ở lề phải, như LaTeX đặt)."""
+    pat = re.compile(rf"^\s*\(\s*{num}\s*\)\s*$", re.M)
+    return next((n for n, t in enumerate(page_texts(d)) if pat.search(t)), None)
+
+
 def chat_plan(d: dict, ask: ChatAsk, question: str, budget: int, see: bool) -> dict:
     """Chọn nguồn ngữ cảnh cho câu hỏi. Trả về {"mode", "pages" (trang gửi chữ, quan trọng trước), "images" (trang
     gửi ảnh), "why"}. `see` = có model xem được ảnh trang."""
     n_pages = d["out"].page_count
+    if ask.context == "near":         # như trước 25/09/2026 (mốc so sánh cho bench): trang đang xem + lân cận
+        return {"mode": "pair" if budget >= 6000 else "source", "pages": [] if ask.page is None else [ask.page],
+                "images": [], "why": "trang đang xem + lân cận"}
     q = f"{question} {ask.selection}"
     main, why = [], []
     if ask.selection.strip() and ask.page is not None:
@@ -3783,6 +3796,11 @@ def chat_plan(d: dict, ask: ChatAsk, question: str, budget: int, see: bool) -> d
         if (p := caption_page(d, kind, num)) is not None and p not in main:
             main.append(p)
             why.append(f"{'Hình' if kind == 'fig' else 'Bảng'} {num} ở trang {p + 1}")
+    for m in _Q_EQ.finditer(q):
+        num = m[1] or m[2]
+        if (p := equation_page(d, num)) is not None and p not in main:
+            main.append(p)
+            why.append(f"công thức ({num}) ở trang {p + 1}")
     if not main and ask.page is not None:
         main.append(ask.page)
     visual = bool(figs) or bool(_Q_VISUAL.search(q))

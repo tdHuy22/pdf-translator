@@ -384,6 +384,12 @@ with TestClient(A.app) as c:
     c.post(f"/api/{aid}/translate/5?span=1", json={**cfg, "instruction": "Giữ nguyên tên riêng", "instruction_scope": "page"})
     r = c.post(f"/api/{aid}/translate/4?span=3", json=cfg).json()
     ok([p["page"] for p in r["pages"]] == [4], "trang có yêu cầu dịch riêng không bị gộp vào nhóm của trang khác")
+    P = A.chat_plan(d, A.ChatAsk(cfg=A.Config(**cfg), question="Viết lại công thức (1)", page=0), "Viết lại công thức (1)", 9000, True)
+    ok(P["pages"][0] == 3 and P["images"] == [3], "“công thức (1)” → trang có số hiệu (1) (tr.4), gửi ảnh trang đó")
+    P = A.chat_plan(d, A.ChatAsk(cfg=A.Config(**cfg), question="Hình 1?", page=5, context="near"), "Hình 1?", 9000, True)
+    ok(P["pages"] == [5] and not P["images"], "chế độ near (mốc so sánh của bench): chỉ trang đang xem")
+    ok(3 - 1 in A.related_pages({"src": ROOT / "data/bert.pdf", "trans": {}}, "BERT-large có bao nhiêu tham số?"),
+       "“BERT-large” khớp “BERTLARGE” trong bài")
     A.DOCS.clear()                                     # khởi động lại app: khối nạp từ state.json (toạ độ dạng list)
     r = c.post(f"/api/{aid}/translate/3?span=1&force=true", json=cfg)
     ok(r.status_code == 200, "dịch lại trang có công thức sau khi khởi động lại app (trước đây lỗi 500)")
