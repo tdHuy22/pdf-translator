@@ -22,7 +22,7 @@ const FIELDS = ["preset","ocr_preset","chat_preset","base_url","model","temperat
   "ocr_vlm_concurrency","ocr_custom_url","chat_base_url","chat_model","gloss_preset","gloss_base_url","gloss_model",
   "align_preset","align_base_url","align_model",
   "font_serif","font_sans","font_mono"];
-const CHECKS = ["glossary_auto","google_fallback","disable_thinking","chat_same","gloss_same","align_llm","align_same"];
+const CHECKS = ["glossary_auto","google_fallback","disable_thinking","chat_same","gloss_same","align_llm","align_same","sync_marks"];
 // Ô API key → ô Base URL của server dùng key đó ("ocrspace" là dịch vụ cố định, không có base URL)
 const KEY_OF = { api_key:"base_url", ocr_vlm_api_key:"ocr_vlm_base_url", chat_api_key:"chat_base_url", gloss_api_key:"gloss_base_url",
                  align_api_key:"align_base_url",
@@ -60,7 +60,7 @@ function loadSettings() {
         ocr_vlm_concurrency:4, ocr_custom_url:"", google_fallback:true, chat_same:true, chat_base_url:"",
         chat_model:"", gloss_preset:"openrouter", gloss_same:true, gloss_base_url:PRESETS.openrouter.base_url,
         gloss_model:PRESETS.openrouter.gloss, align_llm:true, align_same:false, align_preset:"chatgpt",
-        align_base_url:PRESETS.chatgpt.base_url, align_model:PRESETS.chatgpt.model, font_serif:"auto", font_sans:"auto", font_mono:"auto", ...s };
+        align_base_url:PRESETS.chatgpt.base_url, align_model:PRESETS.chatgpt.model, sync_marks:false, font_serif:"auto", font_sans:"auto", font_mono:"auto", ...s };
   const ver = s.settings_v || 1;
   // v2: model OCR mặc định đổi từ qwen3.5 sang PaddleOCR-VL — cập nhật cài đặt cũ còn để mặc định cũ
   if (ver < 2 && s.ocr_vlm_model === "qwen3.5:latest") s.ocr_vlm_model = PADDLE_OCR;
@@ -99,11 +99,20 @@ function toggleOpts() {
   document.querySelectorAll(".tr-llm").forEach(el => el.style.display = useLlm ? "" : "none");
   document.querySelectorAll(".chat-opt").forEach(el => el.style.display = $("chat_same").checked ? "none" : "");
   document.querySelectorAll(".gloss-opt").forEach(el => el.style.display = $("gloss_same").checked ? "none" : "");
-  const align = $("align_llm").checked;
+  const sync = $("sync_marks").checked, align = sync && $("align_llm").checked;
+  document.querySelectorAll(".sync-on").forEach(el => el.style.display = sync ? "" : "none");
   document.querySelectorAll(".align-on").forEach(el => el.style.display = align ? "" : "none");
   document.querySelectorAll(".align-opt").forEach(el => el.style.display = align && !$("align_same").checked ? "" : "none");
 }
-["ocr_engine","translator","chat_same","gloss_same","align_llm","align_same"].forEach(f => $(f).addEventListener("change", toggleOpts));
+["ocr_engine","translator","chat_same","gloss_same","align_llm","align_same","sync_marks"].forEach(f => $(f).addEventListener("change", toggleOpts));
+
+// Bật/tắt đồng bộ vệt tô: vẽ lại mọi trang; bật thì tính nốt phần tương ứng còn thiếu (vệt tô lúc đang tắt)
+$("sync_marks").addEventListener("change", () => {
+  for (const p of Object.keys(MARKS).map(Number)) {
+    paintMarks(p);
+    if (syncOn()) { fillPeer(p, "original"); fillPeer(p, "translated"); }
+  }
+});
 
 function cfg() {
   const same = $("chat_same").checked, gsame = $("gloss_same").checked, asame = $("align_same").checked;
@@ -204,7 +213,7 @@ function resetDocView() {
 
 function openDoc() {
   buildPages();
-  ["btnAll","btnDl","btnGloss","btnChat","btnNotes"].forEach(b => $(b).disabled = false);
+  ["btnAll","btnDl","btnDlOrg","btnGloss","btnChat","btnNotes","range"].forEach(b => $(b).disabled = false);
   setStatus(`${doc.name} – ${doc.pages} trang` + (doc.scanned_pages ? ` (${doc.scanned_pages} trang scan → OCR)` : "") +
             (doc.done.size ? ` · đã dịch ${doc.done.size}` : ""));
 }
@@ -261,7 +270,7 @@ $("dtab").onclick = async e => {
     await fetch(`/api/docs/${id}`, { method:"DELETE" });
     if (doc?.id === id) {                     // xoá đúng bài đang mở → về màn hình trống
       doc = null; resetDocView(); $("cols").innerHTML = ""; setStatus("Chưa mở file");
-      ["btnAll","btnDl","btnGloss","btnChat","btnNotes"].forEach(b => $(b).disabled = true);
+      ["btnAll","btnDl","btnDlOrg","btnGloss","btnChat","btnNotes","range"].forEach(b => $(b).disabled = true);
       try { localStorage.removeItem("last_doc"); } catch {}
     }
     loadDocs();
@@ -350,6 +359,9 @@ $("cols").addEventListener("mouseover", e => {
 // thì khớp theo CÂU: chữ hai bản khác nhau nên không khớp được từng ký tự, nhưng trong một đoạn thì thứ tự câu
 // giữ nguyên (prompt cấm model gộp/tách đoạn). Số câu hai bên lệch nhau thì mới tô cả đoạn.
 let MARKS = {};
+// Đồng bộ vệt tô: bật thì tô ở bản này là bản kia sáng phần tương ứng (`peer`); tắt thì hai bản tô độc lập.
+// Tắt không xoá `peer` đã có: chỉ không vẽ, không tính mới — bật lại là thấy lại.
+const syncOn = () => $("sync_marks").checked;
 const pageOf = (p, kind) => document.querySelector(`.page[data-p="${p}"][data-kind="${kind}"]`);
 const otherSide = k => (k === "original" ? "translated" : "original");
 const rid = () => Math.random().toString(36).slice(2, 10);
@@ -444,7 +456,7 @@ function peerRange(srcText, dstText, s, e) {
 const WAIT = new Set();       // id các vệt đang chờ LLM
 /** Có cần hỏi LLM không: bôi đen gần hết các câu mà số câu hai bản khớp nhau thì cả câu đã là đáp án đúng. */
 function needAlign(srcText, m, pr) {
-  if (!$("align_llm").checked) return false;
+  if (!syncOn() || !$("align_llm").checked) return false;
   const [cs, ce] = pr.ctx, letters = t => (t.match(/[\p{L}\p{N}]/gu) || []).length;
   return !pr.exact || letters(srcText.slice(m.s, m.e)) < 0.9 * letters(srcText.slice(cs, ce));
 }
@@ -480,7 +492,7 @@ function paintMarks(p) {
     layer.querySelectorAll(".hl").forEach(x => x.remove());
     for (const m of MARKS[p] || []) {
       const wait = m.side !== kind && WAIT.has(m.id);
-      for (const r of (m.side === kind ? m.rects : m.peer) || []) {
+      for (const r of (m.side === kind ? m.rects : syncOn() ? m.peer : []) || []) {
         const d = document.createElement("div");
         d.className = wait ? "hl wait" : "hl";
         d.style.cssText = `left:${r[0]}px;top:${r[1]}px;width:${r[2]-r[0]}px;height:${r[3]-r[1]}px`;
@@ -495,7 +507,7 @@ function paintMarks(p) {
 async function fillPeer(p, kind) {
   const el = pageOf(p, kind), src = pageOf(p, otherSide(kind));
   const todo = (MARKS[p] || []).filter(m => m.side !== kind && !m.peer.length);
-  if (!el || !src || !todo.length) return;
+  if (!syncOn() || !el || !src || !todo.length) return;
   const add = [], later = [];
   for (const m of todo) {
     const a = blockText(src, m.block), b = blockText(el, m.block);
@@ -518,7 +530,7 @@ async function fillPeer(p, kind) {
 /** Vùng chữ mà vệt tô `m` chiếm TRÊN BẢN `side`; null nghĩa là bên đó chưa vẽ được vệt này. */
 function markRange(m, side) {
   if (m.side === side) return [m.s, m.e];
-  return m.peer?.length ? [m.ps, m.pe] : null;
+  return syncOn() && m.peer?.length ? [m.ps, m.pe] : null;
 }
 
 /** Các vệt tô mà vùng chọn hiện tại đang đè lên (để đổi nút thành "Bỏ tô vàng"). */
@@ -544,7 +556,7 @@ async function addMarks(info) {
     const m = { id: rid(), block: b, side: info.side, s: off[0], e: off[1],
                 text: src.text.slice(off[0], off[1]).trim(),
                 rects: offsetRects(el, b, off[0], off[1]), peer: [], ps: 0, pe: 0, via: "" };
-    const dst = peer && peer.dataset.loaded === "1" ? blockText(peer, b) : null;
+    const dst = syncOn() && peer && peer.dataset.loaded === "1" ? blockText(peer, b) : null;
     if (dst?.text) {
       const pr = peerRange(src.text, dst.text, off[0], off[1]);
       [m.ps, m.pe] = pr;
@@ -647,7 +659,10 @@ async function reanchorMarks(p) {
     WAIT.delete(m.id);
     add.push({ ...m, side: "original", s, e, text: a.text.slice(s, e).trim(), rects, peer: [], ps: 0, pe: 0, via: "" });
   }
-  if (add.length) await sendMarks(p, add, add.map(m => m.id));
+  if (add.length) {
+    await sendMarks(p, add, add.map(m => m.id));
+    if (!syncOn()) setStatus(`Trang ${p + 1}: ${add.length} vệt tô ở bản dịch đã chuyển sang câu tương ứng ở bản gốc (bản dịch sắp đổi chữ)`);
+  }
 }
 
 async function translatePages(pages, force = false) {
@@ -665,7 +680,7 @@ async function translatePages(pages, force = false) {
     trBox(pages[0]).innerHTML = `<span class="num">${pages[0]+1}</span><div class="ph">
       <span style="color:#b91c1c">❌ ${e.message}</span>
       <button onclick="translatePages([${pages[0]}])">Thử lại</button></div><div class="layer"></div>`;
-    pages.slice(1).forEach(i => trBox(i).innerHTML = idleBox(i));
+    pages.slice(1).forEach(restoreBox);
     throw e;
   }
   if (doc !== mine) return [];
@@ -680,8 +695,13 @@ async function translatePages(pages, force = false) {
     done.push(pg.page);
     showTranslated(pg, res);
   }
-  pages.filter(i => !done.includes(i)).forEach(i => trBox(i).innerHTML = idleBox(i));
+  pages.filter(i => !done.includes(i)).forEach(restoreBox);
   return done;
+}
+/** Trang đã giữ chỗ mà lượt này không dịch tới: về lại như trước (bản dịch cũ nếu đã dịch, không thì "Chưa dịch"). */
+function restoreBox(i) {
+  if (doc.done.has(i)) showTranslated({ page: i, cached: true }, {});
+  else trBox(i).innerHTML = idleBox(i);
 }
 
 function showTranslated(pg, res) {
@@ -704,12 +724,40 @@ function showTranslated(pg, res) {
   loadLayer(document.querySelector(`.page[data-p="${i}"][data-kind="original"]`), true);
 }
 
+/** "1, 3, 5, 9 - 13", "10-" (tới hết), "-5" (từ đầu) → số trang (đếm từ 0), đã sắp xếp, không trùng.
+ *  Trống = cả bài. Sai cú pháp hay vượt số trang → ném lỗi có lời nhắn cho người dùng. */
+function parseRange(str, pages) {
+  const out = new Set(), s = str.replace(/[–—]/g, "-").replace(/\s*-\s*/g, "-").trim();   // "9 - 13" → "9-13"
+  if (!s) return [...Array(pages).keys()];
+  for (const tok of s.split(/[,;\s]+/).filter(Boolean)) {
+    const m = tok.match(/^(\d*)-(\d*)$|^(\d+)$/);
+    if (!m || (m[1] === "" && m[2] === "" && !m[3])) throw new Error(`không hiểu “${tok}”`);
+    let a = m[3] ? +m[3] : m[1] === "" ? 1 : +m[1], b = m[3] ? +m[3] : m[2] === "" ? pages : +m[2];
+    if (a > b) [a, b] = [b, a];
+    if (a < 1 || b > pages) throw new Error(`trang ${a < 1 ? a : b} ngoài khoảng 1–${pages}`);
+    for (let p = a; p <= b; p++) out.add(p - 1);
+  }
+  return [...out].sort((x, y) => x - y);
+}
+$("range").addEventListener("input", () => {
+  if (!doc) return;
+  try { parseRange($("range").value, doc.pages); $("range").classList.remove("bad"); $("range").title = ""; }
+  catch (e) { $("range").classList.add("bad"); $("range").title = e.message; }
+});
+$("range").addEventListener("keydown", e => { if (e.key === "Enter" && !$("btnAll").disabled) $("btnAll").click(); });
+
 $("btnAll").onclick = async () => {
+  let want;
+  try { want = parseRange($("range").value, doc.pages); }
+  catch (e) { $("range").classList.add("bad"); setStatus("Dải trang sai: " + e.message); return; }
+  const force = $("rangeForce").checked;
   stopFlag = false; $("btnAll").disabled = true; $("btnStop").disabled = false;
-  const queue = [...Array(doc.pages).keys()].filter(i => !doc.done.has(i));
-  const total = doc.pages; let errors = 0;
-  const update = () => { $("bar").style.width = (doc.done.size / total * 100) + "%";
-                         setStatus(`Đã dịch ${doc.done.size}/${total} trang${errors ? `, ${errors} lỗi` : ""}`); };
+  const queue = want.filter(i => force || !doc.done.has(i));
+  const total = queue.length, left = new Set(queue); let errors = 0;
+  const update = () => { const k = total - left.size;
+                         $("bar").style.width = (total ? k / total * 100 : 100) + "%";
+                         setStatus(`Đã dịch ${k}/${total} trang${total < doc.pages ? " đã chọn" : ""}` +
+                                   `${errors ? `, ${errors} lỗi` : ""} · cả bài ${doc.done.size}/${doc.pages}`); };
   update();
   const span = () => parseInt($("page_span").value) || 3;   // "tự động": giữ chỗ 3 trang, server gộp được bao nhiêu thì gộp
   const worker = async () => {
@@ -717,10 +765,12 @@ $("btnAll").onclick = async () => {
       const take = [queue.shift()];   // giữ chỗ các trang liền nhau để hai worker không giành nhau cùng một trang
       while (take.length < span() && queue.length && queue[0] === take[take.length - 1] + 1) take.push(queue.shift());
       try {
-        const got = await translatePages(take);
+        const got = await translatePages(take, force);
+        got.forEach(i => left.delete(i));
         queue.unshift(...take.filter(i => !got.includes(i)));   // server gộp ít hơn → trả lại hàng đợi
       } catch {
         errors++;
+        left.delete(take[0]);
         queue.unshift(...take.slice(1));
       }
       update();
@@ -731,7 +781,8 @@ $("btnAll").onclick = async () => {
   $("btnAll").disabled = false; $("btnStop").disabled = true;
 };
 $("btnStop").onclick = () => { stopFlag = true; setStatus("Đang dừng sau trang hiện tại…"); };
-$("btnDl").onclick = () => { location.href = `/api/${doc.id}/download`; };
+$("btnDl").onclick = () => { location.href = `/api/${doc.id}/download?sync=${syncOn()}`; };
+$("btnDlOrg").onclick = () => { location.href = `/api/${doc.id}/download?which=original&sync=${syncOn()}`; };
 
 // ================================================================ Bảng thuật ngữ
 let GLOSS = [], EXTRA = [];   // EXTRA: ứng viên LLM không chọn + thuật ngữ bị ẩn vì bạn từng xoá (hidden)
@@ -739,6 +790,7 @@ $("btnGloss").onclick = () => { $("gloss").classList.toggle("open"); if (!GLOSS.
 $("gClose").onclick = () => $("gloss").classList.remove("open");
 $("gMake").onclick = () => loadGlossary(true);
 $("gAdd").onclick = () => {
+  $("gFind").value = "";                      // dòng mới trống: bộ lọc đang bật sẽ ẩn mất nó
   GLOSS.unshift({ term: "", vi: "", keep: false, use: true });
   drawGlossary();
   $("gtab").querySelector(".gterm")?.focus();
@@ -775,7 +827,27 @@ function drawGlossary() {
     drawGlossary();
   };
   drawExtra();
+  findGloss();
 }
+// Tìm trong bảng: chỉ ẩn dòng (không vẽ lại), để data-i vẫn trỏ đúng vào GLOSS; không phân biệt hoa thường và dấu
+const fold = s => String(s ?? "").normalize("NFD").replace(/\p{M}/gu, "").replace(/[đĐ]/g, "d").toLowerCase();
+function findGloss() {
+  const q = fold($("gFind").value.trim());
+  let hit = 0;
+  $("gtab").querySelectorAll("tr[data-i]").forEach(tr => {
+    const t = GLOSS[+tr.dataset.i], ok = !q || fold(t.term).includes(q) || fold(t.vi).includes(q);
+    tr.style.display = ok ? "" : "none";
+    hit += ok;
+  });
+  $("gextra").querySelectorAll(".gchip").forEach(b => {
+    b.style.display = !q || fold(EXTRA[+b.dataset.i]?.term).includes(q) ? "" : "none";
+  });
+  $("gFound").textContent = q ? `khớp ${hit}/${GLOSS.length}` : "";
+}
+$("gFind").addEventListener("input", findGloss);
+$("gFind").addEventListener("keydown", e => { if (e.key === "Escape") { $("gFind").value = ""; findGloss(); } });
+try { $("ghelp").open = localStorage.getItem("ghelp_open") === "1"; } catch {}
+$("ghelp").addEventListener("toggle", () => { try { localStorage.setItem("ghelp_open", $("ghelp").open ? "1" : "0"); } catch {} });
 // Gợi ý khác: bấm để đưa vào bảng (mặc định giữ nguyên tiếng Anh, đổi sang "dịch" rồi gõ cách dịch nếu cần)
 function drawExtra() {
   const have = new Set(GLOSS.map(t => t.term.trim().toLowerCase()));

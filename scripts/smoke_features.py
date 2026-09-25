@@ -93,6 +93,13 @@ with TestClient(A.app) as c:
        "vệt tô lưu theo vị trí ký tự ở CẢ HAI bản, không phải cả đoạn")
     pdf = pymupdf.open("pdf", c.get(f"/api/{did}/download").content)
     ok([a.type[1] for a in pdf[0].annots()] == ["Highlight"] * 2, "PDF tải về: mỗi khung chữ một annotation highlight")
+    pdf = pymupdf.open("pdf", c.get(f"/api/{did}/download?sync=false").content)
+    ok(not list(pdf[0].annots()), "tắt đồng bộ tô vàng: vệt tô ở bản gốc không vào bản dịch tải về")
+    pdf = pymupdf.open("pdf", c.get(f"/api/{did}/download?which=original&sync=false").content)
+    ok([a.type[1] for a in pdf[0].annots()] == ["Highlight"] and "BERT" in pdf[0].get_text(),
+       "tải bản gốc có tô: đúng bản gốc, vệt tô ở bản gốc có trong đó")
+    r = c.post(f"/api/{did}/translate/1?span=3&force=true", json=cfg).json()
+    ok([p["page"] for p in r["pages"]] == [1, 2, 3], "dịch lại một dải trang (force): trang đã dịch cũng được gộp")
     c.post(f"/api/{did}/marks", json={"page": 0, "add": [], "remove": ["m1"]})
     ok(c.get(f"/api/{did}/marks").json()["marks"] == {}, "bỏ tô vàng theo id")
     c.post(f"/api/{did}/marks", json={"page": 0, "add": [mark]})

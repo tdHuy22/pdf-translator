@@ -2783,12 +2783,13 @@ async def block_context(d: dict, pages: list[int], cfg: Config, flat: list[dict]
 MAX_SPAN = 3   # tự động thì gộp tối đa 3 trang một lượt gọi
 
 
-async def grow_group(d: dict, n: int, cfg: Config, span: int, system: str, got: dict) -> list[int]:
+async def grow_group(d: dict, n: int, cfg: Config, span: int, system: str, got: dict, force: bool = False) -> list[int]:
     """Các trang gộp thêm vào cùng lượt gọi với trang n. Một nhóm = vừa đúng MỘT lượt gọi LLM: trang sau chỉ được
     thêm khi cả nhóm vẫn nằm trong ngữ cảnh và trong MAX_ITEMS đoạn. Ngữ cảnh lớn mà trang ngắn thì gộp được 2–3
     trang: câu ngắt qua trang được dịch liền mạch, đoạn trùng chữ (đầu bảng lặp ở trang sau) chỉ dịch một lần,
     và prompt hệ thống chỉ phải đọc một lần cho cả nhóm.
-    Trang phải OCR thì dừng nhóm ở đó: OCR mất 30–70 giây/trang, gộp vào là người dùng chờ cả nhóm mới thấy gì."""
+    Trang phải OCR thì dừng nhóm ở đó: OCR mất 30–70 giây/trang, gộp vào là người dùng chờ cả nhóm mới thấy gì.
+    `force` (dịch lại một dải trang): trang đã dịch cũng được gộp vào."""
     limit = min(span, cfg.page_span or MAX_SPAN)
     if cfg.translator != "llm" or limit <= 1:
         return []
@@ -2796,7 +2797,7 @@ async def grow_group(d: dict, n: int, cfg: Config, span: int, system: str, got: 
     texts = {b["text"] for b in got[n][0]}                      # đoạn trùng chữ chỉ tính một lần (như khi dịch)
     size = sum(item_tokens(b) for b in got[n][0])
     for m in range(n + 1, min(n + limit, d["out"].page_count)):
-        if m in d["done"] or (nxt := await page_blocks(d, m, cfg, allow_ocr=False)) is None:
+        if (m in d["done"] and not force) or (nxt := await page_blocks(d, m, cfg, allow_ocr=False)) is None:
             break
         new = [b for b in nxt[0] if b["text"] not in texts]
         add = sum(item_tokens(b) for b in new)
@@ -2845,7 +2846,7 @@ async def translate_page(doc_id: str, n: int, cfg: Config, force: bool = False, 
             await ensure_glossary(d, cfg, src)
         cfg = cfg.model_copy(update={"glossary": glossary_text(cfg, d)})  # để model chuyên dịch cũng theo bảng
         system = system_prompt(cfg, d)
-        pages = [n] + await grow_group(d, n, cfg, span, system, got)
+        pages = [n] + await grow_group(d, n, cfg, span, system, got, force)
         flat = [b for p_ in pages for b in got[p_][0]]
         context = await block_context(d, pages, cfg, flat) if cfg.translator == "llm" else {}
         translations, stats = await translate_blocks(cfg, flat, context, system)
@@ -3435,22 +3436,25 @@ async def doc_chat(doc_id: str, ask: ChatAsk):
 
 
 @app.get("/api/{doc_id}/download")
-def download(doc_id: str):
+def download(doc_id: str, which: str = "translated", sync: bool = True):
+    """PDF tải về kèm tô vàng và ghi chú. `which="original"`: bản gốc có tô vàng (tắt đồng bộ vệt tô thì vệt tô ở bản
+    gốc chỉ có ở đây). `sync=False`: không vẽ phần tương ứng của vệt tô bên bản kia."""
     d = get_doc(doc_id)
-    path = store.folder(doc_id) / "download.pdf"
+    side = "original" if which == "original" else "translated"
+    path = store.folder(doc_id) / f"download-{side}.pdf"
     # garbage=4: gộp cả stream trùng nội dung — mỗi trang dịch nhúng lại nguyên font tiếng Việt và font công thức,
     # garbage=3 chỉ gộp đối tượng thường nên PDF 2 MB ra 6–20 MB; garbage=4 còn ≈ bản gốc + vài trăm KB.
     # Cắt font (MuPDF, không cần fontTools) trên bản sao để không đụng tài liệu đang dịch dở: chỉ giữ ký tự đã dùng —
     # Times New Roman của macOS ~800 KB/kiểu chữ còn vài chục KB (đo 19/09/2026: ảnh trang và chữ trích giống hệt)
-    doc = pymupdf.open("pdf", d["out"].tobytes(garbage=4))
-    by_mark, loose = N.plan(d["marks"], d.get("notes", []))
+    doc = pymupdf.open("pdf", d["out"].tobytes(garbage=4) if side == "translated" else d["src"].read_bytes())
+    by_mark, loose = N.plan(d["marks"], d.get("notes", []), side, sync)
     for n, marks in d["marks"].items():    # chữ đã tô vàng → annotation highlight thật trong PDF
-        # vệt tô ở bản dịch thì lấy khung của chính nó, tô ở bản gốc thì lấy khung cụm/câu tương ứng bên bản dịch
-        if n >= doc.page_count or not any(N.mark_rects(m) for m in marks):
+        # vệt tô ở chính bản này thì lấy khung của nó, tô ở bản kia thì lấy khung cụm/câu tương ứng (nếu đồng bộ)
+        if n >= doc.page_count or not any(N.mark_rects(m, side, sync) for m in marks):
             continue
         page = doc[n]                      # phải giữ tham chiếu trang: trang bị thu hồi là annot "not bound"
         for m in marks:
-            for k, r in enumerate(N.mark_rects(m)):
+            for k, r in enumerate(N.mark_rects(m, side, sync)):
                 annot = page.add_highlight_annot(pymupdf.Rect(r))
                 annot.set_colors(stroke=(1, 0.88, 0.25))
                 annot.set_opacity(0.4)     # chữ bên dưới vẫn đọc được
@@ -3459,11 +3463,12 @@ def download(doc_id: str):
                 annot.update()
     N.add_loose(doc, loose)                # ghi chú của trang / cả bài → biểu tượng ghi chú ở lề trên
     try:
-        doc.subset_fonts()
+        if side == "translated":           # bản gốc: font của tác giả, giữ nguyên
+            doc.subset_fonts()
     except Exception as e:  # noqa: BLE001 — tính năng mới của MuPDF; lỗi thì nhúng nguyên font như trước
         print(f"[font] không cắt được font ({e!r}) → nhúng nguyên font")
     doc.save(path, garbage=4, deflate=True)
-    name = Path(d["name"] or "paper.pdf").stem + "_vi.pdf"
+    name = Path(d["name"] or "paper.pdf").stem + ("_vi.pdf" if side == "translated" else "_goc_to_vang.pdf")
     return FileResponse(path, filename=name, media_type="application/pdf")
 
 

@@ -97,17 +97,20 @@ def markdown(title: str, name: str, notes: list[dict]) -> str:
     return "\n".join(out).rstrip() + "\n"
 
 
-def mark_rects(m: dict) -> list:
-    """Khung của vệt tô trên BẢN DỊCH (PDF tải về là bản dịch): vệt tô ở bản dịch thì khung của chính nó, tô ở bản
-    gốc thì khung cụm/câu tương ứng bên bản dịch."""
-    return m["rects"] if m["side"] == "translated" else m["peer"]
+def mark_rects(m: dict, side: str = "translated", sync: bool = True) -> list:
+    """Khung của vệt tô trên bản `side` của PDF tải về (mặc định bản dịch): vệt tô ở chính bản đó thì khung của nó;
+    tô ở bản kia thì khung cụm/câu tương ứng — chỉ khi đang bật đồng bộ vệt tô (`sync`), tắt thì không có."""
+    if m["side"] == side:
+        return m["rects"]
+    return m["peer"] if sync else []
 
 
-def plan(marks: dict, notes: list[dict]) -> tuple[dict[str, str], dict[int, str]]:
-    """Ghi chú nào vào đâu trong PDF tải về: {id vệt tô: chữ} cho vệt có khung trên bản dịch (thành nội dung popup
+def plan(marks: dict, notes: list[dict], side: str = "translated",
+         sync: bool = True) -> tuple[dict[str, str], dict[int, str]]:
+    """Ghi chú nào vào đâu trong PDF tải về: {id vệt tô: chữ} cho vệt có khung trên bản `side` (thành nội dung popup
     của highlight đầu tiên của vệt đó), và {trang: chữ} cho phần còn lại — ghi chú của trang, của vệt đã bỏ hoặc
-    không có khung bên bản dịch, và ghi chú cả bài (trang 1) — thành biểu tượng ghi chú ở lề trên trang."""
-    drawn = {m["id"] for ms in marks.values() for m in ms if mark_rects(m)}
+    không có khung bên bản đó, và ghi chú cả bài (trang 1) — thành biểu tượng ghi chú ở lề trên trang."""
+    drawn = {m["id"] for ms in marks.values() for m in ms if mark_rects(m, side, sync)}
     by_mark: dict[str, list[dict]] = {}
     loose: dict[int, list[dict]] = {}
     for note in ordered(notes):

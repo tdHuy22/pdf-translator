@@ -115,7 +115,7 @@ function paintNoteDots(p) {
     if (!layer) continue;
     layer.querySelectorAll(".ndot").forEach(x => x.remove());
     for (const m of MARKS[p] || []) {
-      const rs = (m.side === kind ? m.rects : m.peer) || [];
+      const rs = (m.side === kind ? m.rects : syncOn() ? m.peer : []) || [];
       if (!withNote.has(m.id) || !rs.length) continue;
       const r = rs[rs.length - 1], d = document.createElement("span");
       d.className = "ndot";
