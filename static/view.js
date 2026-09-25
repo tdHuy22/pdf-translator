@@ -115,19 +115,32 @@ $("cols").addEventListener("load", e => { if (e.target.tagName === "IMG") sharpe
 window.addEventListener("scroll", sharpenSoon, { passive: true });
 
 // ---------------- Kính lúp: giữ ⌥ Option / Alt trong khi rê chuột trên trang
-const lens = $("lens");
+// Phóng ×2,5 từ ảnh đang hiện thì mờ (ở 100% ảnh chỉ vẽ ×2), nên kính lúp tải riêng bản ×4 của trang đó; trong lúc
+// chờ thì soi tạm trên ảnh đang hiện. Bản ×4 đã tải được nhớ lại (trình duyệt cũng giữ trong bộ nhớ đệm).
+const lens = $("lens"), LENS_K = 2.5, HI = new Map();       // url ảnh đang hiện → url bản ×4 đã tải xong
 let mouse = null;
+function hiRes(img) {
+  const u = new URL(img.src, location.href);
+  if (qOf(img) >= 4) return img.src;
+  if (HI.has(img.src)) return HI.get(img.src) || img.src;  // "" = đang tải
+  u.searchParams.set("zoom", 4);
+  const hi = u.pathname + u.search, pre = new Image(), key = img.src;
+  HI.set(key, "");
+  pre.onload = () => { HI.set(key, hi); if (!lens.hidden && mouse) lensAt(mouse); };
+  pre.onerror = () => HI.delete(key);
+  pre.src = hi;
+  return img.src;
+}
 function lensAt(ev) {
   const img = ev && document.elementFromPoint(ev.clientX, ev.clientY)?.closest(".page")?.querySelector("img");
   if (!img || !img.naturalWidth) { lens.hidden = true; return; }
-  sharpen(img);
-  const r = img.getBoundingClientRect(), k = 2.5, R = lens.offsetWidth / 2 || 120;
+  const r = img.getBoundingClientRect(), R = lens.offsetWidth / 2 || 120;
   lens.hidden = false;
   lens.style.left = ev.clientX - R + "px";
   lens.style.top = ev.clientY - R + "px";
-  lens.style.backgroundImage = `url("${img.src}")`;
-  lens.style.backgroundSize = `${r.width * k}px ${r.height * k}px`;
-  lens.style.backgroundPosition = `${R - (ev.clientX - r.left) * k}px ${R - (ev.clientY - r.top) * k}px`;
+  lens.style.backgroundImage = `url("${hiRes(img)}")`;
+  lens.style.backgroundSize = `${r.width * LENS_K}px ${r.height * LENS_K}px`;
+  lens.style.backgroundPosition = `${R - (ev.clientX - r.left) * LENS_K}px ${R - (ev.clientY - r.top) * LENS_K}px`;
 }
 document.addEventListener("mousemove", e => {
   mouse = e;

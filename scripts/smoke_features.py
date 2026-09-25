@@ -355,6 +355,39 @@ with TestClient(A.app) as c:
     ok(3 not in c.get(f"/api/{bid}/state").json()["done"], "thôi giữ bản gốc → trang về chưa dịch")
 A.chat = _fc
 
+print("12. Sửa sau rà soát (25/09/2026)")
+vis = lambda q: bool(A._Q_VISUAL.search(q) or A._Q_FIG.search(q) or A._Q_TAB.search(q))  # noqa: E731
+ok(not any(vis(q) for q in ["Mô hình này khác BERT thế nào?", "Bảng thuật ngữ dịch attention là gì", "Mô hình 2 lớp?",
+                            "Hình thức huấn luyện?", "Tình hình nghiên cứu?"])
+   and all(vis(q) for q in ["Hình 2 nói gì?", "Trong hình, mũi tên chỉ gì?", "Bảng 3?", "Giải thích công thức (1)"]),
+   "“mô hình”, “bảng thuật ngữ”… không bị coi là hỏi về hình/bảng; “Hình 2”, “công thức” thì có")
+with TestClient(A.app) as c:
+    with open(ROOT / "data/attention-is-all-you-need.pdf", "rb") as f:
+        aid = c.post("/api/upload", files={"file": ("att2.pdf", f, "application/pdf")}).json()["id"]
+    d = A.DOCS[aid]
+    c.get(f"/api/{aid}/page/3/layer")
+    ok("⟦Attention(Q, K, V ) = softmax(QKT √dk )V⟧" in A.page_pair(d, 3, "source"),
+       "công thức đứng riêng dòng có trong chữ gửi LLM (Attention, tr.4)")
+    real = A.chat_stream
+    async def eyes_fail(cfg_, system, messages, num_ctx=0):
+        if messages[-1].get("images"):
+            raise A.LLMError("Lỗi LLM 429: rate-limited")
+        async for x in real(cfg_, system, messages, num_ctx):
+            yield x
+    A.chat_stream = eyes_fail
+    c2 = {**cfg, "see_base_url": "https://see/v1", "see_model": "eye"}
+    r = c.post(f"/api/{aid}/chat", json={"cfg": c2, "question": "Hình 2 vẽ gì?", "page": 0})
+    info = json.loads(r.headers["x-context"])
+    ok(r.text == "Trả lời thử." and info["images"] == [] and info["model"] == "m" and "model xem ảnh lỗi" in info["why"],
+       "model xem ảnh lỗi → tự hỏi lại model trò chuyện chỉ với chữ (header nói đúng)")
+    A.chat_stream = real
+    c.post(f"/api/{aid}/translate/5?span=1", json={**cfg, "instruction": "Giữ nguyên tên riêng", "instruction_scope": "page"})
+    r = c.post(f"/api/{aid}/translate/4?span=3", json=cfg).json()
+    ok([p["page"] for p in r["pages"]] == [4], "trang có yêu cầu dịch riêng không bị gộp vào nhóm của trang khác")
+    A.DOCS.clear()                                     # khởi động lại app: khối nạp từ state.json (toạ độ dạng list)
+    r = c.post(f"/api/{aid}/translate/3?span=1&force=true", json=cfg)
+    ok(r.status_code == 200, "dịch lại trang có công thức sau khi khởi động lại app (trước đây lỗi 500)")
+
 print("9. Nhà cung cấp, thông tin model")
 with TestClient(A.app) as c:
     ps = c.get("/api/providers").json()["providers"]

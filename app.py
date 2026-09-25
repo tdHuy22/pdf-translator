@@ -1604,7 +1604,8 @@ def formula_source(src: pymupdf.Document, pno: int, formulas: list[dict]) -> pym
     khác (vd. "ma v" trên √d_k); redact theo ô cũng không được vì khung √ trùm lên chữ dòng trên, xoá chữ là mất √.
     → lọc từng ký tự theo toạ độ chân chữ bằng bộ lọc nội dung của MuPDF (API nội bộ của PyMuPDF; lỗi thì chép nguyên)."""
     global _warned_filter
-    own = {k for f in formulas for k in f["chars"]}
+    # tuple(): khối nạp lại từ state.json (khởi động lại app) có toạ độ dạng list — không cho vào set được
+    own = {tuple(k) for f in formulas for k in f["chars"]}
     doc = pymupdf.open()
     doc.insert_pdf(src, from_page=pno, to_page=pno)
     try:
@@ -2905,7 +2906,8 @@ async def grow_group(d: dict, n: int, cfg: Config, span: int, system: str, got: 
     trang: câu ngắt qua trang được dịch liền mạch, đoạn trùng chữ (đầu bảng lặp ở trang sau) chỉ dịch một lần,
     và prompt hệ thống chỉ phải đọc một lần cho cả nhóm.
     Trang phải OCR thì dừng nhóm ở đó: OCR mất 30–70 giây/trang, gộp vào là người dùng chờ cả nhóm mới thấy gì.
-    `force` (dịch lại một dải trang): trang đã dịch cũng được gộp vào."""
+    `force` (dịch lại một dải trang): trang đã dịch cũng được gộp vào. Trang có yêu cầu dịch riêng khác trang n thì
+    dừng nhóm ở đó (xem instruction_text)."""
     limit = min(span, cfg.page_span or MAX_SPAN)
     if cfg.translator != "llm" or limit <= 1:
         return []
@@ -2914,6 +2916,10 @@ async def grow_group(d: dict, n: int, cfg: Config, span: int, system: str, got: 
     size = sum(item_tokens(b) for b in got[n][0])
     for m in range(n + 1, min(n + limit, d["out"].page_count)):
         if (m in d["done"] and not force) or (nxt := await page_blocks(d, m, cfg, allow_ocr=False)) is None:
+            break
+        # một lượt gọi chỉ có MỘT system prompt: trang có yêu cầu dịch riêng (đã nhớ) khác trang đầu nhóm thì để
+        # lượt sau, không thì yêu cầu của nó bị bỏ qua
+        if d.get("instr", {}).get(m, "") != d.get("instr", {}).get(n, ""):
             break
         new = [b for b in nxt[0] if b["text"] not in texts]
         add = sum(item_tokens(b) for b in new)
@@ -3551,6 +3557,59 @@ def formula_text(page: pymupdf.Page, f: dict) -> str:
     return " ".join("".join(out).split())
 
 
+_EQ_NO = re.compile(r"\(\s*\d{1,3}[a-z]?\s*\)\s*$")
+
+
+def display_formulas(page: pymupdf.Page, blocks: list[dict]) -> list[tuple[pymupdf.Rect, str]]:
+    """Công thức đứng riêng dòng (layout bỏ qua khi trích đoạn để dịch, nên không nằm trong đoạn nào): các dòng chữ
+    nằm ngoài mọi đoạn, gom theo khoảng cách dọc (tử số / mẫu số / số hiệu công thức là các dòng riêng), giữ nhóm
+    có ≥ 30% ký tự in bằng font công thức, hoặc có "=" và số hiệu "(1)" ở cuối."""
+    boxes = [pymupdf.Rect(b["bbox"]) + (-1, -1, 1, 1) for b in blocks]
+    cand = []
+    for blk in page.get_text("dict", flags=pymupdf.TEXT_MEDIABOX_CLIP)["blocks"]:
+        for ln in blk.get("lines", ()):
+            if abs(ln["dir"][1]) > 0.1:                        # chữ xoay dọc bên lề (arXiv…)
+                continue
+            r = pymupdf.Rect(ln["bbox"])
+            if any(bx.contains((r.tl + r.br) / 2) for bx in boxes):
+                continue
+            text = "".join(sp["text"] for sp in ln["spans"])
+            chars = sum(len(sp["text"].strip()) for sp in ln["spans"])
+            math = sum(len(sp["text"].strip()) for sp in ln["spans"] if MATH_FONT.search(sp["font"]))
+            if text.strip():
+                cand.append([r, text.strip(), chars, math])
+    cand.sort(key=lambda c: (c[0].y0, c[0].x0))
+    # gom: dòng cách nhóm theo chiều dọc < 1,6 dòng và chồng nhau theo chiều ngang (±60pt: số hiệu công thức ở lề
+    # phải, dấu ngoặc lớn của ma trận). Gộp lặp tới khi không gộp thêm được (ma trận nhiều tầng tới từ nhiều phía).
+    groups = [[pymupdf.Rect(c[0]), [(c[0].y0, c[0].x0, c[1])], c[2], c[3]] for c in cand]
+    near = lambda a, b: (b.y0 - a.y1 < 1.6 * max(min(a.height, b.height), 6) and a.y0 - b.y1 < 1.6 * max(min(a.height, b.height), 6)  # noqa: E731
+                         and a.x0 < b.x1 + 60 and a.x1 > b.x0 - 60)
+    merged = True
+    while merged:
+        merged = False
+        for i in range(len(groups)):
+            for j in range(i + 1, len(groups)):
+                if near(groups[i][0], groups[j][0]):
+                    gi, gj = groups[i], groups.pop(j)
+                    gi[0] |= gj[0]
+                    gi[1] += gj[1]
+                    gi[2] += gj[2]
+                    gi[3] += gj[3]
+                    merged = True
+                    break
+            if merged:
+                break
+    groups = [[r, [t for *_, t in sorted(lines)], c, m] for r, lines, c, m in groups]
+    out = []
+    for r, lines, chars, math in groups:
+        text = " ".join(lines)
+        if chars < 3 or chars > 2000 or r.width < 30:
+            continue
+        if math >= 0.3 * chars or ("=" in text and _EQ_NO.search(text)):
+            out.append((r, text if len(text) <= 700 else text[:700] + " …"))   # ma trận lớn: đủ biết là gì
+    return out
+
+
 def page_pair(d: dict, n: int, mode: str = "pair") -> str:
     """Chữ của một trang để gửi LLM, ghép theo từng đoạn. `mode`: "pair" = chữ gốc kèm bản dịch tiếng Việt,
     "source" = chỉ chữ gốc (đỡ nửa số token), "translation" = chỉ bản dịch (đoạn chưa dịch thì chữ gốc).
@@ -3563,7 +3622,16 @@ def page_pair(d: dict, n: int, mode: str = "pair") -> str:
     tr = d["trans"].get(n, {})
     ftext = d.setdefault("ftext", {})         # (trang, đoạn) → [chữ từng công thức]: đọc glyph một lần thôi
     page = None
-    parts = []
+    # công thức đứng riêng dòng → chèn ngay sau đoạn nằm trên nó (cùng cột), để LLM đọc đúng mạch "… as: <công thức>"
+    if ("disp", n) not in ftext:
+        page = pymupdf.open(d["src"])[n]
+        ftext["disp", n] = [(tuple(r), t) for r, t in display_formulas(page, blocks)]
+    after: dict[int, list[str]] = collections.defaultdict(list)
+    for r, t in ftext["disp", n]:
+        above = [(b["bbox"][3], i) for i, b in enumerate(blocks)
+                 if b["bbox"][3] <= r[1] + 2 and b["bbox"][0] < r[2] and b["bbox"][2] > r[0]]
+        after[max(above)[1] if above else -1].append(f"[công thức] ⟦{t}⟧")
+    parts = list(after.get(-1, []))
     for i, b in enumerate(blocks):
         src, vi = untag(b["text"]), untag(tr.get(i, ""))
         if b.get("formulas") and "{v" in src + vi:
@@ -3579,6 +3647,7 @@ def page_pair(d: dict, n: int, mode: str = "pair") -> str:
             parts.append(f"[{i}] {vi or src}")
         else:
             parts.append(f"[{i}] {src}" + (f"\n    → {vi}" if vi and vi != src else ""))
+        parts += after.get(i, [])
     return "\n".join(parts)
 
 
@@ -3631,10 +3700,17 @@ class ChatAsk(BaseModel):
 # ---------------- Chọn ngữ cảnh cho câu hỏi
 # Luật cố định (không hỏi thêm LLM → không chậm thêm), giải thích được: giao diện hiện lý do dưới câu trả lời.
 _Q_PAGE = re.compile(r"(?:\btrang|\btr\.|\bpage|\bp\.)\s*(\d{1,4})\b", re.I)
-_Q_FIG = re.compile(r"(?:\bhình|\bfigure|\bfig\.?)\s*(\d{1,3})\b", re.I)
+# "hình"/"bảng" đứng một mình KHÔNG đủ: tiếng Việt viết rời từng âm tiết nên "mô hình", "hình thức", "tình hình",
+# "bảng thuật ngữ" đều chứa đúng chữ đó (đo 25/09/2026: "Mô hình này khác BERT thế nào?" bị gửi ảnh trang).
+# Chỉ tính khi có số ("Hình 2") hoặc trong cụm chắc chắn là nói về hình/bảng của bài.
+_NOT_FIG = r"(?<!mô )(?<!tình )(?<!định )(?<!địa )(?<!điển )(?<!mẫu )(?<!hữu )(?<!vô )"
+_Q_FIG = re.compile(rf"(?:{_NOT_FIG}\bhình|\bfigure|\bfig\.?)\s*(\d{{1,3}})\b", re.I)
 _Q_TAB = re.compile(r"(?:\bbảng|\btable|\btab\.)\s*(\d{1,3})\b", re.I)
-_Q_VISUAL = re.compile(r"\b(?:hình|biểu đồ|đồ thị|sơ đồ|bảng|figure|fig|table|chart|plot|graph|diagram|công thức|"
-                       r"phương trình|equation|ký hiệu|kí hiệu|trục|đường cong|màu)\b", re.I)
+_Q_VISUAL = re.compile(
+    r"\b(?:biểu đồ|đồ thị|sơ đồ|công thức|phương trình|ký hiệu|kí hiệu|đường cong|trục (?:x|y|hoành|tung)|"
+    r"figures?|fig|tables?|charts?|plots?|graphs?|diagrams?|equations?|eq|formulas?|axis|axes)\b"
+    rf"|(?:{_NOT_FIG}\bhình (?:vẽ|ảnh|minh hoạ|minh họa|này|trên|dưới|bên|đó|kia)\b|\btrong hình\b)"
+    r"|\bbảng (?:này|trên|dưới|đó|kết quả|số liệu|so sánh)\b|\btrong bảng\b(?! thuật ngữ)", re.I)
 _Q_GLOBAL = re.compile(r"tóm tắt|tổng quan|tổng kết|cả bài|toàn bài|toàn bộ|cả tài liệu|đóng góp|kết luận|hạn chế|"
                        r"ý chính|nội dung chính|bài (?:này|báo) (?:nói|đề xuất|làm|giải quyết)|summar|overview|"
                        r"contribution|conclusion|limitation", re.I)
@@ -3909,49 +3985,84 @@ async def doc_chat(doc_id: str, ask: ChatAsk):
     user_msg = msgs[-1]
 
     see = see_cfg(cfg0)
-    cfg = chat_cfg(cfg0)
-    kind, n_ctx, _ = await server_info(cfg.base_url, cfg.model)
-    # server tự host: num_ctx lớn là tốn RAM/VRAM → 16k; API ngoài thì theo ngữ cảnh thật của model (tối đa 128k)
-    ctx = min(n_ctx, 16384) if kind in ("ollama", "llamacpp") else min(n_ctx, 131072)
     if "outline" not in d:
         src = pymupdf.open(d["src"])
         d["outline"] = await asyncio.to_thread(doc_outline, src)
         # Tên bài vốn chỉ được đặt khi lập bảng thuật ngữ; tắt bảng tự lập thì phần trò chuyện mất luôn tên bài
         d.setdefault("title", await asyncio.to_thread(doc_title, src))
     gloss, outline = glossary_text(cfg0, d), d["outline"]
-    system = "\n\n".join(x for x in (
+    base_system = "\n\n".join(x for x in (
         CHAT_PROMPT,
         f'Tên bài: "{d["title"]}"' if d.get("title") else "",
         "Bảng thuật ngữ (dùng đúng cách dịch này):\n" + gloss if gloss else "",
         "Mục lục bài:\n" + "\n".join(outline) if outline else "",
     ) if x)
-    budget = max(int(0.55 * ctx) - est_tokens(system), 400)
-    plan = await asyncio.to_thread(chat_plan, d, ask, question, budget, see is not None)
+
+    async def limits(c: Config, n_img: int = 0) -> tuple[int, int]:
+        """(ngữ cảnh gửi server, ngân sách token cho phần tài liệu). Server tự host: num_ctx lớn là tốn RAM/VRAM → 16k;
+        API ngoài thì theo ngữ cảnh thật của model (tối đa 128k). Mỗi ảnh trang tính ~1500 token."""
+        kind, n_ctx, _ = await server_info(c.base_url, c.model)
+        ctx_ = min(n_ctx, 16384) if kind in ("ollama", "llamacpp") else min(n_ctx, 131072)
+        return ctx_, max(int(0.55 * ctx_) - est_tokens(base_system) - 1500 * n_img, 400)
+
+    async def prepare(plan: dict, c: Config) -> tuple[str, list[dict], int, dict]:
+        """System prompt, lịch sử (câu cuối kèm ngữ cảnh, ảnh), ngữ cảnh gửi server, và thông tin ngữ cảnh cho giao diện."""
+        ctx_, budget = await limits(c, len(plan["images"]))
+        if plan["mode"] != "full":    # không hỏi cả bài: trang chính + liên quan + lân cận là đủ, gửi cả bài chỉ làm
+            budget = min(budget, CHAT_BUDGET)   # chậm và loãng câu trả lời (model 128k+ sẽ nhận nguyên bài)
+        ctxt, sent = await asyncio.to_thread(chat_context, d, ask, plan, budget)
+        hist = C.history(sess)
+        if ctxt:
+            hist[-1] = {**hist[-1], "content": f"{ctxt}\n\n[Câu hỏi]\n{hist[-1]['content']}"}
+        system_ = base_system
+        if plan["images"]:
+            hist[-1]["images"] = [await asyncio.to_thread(page_image, d, n) for n in plan["images"]]
+            system_ += ("\n\nKèm theo câu hỏi là ảnh các trang: " + ", ".join(str(n + 1) for n in plan["images"])
+                        + ". Đọc hình, bảng, công thức trực tiếp trên ảnh.")
+        else:
+            system_ += "\n\nCông thức trong chữ trích từ PDF nằm trong ⟦…⟧ (chép từ glyph nên có thể lộn xộn)."
+        info_ = {"mode": plan["mode"], "pages": [n + 1 for n in sent], "images": [n + 1 for n in plan["images"]],
+                 "model": c.model, "why": plan["why"]}
+        return system_, hist, ctx_, info_
+
+    cfg = chat_cfg(cfg0)
+    _, budget0 = await limits(cfg)
+    plan = await asyncio.to_thread(chat_plan, d, ask, question, budget0, see is not None)
     if plan["images"]:              # trả lời bằng model xem ảnh; ngữ cảnh chữ theo ngữ cảnh của model đó
         cfg = see
-        kind2, n2, _ = await server_info(cfg.base_url, cfg.model)
-        ctx = min(n2, 16384) if kind2 in ("ollama", "llamacpp") else min(n2, 131072)
-        budget = max(int(0.55 * ctx) - est_tokens(system) - 1500 * len(plan["images"]), 400)
-    if plan["mode"] != "full":        # không phải hỏi cả bài: trang chính + liên quan + lân cận là đủ, gửi cả bài chỉ
-        budget = min(budget, CHAT_BUDGET)   # làm chậm và loãng câu trả lời (model 128k+ sẽ nhận nguyên bài)
-    ctxt, sent = await asyncio.to_thread(chat_context, d, ask, plan, budget)
-    history = C.history(sess)
-    if ctxt:
-        history[-1] = {**history[-1], "content": f"{ctxt}\n\n[Câu hỏi]\n{history[-1]['content']}"}
-    if plan["images"]:
-        history[-1]["images"] = [await asyncio.to_thread(page_image, d, n) for n in plan["images"]]
-        system += ("\n\nKèm theo câu hỏi là ảnh các trang: " + ", ".join(str(n + 1) for n in plan["images"])
-                   + ". Đọc hình, bảng, công thức trực tiếp trên ảnh.")
-    else:
-        system += "\n\nCông thức trong chữ trích từ PDF nằm trong ⟦…⟧ (chép từ glyph nên có thể lộn xộn)."
-    info = {"mode": plan["mode"], "pages": [n + 1 for n in sent], "images": [n + 1 for n in plan["images"]],
-            "model": cfg.model, "why": plan["why"]}
+    system, history, ctx, info = await prepare(plan, cfg)
     C.save(store.folder(doc_id), sessions)
 
-    async def gen():
-        acc, stopped, failed = "", True, False
+    # Lấy mẩu chữ đầu tiên TRƯỚC khi trả response: model xem ảnh lỗi ngay (429, quá tải, không nhận ảnh) thì còn kịp
+    # hỏi lại bằng model trò chuyện chỉ với chữ — và header X-Context nói đúng ngữ cảnh đã dùng.
+    stream, first, error = chat_stream(cfg, system, history, ctx), "", None
+    try:
+        first = await stream.__anext__()
+    except StopAsyncIteration:
+        pass
+    except LLMError as e:
+        error = e
+    if error is not None and plan["images"]:
+        await stream.aclose()
+        plan = {**plan, "images": [], "why": f"{plan['why']}; model xem ảnh lỗi ({str(error)[:120]}) → chỉ gửi chữ"}
+        cfg = chat_cfg(cfg0)
+        system, history, ctx, info = await prepare(plan, cfg)
+        stream, first, error = chat_stream(cfg, system, history, ctx), "", None
         try:
-            async for piece in chat_stream(cfg, system, history, ctx):
+            first = await stream.__anext__()
+        except StopAsyncIteration:
+            pass
+        except LLMError as e:
+            error = e
+
+    async def gen():
+        acc, stopped, failed = first, True, False
+        try:
+            if error is not None:
+                raise error
+            if first:
+                yield first
+            async for piece in stream:
                 acc += piece
                 yield piece
             stopped = False
@@ -3959,6 +4070,7 @@ async def doc_chat(doc_id: str, ask: ChatAsk):
             failed = True
             yield f"\n\n⚠️ {e}"
         finally:                      # cả khi người dùng bấm Dừng (kết nối bị ngắt): giữ phần đã trả lời
+            await stream.aclose()
             if acc.strip():
                 msgs.append(C.message("assistant", acc, model=cfg.model, ctx=info, stopped=stopped and not failed))
             elif not ask.regenerate and failed and user_msg in msgs:
