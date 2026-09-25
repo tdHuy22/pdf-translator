@@ -22,6 +22,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 A.store.ROOT = pathlib.Path(tempfile.mkdtemp(prefix="vietpaper-smoke-"))
 A.KEYS_FILE, A._keys = A.store.ROOT / "keys.json", {}   # không đụng key thật trong data/keys.json
 A.USER_TERMS_FILE = A.store.ROOT / "user_terms.json"    # …và thuật ngữ người dùng đã dạy (data/user_terms.json)
+A.PROVIDERS_FILE = A.store.ROOT / "providers.json"      # …và nhà cung cấp người dùng đã lưu (data/providers.json)
 A._uterms.clear()
 A._uterms.update(blocked={}, prefer={})
 A.load_keys = lambda: None
@@ -249,6 +250,29 @@ with TestClient(A.app) as c:
        "xoá tài liệu → không mở lại được nữa")
     A.store.save_state(d_live)                      # một việc của bài (đang dịch / lập thuật ngữ) xong SAU khi bài bị xoá
     ok(not A.store.folder(did).exists(), "việc còn chạy của bài đã xoá không lỗi, không làm bài sống lại")
+
+print("9. Nhà cung cấp, thông tin model")
+with TestClient(A.app) as c:
+    ps = c.get("/api/providers").json()["providers"]
+    ok({"openrouter", "tuf", "chatgpt"} <= {p["id"] for p in ps} and not next(p for p in ps if p["id"] == "tuf")["builtin"],
+       "lần đầu: có sẵn + gieo TUF/ChatGPT thành nhà cung cấp của người dùng")
+    r = c.post("/api/providers", json={"name": "Máy Lab", "base_url": "http://lab:8000/v1/", "model": "m"}).json()
+    ok(r["id"] == "may-lab" and r["base_url"] == "http://lab:8000/v1", "thêm mới: id theo tên (bỏ dấu), bỏ / cuối URL")
+    r2 = c.post("/api/providers", json={"id": "may-lab", "name": "Máy Lab", "base_url": "http://lab:9000/v1"}).json()
+    ok(r2["id"] == "may-lab" and sum(p["id"] == "may-lab" for p in c.get("/api/providers").json()["providers"]) == 1,
+       "sửa theo id: không tạo bản trùng")
+    ok(c.post("/api/providers", json={"id": "openrouter", "name": "x", "base_url": "http://x"}).status_code == 400,
+       "không đè được nhà cung cấp có sẵn")
+    ok(c.post("/api/providers", json={"name": "Máy Lab", "base_url": "http://y"}).json()["id"] == "may-lab-2",
+       "trùng tên → id khác")
+    c.delete("/api/providers/may-lab")
+    ok("may-lab" not in {p["id"] for p in c.get("/api/providers").json()["providers"]}, "xoá")
+    ok(c.delete("/api/providers/openai").status_code == 404, "không xoá được nhà cung cấp có sẵn")
+m = A.model_meta({"id": "a/b:free", "context_length": 262144, "architecture": {"input_modalities": ["text", "image"]},
+                  "pricing": {"prompt": "0", "completion": "0"}})
+m2 = A.model_meta({"id": "local"})
+ok(m == {"id": "a/b:free", "name": "", "ctx": 262144, "vision": True, "free": True} and m2["vision"] is None and m2["free"] is None,
+   "thông tin model: OpenRouter có ctx/ảnh/free, server khác để trống (không đoán)")
 
 print("\nTẤT CẢ ĐỀU ĐẠT" if not FAIL else f"\n{len(FAIL)} MỤC SAI: " + "; ".join(FAIL))
 sys.exit(1 if FAIL else 0)

@@ -1,20 +1,7 @@
 const PADDLE_OCR = "hf.co/PaddlePaddle/PaddleOCR-VL-1.6-GGUF:latest";  // OCR tốt nhất đã đo (18/09/2026)
-const PRESETS = {  // model: model dịch mặc định, vision: model OCR mặc định, parallel: số vùng OCR gửi cùng lúc,
-                   // gloss: model lập bảng thuật ngữ mặc định (không có thì như model dịch)
-  ollama:     { base_url: "http://localhost:11434/v1", model: "qwen3.5:latest", vision: PADDLE_OCR, parallel: 4 },
-  llamacpp:   { base_url: "http://localhost:8080/v1",  model: "local", vision: "local", parallel: 1 },
-  // 4b chứ không phải 9b: bench 21/09/2026 hai model ngang nhau về nghĩa mà 4b nhanh gấp 4 lần (nằm trọn trên GPU)
-  tuf:        { base_url: "http://100.64.0.1:8080/v1", model: "4b", vision: "paddleocr-vl", parallel: 1 },
-  lmstudio:   { base_url: "http://localhost:1234/v1",  model: "", vision: "", parallel: 1 },
-  // gloss: model lập bảng thuật ngữ mặc định (bench_glossary 21/09/2026: Nemotron Ultra free lọc/dịch tốt hơn hẳn 4b)
-  openrouter: { base_url: "https://openrouter.ai/api/v1", model: "google/gemini-2.5-flash", vision: "google/gemini-2.5-flash", parallel: 4,
-                gloss: "nvidia/nemotron-3-ultra-550b-a55b:free" },
-  openai:     { base_url: "https://api.openai.com/v1", model: "gpt-4.1-mini", vision: "gpt-4.1-mini", parallel: 4 },
-  // Proxy OAuth tới tài khoản ChatGPT web (free) chạy trên TUF, chỉ vào được trong mạng LAN. gpt-6-luna căn vệt tô
-  // đúng nhất trong mọi model đã đo (bench_align 24/09/2026: 56/60, ~3 s/lần); không nhận `temperature` (app tự bỏ).
-  chatgpt:    { base_url: "http://192.168.1.10:10531/v1", model: "gpt-6-luna", parallel: 1 },
-  custom:     {},
-};
+// Nhà cung cấp: nạp từ server (/api/providers — có sẵn + của người dùng, xem app.py). Mỗi mục: base_url, model (dịch,
+// trò chuyện), vision (OCR), gloss (lập bảng thuật ngữ; không có thì như model), parallel (số vùng OCR cùng lúc).
+let PRESETS = { custom: {} };
 const $ = id => document.getElementById(id);
 // Ô chữ thường (lưu nguyên giá trị) và ô đánh dấu (lưu .checked). API key lưu riêng theo server, xem KEY_OF.
 const FIELDS = ["preset","ocr_preset","chat_preset","base_url","model","temperature","concurrency","glossary",
@@ -54,13 +41,14 @@ const fillKeys = () => Object.keys(KEY_OF).forEach(fillKey);
 function loadSettings() {
   let s = {};
   try { s = JSON.parse(localStorage.getItem("llm") || "{}"); } catch {}
-  s = { preset:"ollama", ...PRESETS.ollama, temperature:0.2, concurrency:1, glossary:"", glossary_auto:true, ...s };
+  const P = id => PRESETS[id] || {};
+  s = { preset:"ollama", base_url:P("ollama").base_url, model:P("ollama").model, temperature:0.2, concurrency:1, glossary:"", glossary_auto:true, ...s };
   s = { ocr_preset:"ollama", chat_preset:"ollama", translator:"llm", length_ratio:1.3, page_span:0, ocr_mode:"auto",
         ocr_engine:"rapidocr", ocr_lang:"eng", ocr_vlm_base_url:"http://localhost:11434/v1", ocr_vlm_model:PADDLE_OCR,
         ocr_vlm_concurrency:4, ocr_custom_url:"", google_fallback:true, chat_same:true, chat_base_url:"",
-        chat_model:"", gloss_preset:"openrouter", gloss_same:true, gloss_base_url:PRESETS.openrouter.base_url,
-        gloss_model:PRESETS.openrouter.gloss, align_llm:true, align_same:false, align_preset:"chatgpt",
-        align_base_url:PRESETS.chatgpt.base_url, align_model:PRESETS.chatgpt.model, sync_marks:false, font_serif:"auto", font_sans:"auto", font_mono:"auto", ...s };
+        chat_model:"", gloss_preset:"openrouter", gloss_same:true, gloss_base_url:P("openrouter").base_url,
+        gloss_model:P("openrouter").gloss, align_llm:true, align_same:false, align_preset:"chatgpt",
+        align_base_url:P("chatgpt").base_url, align_model:P("chatgpt").model, sync_marks:false, font_serif:"auto", font_sans:"auto", font_mono:"auto", ...s };
   const ver = s.settings_v || 1;
   // v2: model OCR mặc định đổi từ qwen3.5 sang PaddleOCR-VL — cập nhật cài đặt cũ còn để mặc định cũ
   if (ver < 2 && s.ocr_vlm_model === "qwen3.5:latest") s.ocr_vlm_model = PADDLE_OCR;
@@ -80,9 +68,11 @@ function loadSettings() {
   // v4: căn vệt tô mặc định đổi từ 4b trên TUF sang gpt-6-luna qua proxy ChatGPT — đổi cài đặt còn để mặc định cũ
   if (ver < 4 && s.align_preset === "tuf" && s.align_model === "4b") {
     $("align_preset").value = "chatgpt";
-    $("align_base_url").value = PRESETS.chatgpt.base_url;
-    $("align_model").value = PRESETS.chatgpt.model;
+    $("align_base_url").value = P("chatgpt").base_url || "";
+    $("align_model").value = P("chatgpt").model || "";
   }
+  // nhà cung cấp đã lưu không còn (đã xoá) → "Tùy chỉnh", giữ nguyên Base URL và model đang có
+  document.querySelectorAll("select.provider-sel").forEach(sel => { if (!sel.value) sel.value = "custom"; });
   fillKeys();
   toggleOpts();
   saveSettings();
@@ -147,38 +137,208 @@ Object.keys(KEY_OF).forEach(f => $(f).addEventListener("change", () => rememberK
 Object.values(KEY_OF).filter(u => u !== "ocrspace").forEach(u => $(u).addEventListener("change", fillKeys));
 $("btnSet").onclick = () => $("settings").classList.toggle("open");
 
-// Cùng một khối "nhà cung cấp" cho dịch, OCR (Vision LLM) và trò chuyện
+// ---------------- Nhà cung cấp
+async function loadProviders() {
+  try {
+    const { providers } = await (await fetch("/api/providers")).json();
+    PRESETS = { custom: {} };
+    for (const p of providers) PRESETS[p.id] = p;
+  } catch {}
+  document.querySelectorAll("select.provider-sel").forEach(sel => {
+    const cur = sel.value;
+    sel.innerHTML = Object.values(PRESETS).filter(p => p.id).map(p =>
+      `<option value="${esc(p.id)}">${esc(p.name)}${p.builtin ? "" : " ★"}</option>`).join("") +
+      `<option value="custom">Tùy chỉnh (OpenAI-compatible)</option>`;
+    if (cur) sel.value = PRESETS[cur] ? cur : "custom";
+  });
+  drawProviders();
+}
+
+// Cùng một khối "nhà cung cấp" cho dịch, OCR (Vision LLM), trò chuyện, thuật ngữ, căn vệt tô
 function bindProvider(ids, modelKey) {
   $(ids.preset).addEventListener("change", () => {
     const p = PRESETS[$(ids.preset).value];
     if (p.base_url) $(ids.base).value = p.base_url;
-    const m = p[modelKey] ?? (ids.fallback ? p[ids.fallback] : undefined);
-    if (m !== undefined) $(ids.model).value = m;
+    const m = p[modelKey] || (ids.fallback ? p[ids.fallback] : undefined);
+    if (m !== undefined && p.id) $(ids.model).value = m;
     if (ids.parallel && p.parallel) $(ids.parallel).value = p.parallel;
-    $(ids.list).style.display = "none";
     fillKeys();
     saveSettings();
   });
-  $(ids.list).onchange = e => { if (e.target.value) { $(ids.model).value = e.target.value; saveSettings(); } };
-  $(ids.btn).onclick = async () => {
-    try {
-      const r = await fetch("/api/models", { method:"POST", headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({ base_url:$(ids.base).value, api_key:$(ids.key).value }) });
-      if (!r.ok) throw new Error(await r.text());
-      const { models } = await r.json(), sel = $(ids.list), cur = $(ids.model).value;
-      sel.innerHTML = `<option value="">— chọn model (${models.length}) —</option>` +
-        models.map(m => `<option value="${m}"${m === cur ? " selected" : ""}>${m}</option>`).join("");
-      sel.style.display = models.length ? "block" : "none";
-      setStatus(`Tìm thấy ${models.length} model`);
-      loadKeys();
-    } catch (e) { alert("Không lấy được danh sách model: " + e.message); }
-  };
+  document.querySelector(`.psave[data-for="${ids.preset}"]`).onclick = () => quickSaveProvider(ids, modelKey);
+  modelPicker(ids);
 }
-bindProvider({ preset:"preset", base:"base_url", key:"api_key", model:"model", btn:"btnModels", list:"models" }, "model");
-bindProvider({ preset:"ocr_preset", base:"ocr_vlm_base_url", key:"ocr_vlm_api_key", model:"ocr_vlm_model", btn:"btnOcrModels", list:"ocr_models", parallel:"ocr_vlm_concurrency" }, "vision");
-bindProvider({ preset:"chat_preset", base:"chat_base_url", key:"chat_api_key", model:"chat_model", btn:"btnChatModels", list:"chat_models" }, "model");
-bindProvider({ preset:"align_preset", base:"align_base_url", key:"align_api_key", model:"align_model", btn:"btnAlignModels", list:"align_models" }, "model");
-bindProvider({ preset:"gloss_preset", base:"gloss_base_url", key:"gloss_api_key", model:"gloss_model", btn:"btnGlossModels", list:"gloss_models", fallback:"model" }, "gloss");
+
+/** 💾 cạnh ô nhà cung cấp: lưu Base URL + model đang nhập. Đang chọn nhà cung cấp của mình thì cập nhật nó (giữ tên),
+ *  đổi tên thì lưu thành nhà cung cấp mới. */
+async function quickSaveProvider(ids, modelKey) {
+  const cur = PRESETS[$(ids.preset).value], own = cur?.id && !cur.builtin;
+  const name = prompt(own ? `Cập nhật “${cur.name}” bằng Base URL + model đang nhập?\n(Đổi tên để lưu thành nhà cung cấp mới)`
+                          : "Tên nhà cung cấp mới (lưu Base URL + model đang nhập):", own ? cur.name : "");
+  if (!name?.trim()) return;
+  const same = own && name.trim() === cur.name;
+  const body = { ...(same ? cur : { model: "", vision: "", gloss: "", parallel: 1 }), id: same ? cur.id : "",
+                 name: name.trim(), base_url: $(ids.base).value, [modelKey]: $(ids.model).value };
+  if (ids.parallel) body.parallel = parseInt($(ids.parallel).value) || 1;
+  const r = await fetch("/api/providers", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) });
+  if (!r.ok) { alert("Không lưu được: " + ((await r.json().catch(() => ({}))).detail || r.statusText)); return; }
+  const saved = await r.json();
+  await loadProviders();
+  $(ids.preset).value = saved.id;
+  saveSettings();
+  setStatus(`Đã lưu nhà cung cấp “${saved.name}”`);
+}
+
+// ---------------- Ô model: gõ để lọc danh sách model của server (tải khi bấm vào ô, nhớ 24 giờ theo Base URL)
+const MODELS = {};                                         // base_url → [{id, name, ctx, vision, free}]
+const MODELS_TTL = 24 * 3600 * 1000;
+function cachedModels(base) {
+  if (MODELS[base]) return MODELS[base];
+  try {
+    const c = JSON.parse(localStorage.getItem("models:" + base) || "null");
+    if (c && Date.now() - c.t < MODELS_TTL && Array.isArray(c.models)) return (MODELS[base] = c.models);
+  } catch {}
+  return null;
+}
+async function fetchModels(base, key) {
+  const r = await fetch("/api/models", { method:"POST", headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({ base_url: base, api_key: key }) });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+  const models = (await r.json()).models.map(m => typeof m === "string" ? { id: m } : m);
+  MODELS[base] = models;
+  try { localStorage.setItem("models:" + base, JSON.stringify({ t: Date.now(), models })); } catch {}
+  loadKeys();
+  return models;
+}
+const recentModels = () => { try { return JSON.parse(localStorage.getItem("recent_models") || "[]"); } catch { return []; } };
+function useModel(id) {
+  const r = [id, ...recentModels().filter(x => x !== id)].slice(0, 30);
+  try { localStorage.setItem("recent_models", JSON.stringify(r)); } catch {}
+}
+const fmtCtx = n => n >= 1e6 ? Math.round(n / 1e5) / 10 + "M" : Math.round(n / 1024) + "k";
+function modelTags(m) {
+  return (m.free ? `<i class="free">free</i>` : "") + (m.vision ? `<i class="vis" title="đọc được ảnh">👁 ảnh</i>` : "") +
+         (m.ctx ? `<i title="ngữ cảnh">${fmtCtx(m.ctx)}</i>` : "");
+}
+function modelPicker(ids) {
+  const inp = $(ids.model), box = inp.parentElement.querySelector(".mlist");
+  let items = [], act = -1, typed = false;
+  const base = () => $(ids.base).value.trim().replace(/\/+$/, "");
+  const close = () => { box.hidden = true; act = -1; };
+  function render(models) {
+    const q = typed ? inp.value.trim().toLowerCase().split(/\s+/).filter(Boolean) : [];
+    const rec = recentModels(), cur = inp.value;
+    let list = models.filter(m => q.every(w => (m.id + " " + (m.name || "")).toLowerCase().includes(w)));
+    const rank = m => {
+      const id = m.id.toLowerCase(), tail = id.split("/").pop();
+      if (!q.length) return m.id === cur ? 0 : rec.includes(m.id) ? 1 + rec.indexOf(m.id) / 100 : 2;
+      return tail.startsWith(q[0]) || id.startsWith(q[0]) ? 0 : 1;
+    };
+    list = list.map(m => [rank(m), m]).sort((a, b) => a[0] - b[0] || a[1].id.localeCompare(b[1].id)).map(x => x[1]);
+    items = list.slice(0, 300);
+    act = typed && items.length ? 0 : -1;
+    box.innerHTML = items.length
+      ? items.map((m, i) => `<div class="mopt${m.id === cur ? " cur" : ""}${i === act ? " act" : ""}" data-i="${i}" title="${esc(m.name || m.id)}"><span>${esc(m.id)}</span>${modelTags(m)}</div>`).join("") +
+        (list.length > items.length ? `<div class="mhint">… còn ${list.length - items.length} model, gõ thêm để lọc</div>` : "")
+      : `<div class="mhint">${models.length ? "Không có model khớp — Enter để dùng đúng tên đã gõ" : "Server không trả về model nào"}</div>`;
+    box.hidden = false;
+  }
+  async function open(force = false) {
+    if (!base()) return;
+    let models = !force && cachedModels(base());
+    if (!models) {
+      box.hidden = false;
+      box.innerHTML = `<div class="mhint">Đang tải danh sách model…</div>`;
+      try { models = await fetchModels(base(), $(ids.key).value); }
+      catch (e) { box.innerHTML = `<div class="mhint">Không tải được danh sách model: ${esc(e.message)}</div>`; return; }
+      if (document.activeElement !== inp) return;
+    }
+    render(models);
+  }
+  function choose(m) {
+    inp.value = m.id;
+    useModel(m.id);
+    close();
+    saveSettings();
+  }
+  function move(k) {
+    if (!items.length) return;
+    act = (act + k + items.length) % items.length;
+    box.querySelectorAll(".mopt").forEach((el, i) => el.classList.toggle("act", i === act));
+    box.querySelector(".mopt.act")?.scrollIntoView({ block: "nearest" });
+  }
+  inp.addEventListener("focus", () => { typed = false; open(); });
+  inp.addEventListener("input", () => { typed = true; const m = cachedModels(base()); m ? render(m) : open(); });
+  inp.addEventListener("blur", () => setTimeout(close, 150));
+  inp.addEventListener("keydown", e => {
+    if (e.key === "ArrowDown") { e.preventDefault(); if (box.hidden) open(); else move(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
+    else if (e.key === "Enter") { e.preventDefault(); if (!box.hidden && act >= 0) choose(items[act]); else { close(); saveSettings(); } }
+    else if (e.key === "Escape" && !box.hidden) { e.stopPropagation(); close(); }
+  });
+  box.addEventListener("mousedown", e => {
+    e.preventDefault();                                    // giữ focus ở ô, không để blur đóng danh sách trước khi chọn
+    const el = e.target.closest(".mopt");
+    if (el) choose(items[+el.dataset.i]);
+  });
+  $(ids.btn).onclick = () => { inp.focus(); typed = false; open(true); };
+  $(ids.base).addEventListener("change", () => { if (!box.hidden) open(); });
+}
+
+// ---------------- Mục "Nhà cung cấp của bạn" trong Cấu hình
+let pvEdit = "";                                           // id đang sửa; rỗng = thêm mới
+function drawProviders() {
+  const own = Object.values(PRESETS).filter(p => p.id && !p.builtin);
+  $("pvtab").innerHTML = own.length ? `<tr><th>Tên</th><th>Base URL</th><th>Model</th><th>OCR</th><th>Thuật ngữ</th><th></th></tr>` +
+    own.map(p => `<tr data-id="${esc(p.id)}"><td><b>${esc(p.name)}</b></td><td>${esc(p.base_url)}</td><td>${esc(p.model)}</td>
+      <td>${esc(p.vision)}</td><td>${esc(p.gloss)}</td>
+      <td style="white-space:nowrap"><button type="button" class="pvedit">✏️</button><button type="button" class="pvdel">🗑</button></td></tr>`).join("")
+    : `<tr><td class="hint">Chưa có nhà cung cấp nào của bạn.</td></tr>`;
+}
+function pvForm(p = {}) {
+  pvEdit = p.id || "";
+  $("pv_name").value = p.name || ""; $("pv_base").value = p.base_url || ""; $("pv_model").value = p.model || "";
+  $("pv_vision").value = p.vision || ""; $("pv_gloss").value = p.gloss || ""; $("pv_parallel").value = p.parallel || 1;
+  $("pv_key").value = ""; $("pvMsg").textContent = pvEdit ? `đang sửa “${p.name}”` : "";
+  $("pvSave").textContent = pvEdit ? "Lưu thay đổi" : "Lưu nhà cung cấp";
+}
+$("pvtab").onclick = async e => {
+  const tr = e.target.closest("tr[data-id]"), p = tr && PRESETS[tr.dataset.id];
+  if (!p) return;
+  if (e.target.closest(".pvedit")) { pvForm(p); $("pv_name").focus(); }
+  if (e.target.closest(".pvdel")) {
+    if (!confirm(`Xoá nhà cung cấp “${p.name}”?\nÔ nào đang chọn nó sẽ chuyển sang “Tùy chỉnh”, giữ nguyên Base URL và model.`)) return;
+    await fetch(`/api/providers/${encodeURIComponent(p.id)}`, { method:"DELETE" });
+    await loadProviders();
+    document.querySelectorAll("select.provider-sel").forEach(sel => { if (!PRESETS[sel.value]) sel.value = "custom"; });
+    if (pvEdit === p.id) pvForm();
+    saveSettings();
+  }
+};
+$("pvNew").onclick = () => pvForm();
+$("pvSave").onclick = async () => {
+  const base = $("pv_base").value.trim().replace(/\/+$/, ""), key = $("pv_key").value.trim();
+  const body = { id: pvEdit, name: $("pv_name").value, base_url: base, model: $("pv_model").value.trim(),
+                 vision: $("pv_vision").value.trim(), gloss: $("pv_gloss").value.trim(),
+                 parallel: parseInt($("pv_parallel").value) || 1 };
+  const r = await fetch("/api/providers", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) });
+  if (!r.ok) { $("pvMsg").textContent = "❌ " + ((await r.json().catch(() => ({}))).detail || r.statusText); return; }
+  const saved = await r.json();
+  if (key) { const ks = keyStore(); ks[base] = key; try { localStorage.setItem("apikeys", JSON.stringify(ks)); } catch {} }
+  await loadProviders();
+  pvForm(saved);
+  // thử kết nối luôn: biết ngay Base URL/key đúng chưa (và server nhớ key theo Base URL)
+  $("pvMsg").textContent = "✓ đã lưu · đang thử kết nối…";
+  try { const n = (await fetchModels(base, key)).length; $("pvMsg").textContent = `✓ đã lưu · server trả về ${n} model`; }
+  catch (e) { $("pvMsg").textContent = `✓ đã lưu · ⚠️ chưa kết nối được: ${e.message}`; }
+  fillKeys();
+};
+
+bindProvider({ preset:"preset", base:"base_url", key:"api_key", model:"model", btn:"btnModels" }, "model");
+bindProvider({ preset:"ocr_preset", base:"ocr_vlm_base_url", key:"ocr_vlm_api_key", model:"ocr_vlm_model", btn:"btnOcrModels", parallel:"ocr_vlm_concurrency" }, "vision");
+bindProvider({ preset:"chat_preset", base:"chat_base_url", key:"chat_api_key", model:"chat_model", btn:"btnChatModels" }, "model");
+bindProvider({ preset:"align_preset", base:"align_base_url", key:"align_api_key", model:"align_model", btn:"btnAlignModels" }, "model");
+bindProvider({ preset:"gloss_preset", base:"gloss_base_url", key:"gloss_api_key", model:"gloss_model", btn:"btnGlossModels", fallback:"model" }, "gloss");
 
 async function loadKeys() {
   try { SERVER_KEYS = (await (await fetch("/api/keys")).json()).keys || {}; fillKeys(); } catch {}
@@ -1012,4 +1172,4 @@ async function loadFonts() {
     });
   } catch {}
 }
-loadFonts().then(loadKeys).then(loadSettings).then(() => restoreDoc());
+loadFonts().then(loadKeys).then(loadProviders).then(loadSettings).then(() => restoreDoc());

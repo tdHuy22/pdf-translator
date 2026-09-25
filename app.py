@@ -14,6 +14,7 @@ import heapq
 import io
 import json
 import math
+import os
 import re
 import threading
 import time
@@ -376,6 +377,110 @@ def forget_key(slot: str):
 
 
 load_keys()
+
+
+# ================================================================ Nhà cung cấp LLM
+# Mỗi nhà cung cấp = một server OpenAI-compatible + model mặc định cho từng việc: model (dịch, trò chuyện, căn vệt tô),
+# vision (OCR), gloss (lập bảng thuật ngữ; không có thì như model dịch), parallel (số vùng OCR gửi cùng lúc).
+# Có sẵn: BUILTIN (không sửa/xoá được). Của người dùng: data/providers.json — không chứa key (key lưu theo base_url,
+# xem keys.json ở trên). Lần đầu chạy thì gieo sẵn hai server riêng của người dùng trước đây nằm trong danh sách có sẵn.
+PADDLE_OCR = "hf.co/PaddlePaddle/PaddleOCR-VL-1.6-GGUF:latest"   # OCR tốt nhất đã đo (18/09/2026)
+BUILTIN_PROVIDERS = [
+    {"id": "ollama", "name": "Ollama (local)", "base_url": "http://localhost:11434/v1", "model": "qwen3.5:latest",
+     "vision": PADDLE_OCR, "parallel": 4},
+    {"id": "llamacpp", "name": "llama.cpp server (local)", "base_url": "http://localhost:8080/v1", "model": "local",
+     "vision": "local", "parallel": 1},
+    {"id": "lmstudio", "name": "LM Studio (local)", "base_url": "http://localhost:1234/v1", "model": "", "vision": "",
+     "parallel": 1},
+    # gloss: bench_glossary 21/09/2026 — Nemotron Ultra free lọc/dịch tốt hơn hẳn 4b
+    {"id": "openrouter", "name": "OpenRouter", "base_url": "https://openrouter.ai/api/v1",
+     "model": "google/gemini-2.5-flash", "vision": "google/gemini-2.5-flash", "parallel": 4,
+     "gloss": "nvidia/nemotron-3-ultra-550b-a55b:free"},
+    {"id": "openai", "name": "OpenAI", "base_url": "https://api.openai.com/v1", "model": "gpt-4.1-mini",
+     "vision": "gpt-4.1-mini", "parallel": 4},
+]
+SEED_PROVIDERS = [
+    # 4b chứ không phải 9b: bench 21/09/2026 hai model ngang nhau về nghĩa mà 4b nhanh gấp 4 lần (nằm trọn trên GPU)
+    {"id": "tuf", "name": "llama.cpp – server TUF (Tailscale)", "base_url": "http://100.64.0.1:8080/v1",
+     "model": "4b", "vision": "paddleocr-vl", "parallel": 1},
+    # Proxy OAuth tới tài khoản ChatGPT web (free) trên TUF, chỉ vào được trong LAN. gpt-6-luna căn vệt tô đúng nhất
+    # (bench_align 24/09/2026: 56/60, ~3 s/lần); không nhận `temperature` (app tự bỏ); không nhận ảnh (25/09/2026).
+    {"id": "chatgpt", "name": "ChatGPT (proxy OAuth trên TUF, mạng LAN)", "base_url": "http://192.168.1.10:10531/v1",
+     "model": "gpt-6-luna", "vision": "", "parallel": 1},
+]
+PROVIDERS_FILE = DATA / "providers.json"
+_PROVIDER_ID = re.compile(r"[a-z0-9][a-z0-9_-]{0,39}")
+
+
+class Provider(BaseModel):
+    id: str = ""                   # rỗng = mới (server đặt id theo tên)
+    name: str
+    base_url: str
+    model: str = ""
+    vision: str = ""
+    gloss: str = ""
+    parallel: int = 1
+
+
+def user_providers() -> list[dict]:
+    if not PROVIDERS_FILE.exists():
+        save_providers(SEED_PROVIDERS)
+    try:
+        return [x for x in json.loads(PROVIDERS_FILE.read_text()) if isinstance(x, dict) and x.get("id")]
+    except (OSError, ValueError):
+        return []
+
+
+def save_providers(items: list[dict]) -> None:
+    tmp = PROVIDERS_FILE.with_name(PROVIDERS_FILE.name + ".tmp")
+    tmp.write_text(json.dumps(items, indent=1, ensure_ascii=False))
+    os.replace(tmp, PROVIDERS_FILE)
+
+
+def _slug(name: str) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", unicodedata.normalize("NFKD", name.lower()).encode("ascii", "ignore").decode())
+    return s.strip("-")[:32] or "server"
+
+
+@app.get("/api/providers")
+def list_providers():
+    return {"providers": [{**p, "builtin": True} for p in BUILTIN_PROVIDERS]
+            + [{**p, "builtin": False} for p in user_providers()]}
+
+
+@app.post("/api/providers")
+def save_provider(p: Provider):
+    """Thêm (id rỗng) hoặc sửa một nhà cung cấp của người dùng. Không đè được nhà cung cấp có sẵn."""
+    if not p.name.strip() or not p.base_url.strip():
+        raise HTTPException(400, "Cần tên và Base URL")
+    builtin = {x["id"] for x in BUILTIN_PROVIDERS} | {"custom"}
+    items = user_providers()
+    pid = p.id
+    if not pid:
+        base, k, taken = _slug(p.name), 1, builtin | {x["id"] for x in items}
+        pid = base
+        while pid in taken:
+            k += 1
+            pid = f"{base}-{k}"
+    if pid in builtin or not _PROVIDER_ID.fullmatch(pid):
+        raise HTTPException(400, "Không sửa được nhà cung cấp có sẵn")
+    row = {**p.model_dump(), "id": pid, "name": p.name.strip(), "base_url": p.base_url.strip().rstrip("/"),
+           "parallel": max(1, min(p.parallel, 16))}
+    if any(x["id"] == pid for x in items):
+        items = [row if x["id"] == pid else x for x in items]
+    else:
+        items.append(row)
+    save_providers(items)
+    return {**row, "builtin": False}
+
+
+@app.delete("/api/providers/{pid}")
+def delete_provider(pid: str):
+    items = user_providers()
+    if not any(x["id"] == pid for x in items):
+        raise HTTPException(404, "Không có nhà cung cấp này (hoặc là nhà cung cấp có sẵn)")
+    save_providers([x for x in items if x["id"] != pid])
+    return {"deleted": pid}
 
 
 # ================================================================ PDF text extraction
@@ -3487,7 +3592,28 @@ async def list_models(cfg: Config):
     # llama.cpp router còn liệt kê model tự quét từ HF cache (--hf-repo) và mục "default"
     # không trỏ tới file nào -> chỉ giữ preset có --model. Server khác (không có status.args) giữ nguyên.
     presets = [m for m in data if "--model" in ((m.get("status") or {}).get("args") or [])]
-    return {"models": sorted(m["id"] for m in (presets or data))}
+    out = [model_meta(m) for m in (presets or data) if m.get("id")]
+    MODEL_META[cfg.base_url.rstrip("/")] = {m["id"]: m for m in out}
+    return {"models": sorted(out, key=lambda m: m["id"])}
+
+
+# base_url → {model id → model_meta}: lần gần nhất tải danh sách model (để biết model nào đọc được ảnh)
+MODEL_META: dict[str, dict[str, dict]] = {}
+
+
+def model_meta(m: dict) -> dict:
+    """Thông tin một model trong /models để hiện nhãn ở ô chọn model: ngữ cảnh, có đọc ảnh không, có miễn phí không.
+    Chỉ OpenRouter (và vài API khác) cho biết; không biết thì để None — không đoán."""
+    arch, price = m.get("architecture") or {}, m.get("pricing") or {}
+    mods = arch.get("input_modalities")
+    try:
+        free = float(price["prompt"]) == 0 and float(price["completion"]) == 0 if price else None
+    except (KeyError, TypeError, ValueError):
+        free = None
+    return {"id": m["id"], "name": m.get("name") or "",
+            "ctx": m.get("context_length") or (m.get("top_provider") or {}).get("context_length"),
+            "vision": ("image" in mods) if isinstance(mods, list) else None,
+            "free": True if m["id"].endswith(":free") else free}
 
 
 class NoCache(StaticFiles):

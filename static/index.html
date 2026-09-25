@@ -73,6 +73,23 @@
   #selbar.on { display:flex; }
   #selbar button { font-size:12px; padding:4px 8px; }
 
+  /* ---- Nhà cung cấp + ô chọn model gõ-để-lọc ---- */
+  .prow { display:flex; gap:4px; } .prow select { flex:1; min-width:0; }
+  .psave { padding:3px 6px; }
+  .mpick { position:relative; display:flex; gap:4px; } .mpick input { flex:1; min-width:0; }
+  .mlist { position:absolute; top:100%; left:0; min-width:100%; width:max-content; max-width:min(560px, 92vw); z-index:40; margin-top:2px; max-height:300px; overflow:auto;
+           background:var(--panel); border:1px solid var(--line); border-radius:6px; box-shadow:0 6px 18px rgba(0,0,0,.18); }
+  .mlist[hidden] { display:none; }
+  .mopt { display:flex; gap:6px; align-items:center; padding:4px 8px; font-size:12px; color:var(--text); cursor:pointer; }
+  .mopt span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mopt.act { background:#eef2ff; } .mopt.cur span { font-weight:600; }
+  .mopt i { font-style:normal; font-size:10px; padding:0 4px; border-radius:3px; background:#f3f4f6; color:var(--muted); }
+  .mopt i.free { background:#dcfce7; color:#166534; } .mopt i.vis { background:#e0e7ff; color:#3730a3; }
+  .mhint { padding:6px 8px; font-size:12px; color:var(--muted); }
+  #pvtab { width:100%; border-collapse:collapse; font-size:12px; }
+  #pvtab td, #pvtab th { padding:3px 6px; border-bottom:1px solid #f1f2f4; text-align:left; }
+  #pvtab th { color:var(--muted); font-weight:600; }
+
   /* ---- Bảng thuật ngữ ---- */
   #gloss { display:none; background:var(--panel); border-bottom:1px solid var(--line); padding:8px 12px; }
   #gloss.open { display:block; }
@@ -226,21 +243,11 @@
       <option value="google">Google Translate (miễn phí, không cần key, không cần server)</option>
     </select></label>
   <label class="tr-llm">Nhà cung cấp
-    <select id="preset">
-      <option value="ollama">Ollama (local)</option>
-      <option value="llamacpp">llama.cpp server (local)</option>
-      <option value="tuf">llama.cpp – server TUF (Tailscale)</option>
-      <option value="lmstudio">LM Studio (local)</option>
-      <option value="openrouter">OpenRouter</option>
-      <option value="openai">OpenAI</option>
-      <option value="chatgpt">ChatGPT (proxy OAuth trên TUF, mạng LAN)</option>
-      <option value="custom">Tùy chỉnh (OpenAI-compatible)</option>
-    </select></label>
+    <span class="prow"><select id="preset" class="provider-sel"></select><button type="button" class="psave" data-for="preset" title="Lưu Base URL + model đang nhập thành nhà cung cấp của bạn (hoặc cập nhật nhà cung cấp đang chọn)">💾</button></span></label>
   <label class="tr-llm">Base URL <input id="base_url"></label>
   <label class="tr-llm">API key <input id="api_key" type="password" placeholder="(để trống nếu local)"></label>
   <label class="tr-llm">Model
-    <span style="display:flex;gap:4px"><input id="model" style="flex:1"><button id="btnModels" type="button">Tải DS</button></span>
-    <select id="models" style="display:none;margin-top:4px"></select></label>
+    <div class="mpick"><input id="model" autocomplete="off" spellcheck="false" placeholder="gõ để tìm model…"><button id="btnModels" type="button" title="Tải lại danh sách model của server này">↻</button><div class="mlist" hidden></div></div></label>
   <label class="tr-llm">Temperature <input id="temperature" type="number" step="0.1" min="0" max="2"></label>
   <label class="tr-llm" style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="disable_thinking"> Tắt thinking cho model tự host (nhanh hơn nhiều)</label>
   <label class="tr-llm" style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="google_fallback"> Dùng Google Translate khi LLM lỗi</label>
@@ -275,20 +282,11 @@
   <label class="ocr-opt" data-engine="tesseract ocrspace">Ngôn ngữ OCR <input id="ocr_lang" placeholder="eng"></label>
   <label class="ocr-opt" data-engine="ocrspace">OCR.space API key <input id="ocr_api_key" type="password" placeholder="helloworld (demo)"></label>
   <label class="ocr-opt" data-engine="vlm">Nhà cung cấp
-    <select id="ocr_preset">
-      <option value="ollama">Ollama (local)</option>
-      <option value="llamacpp">llama.cpp server (local)</option>
-      <option value="tuf">llama.cpp – server TUF (Tailscale)</option>
-      <option value="lmstudio">LM Studio (local)</option>
-      <option value="openrouter">OpenRouter</option>
-      <option value="openai">OpenAI</option>
-      <option value="custom">Tùy chỉnh (OpenAI-compatible)</option>
-    </select></label>
+    <span class="prow"><select id="ocr_preset" class="provider-sel"></select><button type="button" class="psave" data-for="ocr_preset" title="Lưu Base URL + model đang nhập thành nhà cung cấp của bạn (hoặc cập nhật nhà cung cấp đang chọn)">💾</button></span></label>
   <label class="ocr-opt" data-engine="vlm">Base URL <input id="ocr_vlm_base_url"></label>
   <label class="ocr-opt" data-engine="vlm">API key <input id="ocr_vlm_api_key" type="password" placeholder="(để trống nếu local)"></label>
   <label class="ocr-opt" data-engine="vlm">Model
-    <span style="display:flex;gap:4px"><input id="ocr_vlm_model" style="flex:1"><button id="btnOcrModels" type="button">Tải DS</button></span>
-    <select id="ocr_models" style="display:none;margin-top:4px"></select></label>
+    <div class="mpick"><input id="ocr_vlm_model" autocomplete="off" spellcheck="false" placeholder="gõ để tìm model…"><button id="btnOcrModels" type="button" title="Tải lại danh sách model của server này">↻</button><div class="mlist" hidden></div></div></label>
   <label class="ocr-opt" data-engine="vlm" title="Ollama/API cloud: 4. llama-server chỉ có 1 slot (-np 1, vd. TUF): 1 — gửi nhiều hơn chỉ phải xếp hàng, dễ quá thời gian chờ">Số vùng gửi cùng lúc
     <input id="ocr_vlm_concurrency" type="number" min="1" max="8"></label>
   <label class="ocr-opt" data-engine="custom">URL <input id="ocr_custom_url" placeholder="http://localhost:9000/ocr"></label>
@@ -297,63 +295,46 @@
   <h3 class="sec">3. Trò chuyện về tài liệu</h3>
   <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="chat_same"> Dùng đúng server/model đang dịch</label>
   <label class="chat-opt">Nhà cung cấp
-    <select id="chat_preset">
-      <option value="ollama">Ollama (local)</option>
-      <option value="llamacpp">llama.cpp server (local)</option>
-      <option value="tuf">llama.cpp – server TUF (Tailscale)</option>
-      <option value="lmstudio">LM Studio (local)</option>
-      <option value="openrouter">OpenRouter</option>
-      <option value="openai">OpenAI</option>
-      <option value="chatgpt">ChatGPT (proxy OAuth trên TUF, mạng LAN)</option>
-      <option value="custom">Tùy chỉnh (OpenAI-compatible)</option>
-    </select></label>
+    <span class="prow"><select id="chat_preset" class="provider-sel"></select><button type="button" class="psave" data-for="chat_preset" title="Lưu Base URL + model đang nhập thành nhà cung cấp của bạn (hoặc cập nhật nhà cung cấp đang chọn)">💾</button></span></label>
   <label class="chat-opt">Base URL <input id="chat_base_url"></label>
   <label class="chat-opt">API key <input id="chat_api_key" type="password" placeholder="(để trống nếu local)"></label>
   <label class="chat-opt">Model
-    <span style="display:flex;gap:4px"><input id="chat_model" style="flex:1"><button id="btnChatModels" type="button">Tải DS</button></span>
-    <select id="chat_models" style="display:none;margin-top:4px"></select></label>
+    <div class="mpick"><input id="chat_model" autocomplete="off" spellcheck="false" placeholder="gõ để tìm model…"><button id="btnChatModels" type="button" title="Tải lại danh sách model của server này">↻</button><div class="mlist" hidden></div></div></label>
 
   <h3 class="sec">4. Lập bảng thuật ngữ</h3>
   <label style="flex-direction:row;align-items:center;gap:6px" title="Bảng thuật ngữ chỉ tốn một lượt gọi cho mỗi tài liệu, nên đáng dùng model mạnh hơn model dịch (vd. Nemotron Ultra free trên OpenRouter, ~15 giây)"><input type="checkbox" id="gloss_same"> Dùng đúng server/model đang dịch</label>
   <label class="gloss-opt">Nhà cung cấp
-    <select id="gloss_preset">
-      <option value="ollama">Ollama (local)</option>
-      <option value="llamacpp">llama.cpp server (local)</option>
-      <option value="tuf">llama.cpp – server TUF (Tailscale)</option>
-      <option value="lmstudio">LM Studio (local)</option>
-      <option value="openrouter">OpenRouter</option>
-      <option value="openai">OpenAI</option>
-      <option value="chatgpt">ChatGPT (proxy OAuth trên TUF, mạng LAN)</option>
-      <option value="custom">Tùy chỉnh (OpenAI-compatible)</option>
-    </select></label>
+    <span class="prow"><select id="gloss_preset" class="provider-sel"></select><button type="button" class="psave" data-for="gloss_preset" title="Lưu Base URL + model đang nhập thành nhà cung cấp của bạn (hoặc cập nhật nhà cung cấp đang chọn)">💾</button></span></label>
   <label class="gloss-opt">Base URL <input id="gloss_base_url"></label>
   <label class="gloss-opt">API key <input id="gloss_api_key" type="password" placeholder="(để trống nếu local)"></label>
   <label class="gloss-opt">Model
-    <span style="display:flex;gap:4px"><input id="gloss_model" style="flex:1"><button id="btnGlossModels" type="button">Tải DS</button></span>
-    <select id="gloss_models" style="display:none;margin-top:4px"></select></label>
+    <div class="mpick"><input id="gloss_model" autocomplete="off" spellcheck="false" placeholder="gõ để tìm model…"><button id="btnGlossModels" type="button" title="Tải lại danh sách model của server này">↻</button><div class="mlist" hidden></div></div></label>
 
   <h3 class="sec">5. Tô vàng</h3>
   <label style="flex-direction:row;align-items:center;gap:6px" title="Bật: tô ở bản này thì bản kia tự sáng phần tương ứng. Tắt: hai bản tô độc lập, tô ở đâu sáng ở đó (vệt tô cũ vẫn giữ, bật lại là thấy lại phần tương ứng)"><input type="checkbox" id="sync_marks"> Đồng bộ vệt tô sang bản kia</label>
   <label class="sync-on" style="flex-direction:row;align-items:center;gap:6px" title="Bôi đen vài chữ rồi tô vàng: bản kia sáng NGAY cả câu tương ứng, vài giây sau LLM trả lời thì thu lại đúng cụm tương ứng. Tắt: bản kia luôn tô cả câu."><input type="checkbox" id="align_llm"> Tô đúng cụm tương ứng ở bản kia bằng LLM (mỗi lần tô hỏi LLM một lượt nhỏ)</label>
   <label class="align-on" style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="align_same"> Dùng đúng server/model đang dịch</label>
   <label class="align-opt">Nhà cung cấp
-    <select id="align_preset">
-      <option value="ollama">Ollama (local)</option>
-      <option value="llamacpp">llama.cpp server (local)</option>
-      <option value="tuf">llama.cpp – server TUF (Tailscale)</option>
-      <option value="lmstudio">LM Studio (local)</option>
-      <option value="openrouter">OpenRouter</option>
-      <option value="openai">OpenAI</option>
-      <option value="chatgpt">ChatGPT (proxy OAuth trên TUF, mạng LAN)</option>
-      <option value="custom">Tùy chỉnh (OpenAI-compatible)</option>
-    </select></label>
+    <span class="prow"><select id="align_preset" class="provider-sel"></select><button type="button" class="psave" data-for="align_preset" title="Lưu Base URL + model đang nhập thành nhà cung cấp của bạn (hoặc cập nhật nhà cung cấp đang chọn)">💾</button></span></label>
   <label class="align-opt">Base URL <input id="align_base_url"></label>
   <label class="align-opt">API key <input id="align_api_key" type="password" placeholder="(để trống nếu local)"></label>
   <label class="align-opt">Model
-    <span style="display:flex;gap:4px"><input id="align_model" style="flex:1"><button id="btnAlignModels" type="button">Tải DS</button></span>
-    <select id="align_models" style="display:none;margin-top:4px"></select></label>
+    <div class="mpick"><input id="align_model" autocomplete="off" spellcheck="false" placeholder="gõ để tìm model…"><button id="btnAlignModels" type="button" title="Tải lại danh sách model của server này">↻</button><div class="mlist" hidden></div></div></label>
 
-  <h3 class="sec">6. Font bản dịch</h3>
+  <h3 class="sec">7. Nhà cung cấp của bạn</h3>
+  <div style="grid-column:1/-1" class="hint">Server OpenAI-compatible bạn hay dùng: lưu một lần, sau đó chọn được ở mọi ô “Nhà cung cấp” (dịch, OCR, trò chuyện, thuật ngữ, căn vệt tô, xem ảnh trang). Lưu trên server (<code>data/providers.json</code>); API key vẫn lưu riêng theo Base URL. Nút 💾 cạnh mỗi ô “Nhà cung cấp” lưu nhanh Base URL + model đang nhập.</div>
+  <div style="grid-column:1/-1"><table id="pvtab"></table></div>
+  <label>Tên <input id="pv_name" placeholder="vd. vLLM ở phòng lab"></label>
+  <label>Base URL <input id="pv_base" placeholder="http://host:8000/v1"></label>
+  <label>API key <input id="pv_key" type="password" placeholder="(tuỳ chọn)"></label>
+  <label>Model dịch / trò chuyện <input id="pv_model"></label>
+  <label>Model OCR (vision) <input id="pv_vision"></label>
+  <label>Model lập bảng thuật ngữ <input id="pv_gloss" placeholder="(trống = như model dịch)"></label>
+  <label>Số vùng OCR gửi cùng lúc <input id="pv_parallel" type="number" min="1" max="16" value="1"></label>
+  <label style="flex-direction:row;align-items:flex-end;gap:6px"><button id="pvSave" type="button" class="primary">Lưu nhà cung cấp</button>
+    <button id="pvNew" type="button">Mới</button><span class="hint" id="pvMsg"></span></label>
+
+  <h3 class="sec">8. Font bản dịch</h3>
   <label>Font có chân (chữ gốc serif) <select id="font_serif" class="font-sel" data-kind="serif"></select></label>
   <label>Font không chân (chữ gốc sans) <select id="font_sans" class="font-sel" data-kind="sans"></select></label>
   <label>Font đơn cách (code) <select id="font_mono" class="font-sel" data-kind="mono"></select></label>
