@@ -944,6 +944,96 @@ def table_cells(lines: list[dict]) -> list[list[dict]]:
     return [c["lines"] for c in out]
 
 
+_WRAP_MARK = "↪↩"  # ↪ (hoặc ↩ ghép với →): dòng code bị ngắt, phần sau viết tiếp dòng trên (minted)
+
+
+def line_chars(ln: dict) -> str:
+    return "".join(c["c"] for s in ln["spans"] for c in s["chars"])
+
+
+def prose_words(lines: list[dict], kind: str) -> tuple[int, int]:
+    """(số từ văn xuôi, số token code) của một đoạn trong vùng thuật toán/code; `kind` = loại font chính của vùng.
+    Code: chữ khác font chính (Query đơn cách, User không chân giữa thuật toán chữ có chân), nghiêng (tên biến args,
+    res), có "_" (tool_calls, 'get_channels_0'). Văn xuôi: từ thường ≥ 2 chữ cái cùng font chính. Còn lại không
+    tính bên nào: từ đậm (từ khoá let/in/function), dính ký hiệu toán (Q𝑖, max(𝑚(), toàn hoa (LOOP, FRESH), một chữ
+    cái, khoá "content:", gọi hàm "rowmax(S(", tên có số (FlashAttention-2) — thuật toán kiểu FlashAttention-2 dày
+    công thức mà vẫn là câu văn; riêng khối code (font chính đơn cách) thì từ dính ký hiệu là code."""
+    prose = code = 0
+    for ln in lines:
+        tokens, cur = [], []
+        for s in ln["spans"]:
+            for c in s["chars"]:
+                if c["c"].isspace():
+                    tokens, cur = tokens + [cur] if cur else tokens, []
+                else:
+                    cur.append((c["c"], s))
+        tokens += [cur] if cur else []
+        for tok in tokens:
+            word = "".join(ch for ch, _ in tok)
+            letters = [(ch, s) for ch, s in tok if ch.isalpha()]
+            if len(letters) < 2 or all(ch.isupper() for ch, _ in letters) or word.rstrip(",").endswith(":") \
+                    or any(MATH_FONT.search(s["font"]) for _, s in tok):
+                continue
+            s = letters[0][1]
+            bold, italic = span_style(s)
+            if bold:
+                continue
+            core = word.lstrip("(\"“‘'`").rstrip(".,;)\"”’'`?!")
+            if italic or font_kind(s["font"], s["flags"]) != kind or "_" in core:
+                code += 1
+            elif re.fullmatch(r"[^\W\d_]+(['’-][^\W\d_]+)*", core):
+                prose += 1
+            elif kind == "mono":  # khối code: send_message(to=user, #read_emails_0) — "_" vẽ bằng nét, không phải ký tự
+                code += 1
+    return prose, code
+
+
+def algorithm_lines(lines: list[dict]) -> list[list[dict]]:
+    """Dòng trong vùng thuật toán/code → từng dòng riêng (gộp thành một đoạn thì bản dịch chảy thành văn xuôi, mất
+    thụt lề và số dòng). Hàng có khoảng trống rộng (> 1,5 cỡ chữ: chú thích "// Update memory" căn phải) hay số dòng
+    là một dòng PyMuPDF riêng thì tách thành nhiều mảnh (số dòng giữ nguyên, bản dịch bắt đầu đúng chỗ thụt lề); dòng mở đầu bằng ↪, hay hàng không đánh số giữa các dòng đánh số, nối
+    vào mảnh phía trên. Chỉ giữ mảnh có văn xuôi
+    (tiêu đề "Algorithm 2 …", "Parameters: Tool set …", chú thích): dòng toàn từ khoá/tên biến/JSON dịch ra là hỏng
+    code ("action" → "hành động"), để nguyên bản gốc."""
+    letters = collections.Counter(font_kind(s["font"], s["flags"]) for l in lines for s in l["spans"]
+                                  if not MATH_FONT.search(s["font"]) for c in s["chars"] if c["c"].isalpha())
+    kind = letters.most_common(1)[0][0] if letters else "serif"
+    rows = [sorted(row, key=lambda l: l["bbox"][0]) for row in rows_of(lines)]
+    numbered = [bool(re.match(r"\s*\d{1,3}[:.](\s|$)", " ".join(line_chars(l) for l in row))) for row in rows]
+    seen = False
+    segs: list[list[dict]] = []
+    for row, num in zip(rows, numbered):
+        # thuật toán đánh số dòng: hàng không số sau dòng 1 là phần viết tiếp của bước trên (câu dài bị xuống dòng)
+        wrap = seen and not num and sum(numbered) >= 3
+        seen |= num
+        sizes = sorted(s["size"] for l in row for s in l["spans"])
+        size = sizes[len(sizes) // 2]
+        parts = [[row[0]]]
+        for ln in row[1:]:
+            lone_num = len(parts) == 1 and num and re.fullmatch(r"\s*\d{1,3}[:.]\s*", line_chars(parts[0][0]))
+            if lone_num or ln["bbox"][0] - max(l["bbox"][2] for l in parts[-1]) > 1.5 * size:
+                parts.append([ln])
+            else:
+                parts[-1].append(ln)
+        for p in parts:
+            first = "".join(line_chars(l) for l in p).strip()[:1]
+            x0, x1 = p[0]["bbox"][0], max(l["bbox"][2] for l in p)
+            above = [s for s in segs if min(max(l["bbox"][2] for l in s), x1) > max(min(l["bbox"][0] for l in s), x0)]
+            if wrap and above:
+                above[-1].extend(p)
+            elif first and first in _WRAP_MARK and above:
+                # bỏ dòng chỉ có dấu ↪: nằm trong khung đoạn nên vẫn bị xoá, khỏi thành {vN} lơ lửng giữa bản dịch
+                above[-1].extend(l for l in p if set(line_chars(l)) - set(_WRAP_MARK + "→ "))
+            else:
+                segs.append(list(p))
+    out = []
+    for s in segs:
+        prose, code = prose_words(s, kind)
+        if prose >= 2 and prose >= 0.75 * (prose + code):
+            out.append(s)
+    return out
+
+
 def extract_blocks(page: pymupdf.Page, textpage=None) -> list[dict]:
     """Lấy các đoạn văn bản cùng vị trí, cỡ chữ, màu, đậm/nghiêng.
     Có PP-DocLayout: gom dòng theo vùng (một đoạn = một vùng, bỏ công thức/hình/số trang; bảng dịch từng ô).
@@ -961,7 +1051,8 @@ def extract_blocks(page: pymupdf.Page, textpage=None) -> list[dict]:
             elif regions[i]["label"] == "table" or regions[i]["label"] not in LAYOUT_SKIP:
                 per_region[i].append(ln)
         groups = [(p, g["label"]) for g, ls in zip(regions, per_region) if ls
-                  for p in (table_cells(ls) if g["label"] == "table" else region_paragraphs(ls))]
+                  for p in (table_cells(ls) if g["label"] == "table" else
+                            algorithm_lines(ls) if g["label"] == "algorithm" else region_paragraphs(ls))]
     groups += [(ls, None) for ls in by_block(rest)]
     keep_hyphen = hyphen_rule(page.parent)
     return [b for b in (text_block(ls, label, keep_hyphen) for ls, label in groups) if b]
@@ -1661,13 +1752,31 @@ def ink_clip(page: pymupdf.Page, f: dict) -> tuple:
     """Vùng cắt công thức sát theo nét mực theo chiều dọc (chiều ngang giữ theo bề rộng ký tự để giữ khoảng cách):
     khung font cao hơn nét chữ nhiều → ảnh giữ chỗ cao quá mức, dòng bị dãn."""
     import numpy as np
-    x0, y0, x1, y1 = f["clip"]
-    pix = page.get_pixmap(clip=pymupdf.Rect(f["clip"]), matrix=pymupdf.Matrix(4, 4), colorspace=pymupdf.csGRAY, alpha=False)
+    x0, y0, x1, y1 = clip = formula_reach(f)
+    pix = page.get_pixmap(clip=pymupdf.Rect(clip), matrix=pymupdf.Matrix(4, 4), colorspace=pymupdf.csGRAY, alpha=False)
     a = np.frombuffer(pix.samples, np.uint8).reshape(pix.height, pix.stride)[:, :pix.width]
     rows = np.nonzero(a.min(axis=1) < np.percentile(a, 90) - 60)[0]
     if not len(rows):
         return f["clip"]
-    return x0, max(y0, (pix.y + rows[0]) / 4 - 0.3), x1, min(y1, (pix.y + rows[-1] + 1) / 4 + 0.3)
+    # phần nới thêm của formula_reach: chỉ lấy mực liền với khung ký tự (đuôi "y"), dừng ở hàng trống đầu tiên —
+    # bên dưới có thể là công thức dòng sau (bản sao trang giữ mọi công thức của trang)
+    last, end = rows[0], (f["clip"][3] - pix.y / 4) * 4
+    for r in rows[1:]:
+        if r > end and r > last + 1:
+            break
+        last = r
+    return x0, max(y0, (pix.y + rows[0]) / 4 - 0.3), x1, min(y1, (pix.y + last + 1) / 4 + 0.3)
+
+
+def formula_reach(f: dict) -> tuple:
+    """Vùng có thể có mực của công thức. Khung ký tự lấy theo descender của font; font khai báo descender ≈ 0
+    (NewTXMI của newtx: −0,009 em) thì khung chỉ xuống quá chân chữ 0,2pt → đuôi "y", dấu phẩy bị cắt. Đáy khung
+    sát chân chữ thấp nhất (< 0,1 cỡ chữ; font đúng thì ≥ 0,2) → nới xuống 0,3 cỡ chữ, ink_clip bó lại theo mực."""
+    x0, y0, x1, y1 = f["clip"]
+    low = max((k[1] for k in f.get("chars", ())), default=None)
+    if low is not None and y1 - low < 0.1 * f["size"]:
+        y1 = max(y1, low + 0.3 * f["size"])
+    return x0, y0, x1, y1
 
 
 def descent_overlaps(tmp: pymupdf.Page, formulas: list[dict], first: int = 0) -> dict[int, float]:
@@ -1719,6 +1828,22 @@ def free_boxes(page: pymupdf.Page, blocks: list[dict], todo: list[int]) -> dict[
     return out
 
 
+def redact_rect(rect: pymupdf.Rect, lines: list[pymupdf.Rect]) -> pymupdf.Rect:
+    """Vùng xoá chữ của khối: MuPDF xoá cả ký tự chỉ chồng mép vùng ~2pt, nên dòng của khối bên trên/dưới mà khung
+    chạm vào (công thức cao của bước 12 chồng lên dòng "11: end for" trong thuật toán) bị mất theo. Lùi mép vùng
+    khỏi các dòng đó; ký tự của chính khối vẫn nằm sâu trong vùng nên vẫn bị xoá."""
+    r = pymupdf.Rect(rect)
+    for ln in lines:
+        c = (ln.tl + ln.br) / 2
+        if rect.contains(c) or ln.x0 >= rect.x1 or ln.x1 <= rect.x0:
+            continue
+        if c.y < rect.y0 and ln.y1 > r.y0:
+            r.y0 = ln.y1 - 1
+        elif c.y > rect.y1 and ln.y0 < r.y1:
+            r.y1 = ln.y0 + 1
+    return r if r.height > 0.5 * rect.height else rect
+
+
 def render_translation(page: pymupdf.Page, blocks: list[dict], translations: dict[int, str], cfg: "Config",
                        src: pymupdf.Document | None = None) -> dict[int, dict]:
     """Xoá chữ gốc trong khung và chèn bản dịch vào đúng vị trí, tự co chữ cho vừa.
@@ -1726,14 +1851,15 @@ def render_translation(page: pymupdf.Page, blocks: list[dict], translations: dic
     Các khối cùng cỡ/kiểu chữ co cùng một tỉ lệ để cỡ chữ trên trang đều nhau."""
     fills = {}
     wider = free_boxes(page, blocks, [i for i, b in enumerate(blocks) if translations.get(i) and not b.get("ocr")])
+    lines = [pymupdf.Rect(l["bbox"]) for b in page.get_text("dict")["blocks"] if b["type"] == 0 for l in b["lines"]]
     for i, b in enumerate(blocks):
         if not translations.get(i):
             continue
         rect = pymupdf.Rect(b["bbox"])
         if b.get("ocr"):  # chữ nằm trong ảnh → phủ màu nền lên
             fills[i] = background_color(page, rect + (-1, -1, 1, 1))
-        else:
-            page.add_redact_annot(rect, fill=(1, 1, 1))
+        else:  # không tô trắng: khối nằm trên nền màu (hộp code, hàng bảng tô xám) sẽ thành ô trắng, chữ trắng biến mất
+            page.add_redact_annot(redact_rect(rect, lines), fill=False)
     # Xoá cả nét vẽ nằm gọn trong khung chữ (vạch phân số, gạch trên căn thức): công thức sẽ được vẽ lại chỗ mới
     page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE,
                           graphics=pymupdf.PDF_REDACT_LINE_ART_REMOVE_IF_COVERED)
@@ -2859,14 +2985,23 @@ def page_png(doc_id: str, n: int, kind: str, zoom: float = 2.0):
     return Response(pix.tobytes("png"), media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
-async def page_blocks(d: dict, n: int, cfg: Config, allow_ocr: bool = True) -> tuple[list[dict], bool] | None:
+BLOCKS_VERSION = 2  # tăng khi đổi cách trích khối từ lớp chữ (2: vùng thuật toán/code tách theo dòng)
+
+
+async def page_blocks(d: dict, n: int, cfg: Config, allow_ocr: bool = True,
+                      fresh: bool = False) -> tuple[list[dict], bool] | None:
     """Khối của trang n, lấy lại từ lần trích trước nếu cấu hình OCR không đổi (OCR bằng VLM mất 30–70s/trang).
     Khoá kèm trạng thái model layout: lần trước lỗi phải gộp dòng theo khoảng cách thì lần này trích lại.
-    allow_ocr=False (trang bên cạnh, chỉ để lấy ngữ cảnh): trang chưa trích mà cần OCR → None, không OCR thêm."""
+    allow_ocr=False (trang bên cạnh, chỉ để lấy ngữ cảnh): trang chưa trích mà cần OCR → None, không OCR thêm.
+    fresh (sắp dịch cả trang): khối trích từ lớp chữ bằng code cũ hơn BLOCKS_VERSION thì trích lại — rẻ, không như OCR;
+    trừ trang có vệt tô vàng (ghi theo số hiệu đoạn + vị trí ký tự; dấu ⛔ thì user_skips tự tìm lại theo chữ)."""
     key = (cfg.ocr_mode, cfg.ocr_engine, cfg.ocr_lang, cfg.ocr_vlm_base_url, cfg.ocr_vlm_model, cfg.ocr_custom_url)
     cached = d["blocks"].get(n)
-    if cached and cached[0] == (key, "sess" in _layout):
-        return cached[1], cached[2]
+    if cached and cached[0][0][:len(key)] == key and cached[0][1] == ("sess" in _layout):
+        stale = cached[0][0][len(key):] != (BLOCKS_VERSION,) and not cached[2]
+        if not (stale and fresh and not d["marks"].get(n)):
+            return cached[1], cached[2]
+    key += (BLOCKS_VERSION,)
     src_page = pymupdf.open(d["src"])[n]  # luôn trích từ bản gốc
     if not allow_ocr and needs_ocr(src_page, cfg):
         return None
@@ -2961,7 +3096,7 @@ async def grow_group(d: dict, n: int, cfg: Config, span: int, system: str, got: 
     texts = {b["text"] for b in got[n][0]}                      # đoạn trùng chữ chỉ tính một lần (như khi dịch)
     size = sum(item_tokens(b) for b in got[n][0])
     for m in range(n + 1, min(n + limit, d["out"].page_count)):
-        if (m in d["done"] and not force) or (nxt := await page_blocks(d, m, cfg, allow_ocr=False)) is None:
+        if (m in d["done"] and not force) or (nxt := await page_blocks(d, m, cfg, allow_ocr=False, fresh=True)) is None:
             break
         # một lượt gọi chỉ có MỘT system prompt: trang có yêu cầu dịch riêng (đã nhớ) khác trang đầu nhóm thì để
         # lượt sau, không thì yêu cầu của nó bị bỏ qua
@@ -3088,7 +3223,7 @@ async def translate_page(doc_id: str, n: int, cfg: Config, force: bool = False, 
     if n in d["done"] and not force and not only:
         return {"pages": [{"page": n, "cached": True}]}
     d.setdefault("keep_pages", set()).discard(n)       # trang đang "giữ bản gốc" mà dịch lại → thôi giữ
-    got: dict[int, tuple] = {n: await page_blocks(d, n, cfg)}
+    got: dict[int, tuple] = {n: await page_blocks(d, n, cfg, fresh=not only)}
     src = pymupdf.open(d["src"])
     if "num_ctx" not in d:  # một giá trị cho cả tài liệu: đổi num_ctx giữa các trang là Ollama nạp lại model
         kind, top, _ = await server_info(cfg.base_url, cfg.model)
@@ -3847,7 +3982,7 @@ async def recognize_page(d: dict, n: int, fc: Config) -> int:
     slots = fc.ocr_vlm_concurrency if fc.base_url == fc.ocr_vlm_base_url else slots
 
     async def one(client: httpx.AsyncClient, key: str, rect, glyph: str, f: dict | None):
-        r = pymupdf.Rect(rect) + (-2, -1.5, 2, 1.5)
+        r = pymupdf.Rect(formula_reach(f) if f else rect) + (-2, -1.5, 2, 1.5)
         zoom = min(6.0, max(3.0, 48 / max(r.height, 1)))   # dòng công thức cao ≥ ~48px
         png = (fdoc if f else src)[0 if f else n].get_pixmap(clip=r, matrix=pymupdf.Matrix(zoom, zoom), alpha=False).tobytes("png")
         body = {"model": fc.model, "temperature": 0, "max_tokens": 1500, "messages": [{"role": "user", "content": [
