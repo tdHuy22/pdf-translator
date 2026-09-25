@@ -141,6 +141,8 @@ def save_state(d: dict) -> None:
     st["skip"] = {str(p): {str(i): h for i, h in v.items()} for p, v in list(d.get("skip", {}).items()) if v}
     st["keep_pages"] = sorted(p for p in d.get("keep_pages", ()) if p in done)
     st["instr"] = {str(k): v for k, v in list(d.get("instr", {}).items())}
+    # công thức → LaTeX nhận dạng từ ảnh {trang: {dấu glyph: LaTeX}} (app.py: recognize_page)
+    st["flatex"] = {str(p): dict(v) for p, v in list(d.get("flatex", {}).items()) if v}
     with _locks.setdefault(d["id"], threading.Lock()):
         if _gone(d):
             return
@@ -174,6 +176,7 @@ def load(doc_id: str) -> dict | None:
     d["skip"] = {int(p): {int(i): h for i, h in v.items()} for p, v in st.get("skip", {}).items()}
     d["keep_pages"] = set(st.get("keep_pages", [])) & done
     d["instr"] = {(k if k == "*" else int(k)): v for k, v in st.get("instr", {}).items()}
+    d["flatex"] = {int(p): v for p, v in st.get("flatex", {}).items()}
     return d
 
 

@@ -62,7 +62,8 @@ def ok(cond, msg):
 with TestClient(A.app) as c:
     with open(pathlib.Path(__file__).resolve().parent.parent / "data/bert.pdf", "rb") as f:
         did = c.post("/api/upload", files={"file":("bert.pdf",f,"application/pdf")}).json()["id"]
-    cfg = {"translator":"llm","base_url":"http://x/v1","model":"m","ocr_mode":"off","google_fallback":False}
+    cfg = {"translator":"llm","base_url":"http://x/v1","model":"m","ocr_mode":"off","google_fallback":False,
+           "formula_ocr":"off"}   # nhận dạng công thức gọi Ollama thật → chỉ bật ở mục 14 (server giả)
 
     print("1. Gộp trang")
     CALLS.clear()
@@ -464,6 +465,68 @@ with TestClient(A.app) as c:
     n2 = c.post(f"/api/{aid}/chats/{sid}/summarize", json=cfg).json()
     ok(n1["id"] == n2["id"] and sum(x.get("meta", {}).get("session") == sid for x in d["notes"]) == 1,
        "tổng hợp lại phiên: cập nhật đúng ghi chú cũ")
+
+print("14. Công thức → LaTeX")
+ok(A.clean_latex("\\(R_{\\Theta}^{d}\\),") == "R_{\\Theta}^{d}" and A.clean_latex("$$a=b$$") == "a=b"
+   and A.clean_latex("```latex\nx^2\n```") == "x^2", "bỏ dấu bao công thức, ```, dấu câu chép kèm")
+ok(A.latex_matches(r"\cos m\theta_1 & -\sin m\theta_1", "cos mθ1 −sin mθ1")
+   and not A.latex_matches(r"\mathbf{re} x", "cos mθ1 −sin mθ1"), "đối chiếu LaTeX với glyph: khớp / chặn chép nhầm")
+ok(A.formula_prompt("hf.co/PaddlePaddle/PaddleOCR-VL-1.6-GGUF:latest") == "Formula Recognition:"
+   and A.formula_prompt("x/y") == A.FORMULA_PROMPT, "prompt nhận dạng công thức theo model")
+FCFG = {**cfg, "formula_ocr": "ocr", "ocr_vlm_base_url": "http://ocr/v1", "ocr_vlm_model": "PaddleOCR-VL"}
+REQ, REPLY = [], {}
+def fhandler(req):
+    body = json.loads(req.content)
+    REQ.append(body["messages"][0]["content"][0]["text"])
+    return A.httpx.Response(200, json={"choices": [{"message": {"content": REPLY.get("x", "")}, "finish_reason": "stop"}]})
+RealClient = A.httpx.AsyncClient
+class FMock(RealClient):
+    def __init__(self, *a, **k):
+        super().__init__(*a, transport=A.httpx.MockTransport(fhandler), **k)
+A.httpx.AsyncClient = FMock
+with TestClient(A.app) as c:
+    with open(ROOT / "data/roformer-rope.pdf", "rb") as f:
+        rid = c.post("/api/upload", files={"file": ("rope.pdf", f, "application/pdf")}).json()["id"]
+    d = A.DOCS[rid]
+    c.get(f"/api/{rid}/page/4/layer")
+    disp = A.page_display(d, 4)
+    ok([f["no"] for f in disp] == ["(14)", "(15)", "(16)"] and "cos mθ1" in disp[1]["text"],
+       f"công thức đứng riêng dòng theo layout, có số hiệu: {[f['no'] for f in disp]}")
+    jobs = A.formula_jobs(d, 4)
+    ok(len(jobs) > 3, f"cần nhận dạng: 3 công thức riêng dòng + công thức trong dòng nhiều tầng ({len(jobs)})")
+    REPLY["x"] = "\\mathbf{re}"                                   # model chép nhầm vùng → không dùng
+    r = c.post(f"/api/{rid}/formulas", json={"cfg": FCFG, "pages": [4]}).json()
+    ok(r["latex"] == 0 and r["glyph"] == len(jobs) and REQ and REQ[0] == "Formula Recognition:",
+       "kết quả không khớp glyph → giữ glyph, không thử lại")
+    n_req = len(REQ)
+    c.post(f"/api/{rid}/formulas", json={"cfg": FCFG, "pages": [4]})
+    ok(len(REQ) == n_req, "đã thử rồi thì không gọi lại")
+    d["flatex"] = {}
+    real_match = A.latex_matches
+    A.latex_matches = lambda latex, glyph: True
+    REPLY["x"] = "$$\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}$$"
+    r = c.post(f"/api/{rid}/formulas", json={"cfg": FCFG, "pages": [4]}).json()
+    A.latex_matches = real_match
+    txt = A.page_pair(d, 4, "source")
+    ok(r["latex"] == len(jobs) and "[công thức (15)] ⟦$$\\begin{pmatrix}" in txt, "LaTeX thay chữ glyph trong ngữ cảnh gửi LLM")
+    r = c.post(f"/api/{rid}/chat", json={"cfg": FCFG, "question": "Công thức (15) là gì?", "page": 4, "context": "source"})
+    info = json.loads(r.headers["x-context"])
+    ok("công thức dạng LaTeX" in info["why"] and "nhận dạng từ ảnh" in seen["system"], "trò chuyện: dùng LaTeX, lý do ghi số công thức")
+    A.DOCS.clear()                                     # khởi động lại app
+    c.get(f"/api/{rid}/state")
+    ok(A.DOCS[rid]["flatex"].get(4) and "\\begin{pmatrix}" in A.page_pair(A.DOCS[rid], 4, "source"),
+       "LaTeX lưu trong state.json, còn sau khi khởi động lại")
+    def down(req):
+        raise A.httpx.ConnectError("refused")
+    class Down(RealClient):
+        def __init__(self, *a, **k):
+            super().__init__(*a, transport=A.httpx.MockTransport(down), **k)
+    A.httpx.AsyncClient = Down
+    d = A.DOCS[rid]
+    r = c.post(f"/api/{rid}/chat", json={"cfg": FCFG, "question": "Trang 6 nói gì?", "page": 5})
+    ok(r.status_code == 200 and r.text == "Trả lời thử." and "flatex_fail" in d,
+       "server nhận dạng không chạy → vẫn trả lời bằng glyph, 10 phút không thử lại")
+A.httpx.AsyncClient = RealClient
 
 print("9. Nhà cung cấp, thông tin model")
 with TestClient(A.app) as c:

@@ -1,5 +1,5 @@
 {
-  "_": "Bộ câu hỏi đo cách chọn ngữ cảnh khi trò chuyện (scripts/bench_chat_ctx.py). page = trang đang xem (đếm từ 0) — phần lớn đặt ở trang 1 để buộc app tự tìm đúng trang. must = các nhóm regex (không phân biệt hoa thường), câu trả lời phải khớp từng nhóm; điểm = số nhóm khớp / số nhóm. kind: retrieval (dữ kiện nằm ở trang khác), figure / table / formula (cần hình, bảng, công thức), global (cả bài), local (đang xem đúng trang), trap (có chữ “mô hình” — không được gửi ảnh). Đáp án đã dò lại trong PDF gốc 25/09/2026.",
+  "_": "Bộ câu hỏi đo cách chọn ngữ cảnh khi trò chuyện (scripts/bench_chat_ctx.py). page = trang đang xem (đếm từ 0) — phần lớn đặt ở trang 1 để buộc app tự tìm đúng trang. must = các nhóm regex (không phân biệt hoa thường), câu trả lời phải khớp từng nhóm; điểm = số nhóm khớp / số nhóm. kind: retrieval (dữ kiện nằm ở trang khác), figure / table / formula (cần hình, bảng, công thức), global (cả bài), local (đang xem đúng trang), trap (có chữ “mô hình” — không được gửi ảnh), latex (chép công thức ra LaTeX đúng cấu trúc — đo tính năng công thức → LaTeX, chạy với --no-see). Đáp án đã dò lại trong PDF gốc 25/09/2026.",
   "questions": [
     {"paper": "attention-is-all-you-need", "page": 0, "kind": "retrieval",
      "q": "Mỗi lớp multi-head attention dùng bao nhiêu head, và d_k bằng bao nhiêu?", "must": ["\\b8\\b", "\\b64\\b"]},
@@ -41,6 +41,15 @@
     {"paper": "bert", "page": 0, "kind": "retrieval",
      "q": "Pre-train bao nhiêu bước, với batch size bao nhiêu?", "must": ["1[ .,]?000[ .,]?000|1M\\b|1 triệu|một triệu", "\\b256\\b"]},
     {"paper": "bert", "page": 2, "kind": "trap",
-     "q": "Mô hình này khác ELMo thế nào?", "must": ["ELMo", "hai chiều|bidirectional|fine-?tun|tinh chỉnh|feature"]}
+     "q": "Mô hình này khác ELMo thế nào?", "must": ["ELMo", "hai chiều|bidirectional|fine-?tun|tinh chỉnh|feature"]},
+
+    {"paper": "roformer-rope", "page": 0, "kind": "latex",
+     "q": "Viết lại ma trận xoay ở công thức (15) dưới dạng LaTeX.", "must": ["\\\\cos\\s*m\\s*\\\\theta_\\{?1\\}?\\s*&\\s*-\\s*\\\\sin\\s*m\\s*\\\\theta_\\{?1\\}?\\s*&\\s*0", "\\\\ddots", "\\\\theta_\\{d\\s*/\\s*2\\}"]},
+    {"paper": "roformer-rope", "page": 0, "kind": "latex",
+     "q": "Viết lại công thức (16) dưới dạng LaTeX.", "must": ["n\\s*-\\s*m", "W_\\{?q", "W_\\{?k"]},
+    {"paper": "datasentinel", "page": 0, "kind": "latex",
+     "q": "Viết lại công thức (3) của bài dưới dạng LaTeX.", "must": ["\\\\frac\\s*\\{?\\s*1\\s*\\}?\\s*\\{\\s*\\|\\s*X", "\\\\sum", "\\\\frac\\s*\\{\\s*\\\\beta\\s*\\}\\s*\\{\\s*\\|\\s*D"]},
+    {"paper": "datasentinel", "page": 0, "kind": "latex",
+     "q": "Công thức (4) gồm những tổng nào, trên tập nào? Viết LaTeX.", "must": ["\\\\sum", "s_\\{?t\\}?\\s*,\\s*x_\\{?t", "s_\\{?e\\}?\\s*,\\s*x_\\{?e", "\\\\max"]}
   ]
 }

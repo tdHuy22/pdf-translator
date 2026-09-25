@@ -99,10 +99,14 @@ class Config(BaseModel):
     align_api_key: str = ""
     align_model: str = ""
     # Model xem ảnh trang khi trò chuyện (câu hỏi về hình, bảng, công thức): để trống model = không gửi ảnh.
-    # Proxy ChatGPT không nhận ảnh (25/09/2026) → mặc định giao diện là OpenRouter nex-agi/nex-n2.5-pro:free.
+    # Proxy ChatGPT không nhận ảnh (25/09/2026) → mặc định giao diện là OpenRouter dots-studio/dots-3-note-preview:free
+    # (nex-agi/nex-n2.5-pro:free chọn trước đó bị OpenRouter gỡ cùng ngày).
     see_base_url: str = ""
     see_api_key: str = ""
     see_model: str = ""
+    # Công thức → LaTeX khi trò chuyện (cắt ảnh từng công thức, model đọc ảnh chép ra LaTeX, lưu lại dùng mãi):
+    # "ocr" = model OCR ở mục OCR (mặc định PaddleOCR-VL local), "see" = model xem ảnh ở trên, "off" = chỉ chép glyph
+    formula_ocr: str = "ocr"
 
 
 SYSTEM_PROMPT = """You are an expert academic translator. Translate research paper text (usually English or Chinese) into natural, precise Vietnamese.
@@ -3655,6 +3659,228 @@ def display_formulas(page: pymupdf.Page, blocks: list[dict]) -> list[tuple[pymup
     return out
 
 
+# ---------------- Công thức → LaTeX (nhận dạng từ ảnh)
+# Chữ chép từ glyph của PDF mất cấu trúc hai chiều: ma trận ra một dãy ô lẫn lộn, phân số/căn thức mất gạch (gạch là
+# nét vẽ, không phải ký tự). Cắt ảnh từng công thức cho model đọc ảnh chép ra LaTeX thì đúng: đo 25/09/2026 trên ma
+# trận xoay (15) của RoFormer, PaddleOCR-VL local ("Formula Recognition:"), dots-3-note-preview:free và
+# nex-n2.5-pro:free đều chép đúng cả 7×7 ô. Làm một lần cho mỗi công thức, lưu trong state.json (d["flatex"]:
+# trang → {dấu glyph → LaTeX}; "" = đã thử mà không dùng được → giữ glyph, không thử lại).
+FORMULA_PROMPT = ("Transcribe the mathematical formula in this image into LaTeX. Output only the LaTeX code, without "
+                  "$ delimiters, equation number or explanation.")
+FORMULA_WAIT = 30        # giây chờ nhận dạng công thức của trang chính trước khi trả lời; còn lại chạy nền
+FORMULA_SPREAD = 4.5     # công thức trong dòng có chân chữ lệch nhau > 4,5pt (phân số, tổng có cận, chỉ số hai tầng)
+FORMULA_RETRY = 600      # server nhận dạng lỗi (chưa bật Ollama…) → 10 phút không thử lại
+
+
+def formula_cfg(cfg: Config) -> Config | None:
+    """Model chép công thức sang LaTeX (xem Config.formula_ocr); None = tắt / chưa cấu hình."""
+    if cfg.formula_ocr == "see":
+        return see_cfg(cfg)
+    if cfg.formula_ocr == "ocr" and cfg.ocr_vlm_model:
+        return side_cfg(cfg, cfg.ocr_vlm_base_url, cfg.ocr_vlm_api_key, cfg.ocr_vlm_model)
+    return None
+
+
+def formula_prompt(model: str) -> str:
+    m = model.lower()
+    if "paddleocr-vl" in m or "glm-ocr" in m:   # prompt chính thức của hai model OCR này cho vùng công thức
+        return "Formula Recognition:"
+    return FORMULA_PROMPT
+
+
+def fkey(glyph: str, rect) -> str:
+    """Dấu của một công thức: theo chữ glyph (trích lại khối, đổi số thứ tự đoạn vẫn khớp); công thức không có glyph
+    (vẽ bằng nét) thì theo vị trí."""
+    return hashlib.sha1((glyph or repr([round(v) for v in rect])).encode()).hexdigest()[:12]
+
+
+def glyphs_in(page: pymupdf.Page, rect) -> str:
+    """Chữ glyph của các ký tự có tâm nằm trong vùng (clip của MuPDF lấy cả ký tự chỉ chạm mép)."""
+    r, out = pymupdf.Rect(rect), []
+    for blk in page.get_text("rawdict", clip=r)["blocks"]:
+        for ln in blk.get("lines", ()):
+            if abs(ln["dir"][1]) > 0.1:
+                continue
+            for sp in ln["spans"]:
+                out += [c["c"] for c in sp["chars"] if r.contains(((c["bbox"][0] + c["bbox"][2]) / 2,
+                                                                   (c["bbox"][1] + c["bbox"][3]) / 2))]
+            out.append(" ")
+    return " ".join("".join(out).split())
+
+
+def page_display(d: dict, n: int, page: pymupdf.Page | None = None) -> list[dict]:
+    """Công thức đứng riêng dòng của trang n: [{"bbox", "no" (số hiệu "(15)" hoặc ""), "text" (glyph), "key"}].
+    Có PP-DocLayout thì theo vùng display_formula của nó — gọn từng công thức, số hiệu là vùng riêng; không nạp được
+    model thì gom dòng như display_formulas. Tính một lần cho mỗi trang (layout ~1 giây/trang)."""
+    if ("fdisp", n) not in d:
+        page = page or pymupdf.open(d["src"])[n]
+        blocks = (d["blocks"].get(n) or (None, d.get(("layer", n)) or []))[1]
+        regs = detect_layout(page) if page_has_text(page) else None
+        out = []
+        if regs is None:
+            out = [{"bbox": tuple(r), "no": "", "text": t} for r, t in display_formulas(page, blocks)]
+        else:
+            nums = [(g["bbox"], glyphs_in(page, g["bbox"])) for g in regs if g["label"] == "formula_number"]
+            for g in regs:
+                if g["label"] != "display_formula":
+                    continue
+                x0, y0, x1, y1 = g["bbox"]
+                no = next((t for b, t in nums if b[1] < y1 and b[3] > y0 and b[0] >= x1 - 5 and _EQ_NO.search(t)), "")
+                text = glyphs_in(page, g["bbox"])
+                if len(text) > 700:
+                    text = text[:700] + " …"
+                out.append({"bbox": tuple(round(v, 1) for v in g["bbox"]), "no": no.strip(), "text": text})
+        for f in out:
+            f["key"] = fkey(f["text"], f["bbox"])
+        d["fdisp", n] = out
+    return d["fdisp", n]
+
+
+def page_layer_blocks(d: dict, n: int, page: pymupdf.Page | None = None) -> list[dict]:
+    """Khối chữ của trang n: khối đã dịch, không thì lớp chữ (trích như khi mở trang: layout, không OCR)."""
+    if (got := d["blocks"].get(n)) is not None:
+        return got[1]
+    if ("layer", n) not in d:
+        page = page or pymupdf.open(d["src"])[n]
+        d["layer", n] = extract_blocks(page) if page_has_text(page) else []
+    return d["layer", n]
+
+
+def formula_jobs(d: dict, n: int) -> list[tuple[str, tuple, str, dict | None]]:
+    """Các công thức của trang n nên chép sang LaTeX: (dấu, vùng cắt, glyph, công thức trong dòng hoặc None) — mọi công
+    thức đứng riêng dòng, và công thức trong dòng có nhiều tầng (glyph của chúng mới hay lộn xộn; x_i, W^Q chép glyph
+    vẫn đọc được)."""
+    page = pymupdf.open(d["src"])[n]
+    jobs = [(f["key"], f["bbox"], f["text"], None) for f in page_display(d, n, page)]
+    blocks = page_layer_blocks(d, n, page)
+    for b in blocks:
+        for f in b.get("formulas", ()):
+            ys = [y for _, y in f.get("chars") or ()]
+            if ys and max(ys) - min(ys) > FORMULA_SPREAD:
+                g = formula_text(page, f)
+                jobs.append((fkey(g, f["clip"]), tuple(f["clip"]), g, f))
+    return list({j[0]: j for j in jobs}.values())
+
+
+_GREEK = {"ell": "ℓ", "partial": "∂", "nabla": "∇", "infty": "∞", "sum": "∑", "prod": "∏", "int": "∫", "sqrt": "√",
+          "in": "∈", "top": "⊤", "intercal": "⊺", "times": "×", "cdot": "·", "le": "≤", "leq": "≤", "ge": "≥",
+          "geq": "≥", "neq": "≠", "approx": "≈", "odot": "⊙", "oplus": "⊕", "otimes": "⊗", "prime": "′"}
+
+
+def latex_plain(latex: str) -> str:
+    """LaTeX → chuỗi ký tự gần với glyph (để đối chiếu): \\theta → θ, \\cos → cos, bỏ lệnh định dạng."""
+    def cmd(m: re.Match) -> str:
+        name = m[1]
+        if name in _GREEK:
+            return _GREEK[name]
+        for case in ("SMALL", "CAPITAL"):
+            for nm in (name, name.removeprefix("var")):
+                try:
+                    ch = unicodedata.lookup(f"GREEK {case} LETTER {nm.upper()}")
+                    if (case == "CAPITAL") == nm[:1].isupper():
+                        return ch
+                except KeyError:
+                    pass
+        if name in ("sin", "cos", "tan", "exp", "log", "ln", "max", "min", "arg", "softmax", "det", "lim", "sup", "inf"):
+            return name
+        return " "
+    return re.sub(r"\\([A-Za-z]+)", cmd, latex)
+
+
+def latex_matches(latex: str, glyph: str) -> bool:
+    """LaTeX nhận dạng có khớp chữ glyph của công thức không: so bội tập chữ cái/số (bỏ qua ký hiệu, định dạng).
+    Chặn trường hợp model đọc nhầm vùng hay bịa (chép cả chữ dòng bên cạnh, lặp vô hạn). Không có glyph thì tin model."""
+    norm = lambda s: collections.Counter(c for c in unicodedata.normalize("NFKC", s) if c.isalnum())  # noqa: E731
+    g, t = norm(glyph), norm(latex_plain(latex))
+    if sum(g.values()) < 3:
+        return bool(t)
+    common = sum((g & t).values())
+    return common >= 0.6 * sum(g.values()) and common >= 0.5 * sum(t.values())
+
+
+def clean_latex(text: str) -> str:
+    """Bỏ phần suy nghĩ, ``` và dấu bao công thức ($$, \\[ \\], \\( \\)) mà model hay thêm."""
+    t = re.sub(r"<think>.*?</think>", "", text or "", flags=re.S)
+    t = re.sub(r"```[a-z]*", "", t).strip()
+    t = re.sub(r"(\$|\\\]|\\\))\s*[.,;:]+$", r"\1", t)     # "\(x\)." — dấu câu của câu văn chép kèm
+    for a, b in (("$$", "$$"), ("\\[", "\\]"), ("\\(", "\\)"), ("$", "$")):
+        if t.startswith(a) and t.endswith(b) and len(t) > len(a) + len(b):
+            t = t[len(a):-len(b)].strip()
+            break
+    t = re.sub(r"^\\begin\{(equation|align|displaymath)\*?\}(.*)\\end\{\1\*?\}$", r"\2", t, flags=re.S).strip()
+    t = re.sub(r"\\\)\s*\\\(", " ", t)     # PaddleOCR-VL nối các dòng của công thức nhiều dòng bằng "\) \("
+    return re.sub(r"\s+", " ", t)
+
+
+async def recognize_page(d: dict, n: int, fc: Config) -> int:
+    """Chép sang LaTeX các công thức chưa có của trang n (xem formula_jobs); trả về số công thức đã thử."""
+    lat = d.setdefault("flatex", {})
+    jobs = [j for j in await asyncio.to_thread(formula_jobs, d, n) if j[0] not in lat.get(n, {})]
+    if not jobs:
+        return 0
+    headers = {"Content-Type": "application/json"}
+    if fc.api_key:
+        headers["Authorization"] = f"Bearer {fc.api_key}"
+    if "openrouter.ai" in fc.base_url:
+        headers |= {"HTTP-Referer": "http://localhost", "X-Title": "PDF Paper Translator"}
+    url = fc.base_url.rstrip("/") + "/chat/completions"
+    src = pymupdf.open(d["src"])
+    # công thức trong dòng: cắt từ bản sao trang chỉ còn ký tự của công thức — vùng cắt nằm giữa câu văn, để nguyên thì
+    # model chép cả chữ bên cạnh ("… in generating the", đo 25/09/2026 trên DataSentinel) và bị loại khi đối chiếu
+    inline = [j[3] for j in jobs if j[3]]
+    fdoc = await asyncio.to_thread(formula_source, src, n, inline) if inline else None
+    _, _, slots = await server_info(fc.base_url, fc.model)
+    slots = fc.ocr_vlm_concurrency if fc.base_url == fc.ocr_vlm_base_url else slots
+
+    async def one(client: httpx.AsyncClient, key: str, rect, glyph: str, f: dict | None):
+        r = pymupdf.Rect(rect) + (-2, -1.5, 2, 1.5)
+        zoom = min(6.0, max(3.0, 48 / max(r.height, 1)))   # dòng công thức cao ≥ ~48px
+        png = (fdoc if f else src)[0 if f else n].get_pixmap(clip=r, matrix=pymupdf.Matrix(zoom, zoom), alpha=False).tobytes("png")
+        body = {"model": fc.model, "temperature": 0, "max_tokens": 1500, "messages": [{"role": "user", "content": [
+            {"type": "text", "text": formula_prompt(fc.model)},
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64," + base64.b64encode(png).decode()}}]}]}
+        if re.search(r"ocr", fc.model, re.I):
+            body["stop"] = ["```"]
+        no_think(fc, url, body)
+        async with llm_sem(fc.base_url, slots):
+            resp = await client.post(url, headers=headers, json=body)
+        if resp.status_code >= 400:
+            raise LLMError(f"Lỗi {resp.status_code}: {resp.text[:200]}")
+        choice = resp.json()["choices"][0]
+        latex = clean_latex((choice.get("message") or {}).get("content") or "")
+        ok = choice.get("finish_reason") != "length" and latex and len(latex) < 4000 and latex_matches(latex, glyph)
+        if not ok:
+            print(f"[công thức] trang {n + 1}: bỏ kết quả nhận dạng {latex[:80]!r} (glyph {glyph[:60]!r})")
+        lat.setdefault(n, {})[key] = latex if ok else ""
+
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10, read=180)) as client:
+        res = await asyncio.gather(*(one(client, *j) for j in jobs), return_exceptions=True)
+    errs = [e for e in res if isinstance(e, BaseException)]
+    if errs:
+        d["flatex_fail"] = time.monotonic()
+        print(f"[công thức] trang {n + 1}: {len(errs)}/{len(jobs)} công thức lỗi ({fc.model} @ {fc.base_url}): "
+              f"{errs[0]!r}"[:300])
+    store.save_state(d)
+    return len(jobs)
+
+
+def formulas_ready(d: dict, pages: list[int], cfg: Config) -> list[asyncio.Task]:
+    """Bắt đầu (nếu chưa chạy) việc chép công thức sang LaTeX cho các trang; trả về việc của từng trang để ai cần thì
+    chờ. Server lỗi gần đây thì thôi (chữ glyph vẫn dùng được)."""
+    fc = formula_cfg(cfg)
+    if fc is None or time.monotonic() - d.get("flatex_fail", -FORMULA_RETRY) < FORMULA_RETRY:
+        return []
+    tasks, loop = d.setdefault("flatex_tasks", {}), asyncio.get_running_loop()
+    out = []
+    for n in dict.fromkeys(pages):
+        t = tasks.get(n)
+        if t is None or t.done() or t.get_loop() is not loop:
+            t = tasks[n] = loop.create_task(recognize_page(d, n, fc))
+            t.add_done_callback(lambda t: t.cancelled() or t.exception())   # lỗi đã in trong recognize_page
+        out.append(t)
+    return out
+
+
 def page_pair(d: dict, n: int, mode: str = "pair") -> str:
     """Chữ của một trang để gửi LLM, ghép theo từng đoạn. `mode`: "pair" = chữ gốc kèm bản dịch tiếng Việt,
     "source" = chỉ chữ gốc (đỡ nửa số token), "translation" = chỉ bản dịch (đoạn chưa dịch thì chữ gốc).
@@ -3662,28 +3888,30 @@ def page_pair(d: dict, n: int, mode: str = "pair") -> str:
     Trang chưa trích khối (chưa dịch, chưa mở lớp chữ) thì lấy thẳng chữ của trang — hỏi về trang nào cũng có nội
     dung để LLM đọc."""
     blocks = (d["blocks"].get(n) or (None, d.get(("layer", n)) or []))[1]
+    if not blocks and d.get("flatex", {}).get(n):   # trang đã có LaTeX công thức: trích khối để thay đúng chỗ
+        blocks = page_layer_blocks(d, n)
     if not blocks:
         return pymupdf.open(d["src"])[n].get_text().strip()
     tr = d["trans"].get(n, {})
     ftext = d.setdefault("ftext", {})         # (trang, đoạn) → [chữ từng công thức]: đọc glyph một lần thôi
+    lat = d.get("flatex", {}).get(n, {})      # dấu công thức → LaTeX đã nhận dạng từ ảnh (recognize_page)
     page = None
     # công thức đứng riêng dòng → chèn ngay sau đoạn nằm trên nó (cùng cột), để LLM đọc đúng mạch "… as: <công thức>"
-    if ("disp", n) not in ftext:
-        page = pymupdf.open(d["src"])[n]
-        ftext["disp", n] = [(tuple(r), t) for r, t in display_formulas(page, blocks)]
     after: dict[int, list[str]] = collections.defaultdict(list)
-    for r, t in ftext["disp", n]:
+    for f in page_display(d, n):
+        r = f["bbox"]
         above = [(b["bbox"][3], i) for i, b in enumerate(blocks)
                  if b["bbox"][3] <= r[1] + 2 and b["bbox"][0] < r[2] and b["bbox"][2] > r[0]]
-        after[max(above)[1] if above else -1].append(f"[công thức] ⟦{t}⟧")
+        body = f"$${lat[f['key']]}$$" if lat.get(f["key"]) else f["text"]
+        after[max(above)[1] if above else -1].append(f"[công thức{' ' + f['no'] if f['no'] else ''}] ⟦{body}⟧")
     parts = list(after.get(-1, []))
     for i, b in enumerate(blocks):
         src, vi = untag(b["text"]), untag(tr.get(i, ""))
         if b.get("formulas") and "{v" in src + vi:
             if (n, i) not in ftext:
                 page = page or pymupdf.open(d["src"])[n]
-                ftext[n, i] = [formula_text(page, f) for f in b["formulas"]]
-            fs = ftext[n, i]
+                ftext[n, i] = [(formula_text(page, f), f["clip"]) for f in b["formulas"]]
+            fs = [f"${lat[k]}$" if lat.get(k := fkey(g, r)) else g for g, r in ftext[n, i]]
             put = lambda m: f"⟦{fs[int(m[1]) - 1]}⟧" if 0 < int(m[1]) <= len(fs) else ""  # noqa: E731
             src, vi = PLACEHOLDER.sub(put, src), PLACEHOLDER.sub(put, vi)
         if mode == "source":
@@ -4121,9 +4349,12 @@ async def doc_chat(doc_id: str, ask: ChatAsk):
             system_ += ("\n\nKèm theo câu hỏi là ảnh các trang: " + ", ".join(str(n + 1) for n in plan["images"])
                         + ". Đọc hình, bảng, công thức trực tiếp trên ảnh.")
         else:
-            system_ += "\n\nCông thức trong chữ trích từ PDF nằm trong ⟦…⟧ (chép từ glyph nên có thể lộn xộn)."
+            system_ += ("\n\nCông thức trong chữ trích từ PDF nằm trong ⟦…⟧: dạng LaTeX ($…$, $$…$$) là nhận dạng từ ảnh "
+                        "công thức (tin được), còn lại chép từ glyph nên có thể lộn xộn (chỉ số trên/dưới nằm ngang hàng).")
         info_ = {"mode": plan["mode"], "pages": [n + 1 for n in sent], "images": [n + 1 for n in plan["images"]],
                  "model": c.model, "why": plan["why"]}
+        if k := ctxt.count("⟦$"):
+            info_["why"] += f"{'; ' if info_['why'] else ''}{k} công thức dạng LaTeX"
         if plan["mode"] == "pdf":
             info_["pdf"] = pdf_input(c)
         return system_, hist, ctx_, info_
@@ -4144,6 +4375,12 @@ async def doc_chat(doc_id: str, ask: ChatAsk):
         plan = await asyncio.to_thread(as_text, f"bài dài hơn ngữ cảnh của model ({ctx0} token)")
     else:
         plan = await asyncio.to_thread(chat_plan, d, ask, question, budget0, see is not None)
+    if plan["mode"] != "pdf":
+        # công thức → LaTeX: chờ trang chính (tối đa FORMULA_WAIT giây, lần sau đã có sẵn), các trang khác chạy nền
+        need = plan["pages"] or ([ask.page] if ask.page is not None else [])
+        tasks = formulas_ready(d, need + (list(range(d["out"].page_count)) if plan["mode"] == "full" else []), cfg0)
+        if tasks:
+            await asyncio.wait(tasks[:2], timeout=FORMULA_WAIT)
     if plan["images"]:              # trả lời bằng model xem ảnh; ngữ cảnh chữ theo ngữ cảnh của model đó
         cfg = see
     system, history, ctx, info = await prepare(plan, cfg)
@@ -4199,6 +4436,26 @@ async def doc_chat(doc_id: str, ask: ChatAsk):
 
     return StreamingResponse(gen(), media_type="text/plain; charset=utf-8", headers={
         "X-Session-Id": sess["id"], "X-Context": json.dumps(info), "Cache-Control": "no-store"})
+
+
+class FormulaAsk(BaseModel):
+    cfg: Config
+    pages: list[int] = []         # rỗng = cả bài
+
+
+@app.post("/api/{doc_id}/formulas")
+async def doc_formulas(doc_id: str, ask: FormulaAsk):
+    """Chép sang LaTeX công thức của các trang (chờ xong) — trò chuyện tự làm việc này cho trang cần; endpoint để
+    làm trước cả bài và để kiểm tra. Trả về số công thức: đã có LaTeX / giữ glyph (nhận dạng không dùng được)."""
+    d, cfg = get_doc(doc_id), resolve_keys(ask.cfg)
+    if formula_cfg(cfg) is None:
+        raise HTTPException(400, "Chưa bật nhận dạng công thức (⚙️ Cấu hình → Trò chuyện)")
+    d.pop("flatex_fail", None)
+    pages = [n for n in ask.pages if 0 <= n < d["out"].page_count] or list(range(d["out"].page_count))
+    await asyncio.gather(*formulas_ready(d, pages, cfg))
+    got = [v for n in pages for v in d.get("flatex", {}).get(n, {}).values()]
+    return {"latex": sum(bool(v) for v in got), "glyph": sum(not v for v in got),
+            "failed": "flatex_fail" in d}
 
 
 @app.get("/api/{doc_id}/chats")

@@ -6,7 +6,7 @@ nên "gốc + dịch" chỉ có chữ gốc; không lập bảng thuật ngữ (
 Chấm bằng regex (bench/chat_ctx.json: "must"), không dùng LLM chấm: rẻ, lặp lại được, nhưng thô — câu trả lời đúng
 mà diễn đạt khác đáp án thì bị chấm thiếu, nên xem thêm file kết quả.
 
-    .venv/bin/python scripts/bench_chat_ctx.py                                   # nex-n2.5-pro:free, cả hai chế độ
+    .venv/bin/python scripts/bench_chat_ctx.py                                   # dots-3-note-preview:free, cả hai chế độ
     .venv/bin/python scripts/bench_chat_ctx.py --model qwen/qwen3.8-27b:free --modes auto
     .venv/bin/python scripts/bench_chat_ctx.py --only 5,6                         # vài câu (số thứ tự từ 1)
 
@@ -29,7 +29,7 @@ import app as A
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ap = argparse.ArgumentParser()
 ap.add_argument("--base-url", default="https://openrouter.ai/api/v1")
-ap.add_argument("--model", default="nex-agi/nex-n2.5-pro:free")
+ap.add_argument("--model", default="dots-studio/dots-3-note-preview:free")   # nex-n2.5-pro:free bị gỡ 25/09/2026
 ap.add_argument("--see-model", default="", help="model xem ảnh (mặc định = --model)")
 ap.add_argument("--modes", default="near,auto")
 ap.add_argument("--only", default="", help="số thứ tự câu hỏi, vd. 1,5,6")
@@ -37,6 +37,10 @@ ap.add_argument("--retries", type=int, default=3)
 ap.add_argument("--budget", type=int, default=0,
                 help="ngân sách token ngữ cảnh khi không hỏi cả bài (mặc định như app: CHAT_BUDGET). Bài ngắn chưa dịch "
                      "lọt cả vào 12k nên chế độ nào cũng gửi đủ bài — đặt nhỏ (vd. 3000, như model local 8k) để đo việc tìm trang")
+ap.add_argument("--formula", default="off", choices=["off", "ocr", "see"],
+                help="công thức → LaTeX (Config.formula_ocr): off = chép glyph như trước; ocr = model OCR (mặc định "
+                     "PaddleOCR-VL qua Ollama local); see = model xem ảnh. Nhận dạng làm trước cho cả bài (không tính giờ)")
+ap.add_argument("--no-see", action="store_true", help="không gửi ảnh trang — đo riêng phần chữ (vd. câu kind=latex)")
 ap.add_argument("--resume", default="", help="file kết quả dở (bench/results/chat-ctx-….json): chỉ chạy các lượt còn thiếu")
 args = ap.parse_args()
 
@@ -48,7 +52,10 @@ bench = json.loads((ROOT / "bench/chat_ctx.json").read_text())["questions"]
 pick = {int(x) for x in args.only.split(",") if x.strip()}
 modes = [m.strip() for m in args.modes.split(",") if m.strip()]
 cfg = {"base_url": args.base_url, "model": args.model, "ocr_mode": "off", "glossary_auto": False,
-       "see_base_url": args.base_url, "see_model": args.see_model or args.model}
+       "see_base_url": "" if args.no_see else args.base_url, "see_model": "" if args.no_see else args.see_model or args.model,
+       "formula_ocr": args.formula}
+if args.no_see:   # model trò chuyện đọc được ảnh thì app dùng luôn nó làm model xem ảnh (see_cfg) → quên nhãn model
+    A.MODEL_META.clear()
 
 
 def score(answer: str, must: list[str]) -> float:
@@ -56,17 +63,22 @@ def score(answer: str, must: list[str]) -> float:
 
 
 out = pathlib.Path(args.resume) if args.resume else \
-    ROOT / "bench/results" / f"chat-ctx-{args.model.replace('/', '_')}-{time.strftime('%Y%m%d-%H%M%S')}.json"
+    ROOT / "bench/results" / (f"chat-ctx-{args.model.replace('/', '_')}" + (f"-latex-{args.formula}" if args.formula != "off" else "")
+                              + ("-nosee" if args.no_see else "") + f"-{time.strftime('%Y%m%d-%H%M%S')}.json")
 rows = json.loads(out.read_text())["rows"] if args.resume else []
 have = {(r["n"], r["mode"]) for r in rows}
 with TestClient(A.app) as c:
     ids = {}
-    for paper in sorted({q["paper"] for q in bench}):
+    for paper in sorted({q["paper"] for k, q in enumerate(bench, 1) if not pick or k in pick}):
         with open(ROOT / f"data/{paper}.pdf", "rb") as f:
             ids[paper] = c.post("/api/upload", files={"file": (f"{paper}.pdf", f, "application/pdf")}).json()["id"]
         d = A.DOCS[ids[paper]]
         for n in range(d["out"].page_count):   # đoạn + công thức của mọi trang như khi đã mở lớp chữ
             c.get(f"/api/{ids[paper]}/page/{n}/layer")
+        if args.formula != "off":
+            t = time.time()
+            r = c.post(f"/api/{ids[paper]}/formulas", json={"cfg": cfg}).json()
+            print(f"[công thức] {paper}: {r} — {time.time() - t:.0f} s", flush=True)
     for k, q in enumerate(bench, 1):
         if pick and k not in pick:
             continue
@@ -91,11 +103,11 @@ with TestClient(A.app) as c:
             print(f"{k:2} {mode:5} {sc:4.2f}  {secs:5.1f}s  tr.{info.get('pages', [])[:6]} ảnh{info.get('images', [])}"
                   f"  {q['q'][:60]}", flush=True)
             # ghi sau MỖI lượt: phải huỷ giữa chừng (model free treo) thì không mất gì, chạy tiếp bằng --resume
-            out.write_text(json.dumps({"model": args.model, "rows": rows}, ensure_ascii=False, indent=1))
+            out.write_text(json.dumps({"model": args.model, "formula": args.formula, "no_see": args.no_see, "rows": rows}, ensure_ascii=False, indent=1))
 
 rows.sort(key=lambda r: (r["n"], r["mode"]))
 print(f"\n{'':10}" + "".join(f"{m:>10}" for m in modes))
-for kind in ["retrieval", "formula", "figure", "table", "global", "local", "trap", "*"]:
+for kind in ["retrieval", "formula", "figure", "table", "global", "local", "trap", "latex", "*"]:
     sub = [r for r in rows if kind == "*" or r["kind"] == kind]
     if not sub:
         continue

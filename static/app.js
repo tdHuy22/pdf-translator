@@ -1,3 +1,6 @@
+// Model xem ảnh mặc định: nex-n2.5-pro:free (chọn 25/09/2026) bị OpenRouter gỡ cùng ngày → dots-3-note-preview:free
+// (đọc ảnh, ngữ cảnh 512k; chép đúng ma trận RoPE 7×7 trong 3,8 s, trả lời tiếng Việt)
+const SEE_MODEL = "dots-studio/dots-3-note-preview:free", GONE_MODELS = ["nex-agi/nex-n2.5-pro:free"];
 const PADDLE_OCR = "hf.co/PaddlePaddle/PaddleOCR-VL-1.6-GGUF:latest";  // OCR tốt nhất đã đo (18/09/2026)
 // Nhà cung cấp: nạp từ server (/api/providers — có sẵn + của người dùng, xem app.py). Mỗi mục: base_url, model (dịch,
 // trò chuyện), vision (OCR), gloss (lập bảng thuật ngữ; không có thì như model), parallel (số vùng OCR cùng lúc).
@@ -7,7 +10,7 @@ const $ = id => document.getElementById(id);
 const FIELDS = ["preset","ocr_preset","chat_preset","base_url","model","temperature","concurrency","glossary",
   "translator","length_ratio","page_span","ocr_mode","ocr_engine","ocr_lang","ocr_vlm_base_url","ocr_vlm_model",
   "ocr_vlm_concurrency","ocr_custom_url","chat_base_url","chat_model","gloss_preset","gloss_base_url","gloss_model",
-  "align_preset","align_base_url","align_model","see_preset","see_base_url","see_model",
+  "align_preset","align_base_url","align_model","see_preset","see_base_url","see_model","formula_ocr",
   "font_serif","font_sans","font_mono"];
 const CHECKS = ["glossary_auto","google_fallback","disable_thinking","chat_same","gloss_same","align_llm","align_same","sync_marks","see_on","skip_refs"];
 // Ô API key → ô Base URL của server dùng key đó ("ocrspace" là dịch vụ cố định, không có base URL)
@@ -49,7 +52,7 @@ function loadSettings() {
         chat_model:"", gloss_preset:"openrouter", gloss_same:true, gloss_base_url:P("openrouter").base_url,
         gloss_model:P("openrouter").gloss, align_llm:true, align_same:false, align_preset:"chatgpt",
         align_base_url:P("chatgpt").base_url, align_model:P("chatgpt").model, sync_marks:false, see_on:true, see_preset:"openrouter",
-        see_base_url:P("openrouter").base_url, see_model:"nex-agi/nex-n2.5-pro:free", font_serif:"auto", font_sans:"auto", font_mono:"auto", ...s };
+        see_base_url:P("openrouter").base_url, see_model:SEE_MODEL, formula_ocr:"ocr", font_serif:"auto", font_sans:"auto", font_mono:"auto", ...s };
   const ver = s.settings_v || 1;
   // v2: model OCR mặc định đổi từ qwen3.5 sang PaddleOCR-VL — cập nhật cài đặt cũ còn để mặc định cũ
   if (ver < 2 && s.ocr_vlm_model === "qwen3.5:latest") s.ocr_vlm_model = PADDLE_OCR;
@@ -72,6 +75,8 @@ function loadSettings() {
     $("align_base_url").value = P("chatgpt").base_url || "";
     $("align_model").value = P("chatgpt").model || "";
   }
+  // v5: model xem ảnh mặc định cũ bị OpenRouter gỡ → đổi sang mặc định mới
+  if (ver < 5 && GONE_MODELS.includes($("see_model").value)) $("see_model").value = SEE_MODEL;
   // nhà cung cấp đã lưu không còn (đã xoá) → "Tùy chỉnh", giữ nguyên Base URL và model đang có
   document.querySelectorAll("select.provider-sel").forEach(sel => { if (!sel.value) sel.value = "custom"; });
   fillKeys();
@@ -79,7 +84,7 @@ function loadSettings() {
   saveSettings();
 }
 function saveSettings() {
-  const s = { settings_v: 4 };
+  const s = { settings_v: 5 };
   FIELDS.forEach(f => s[f] = $(f).value);
   CHECKS.forEach(f => s[f] = $(f).checked);
   try { localStorage.setItem("llm", JSON.stringify(s)); } catch {}
@@ -134,6 +139,7 @@ function cfg() {
            see_base_url: $("see_on").checked ? $("see_base_url").value : "",
            see_api_key: $("see_on").checked ? $("see_api_key").value : "",
            see_model: $("see_on").checked ? $("see_model").value : "",
+           formula_ocr: $("formula_ocr").value || "ocr",
            font_serif:$("font_serif").value || "auto", font_sans:$("font_sans").value || "auto",
            font_mono:$("font_mono").value || "auto" };
 }

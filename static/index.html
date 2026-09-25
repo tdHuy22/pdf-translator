@@ -361,6 +361,9 @@
   <label class="see-opt">API key <input id="see_api_key" type="password" placeholder="(để trống nếu local)"></label>
   <label class="see-opt">Model (phải đọc được ảnh 👁)
     <div class="mpick"><input id="see_model" autocomplete="off" spellcheck="false" placeholder="gõ để tìm model…"><button id="btnSeeModels" type="button" title="Tải lại danh sách model của server này">↻</button><div class="mlist" hidden></div></div></label>
+  <label style="grid-column:1/-1" title="Chữ chép từ PDF làm rối công thức (ma trận ra một dãy ô lẫn lộn, phân số và căn mất gạch). Bật thì khi trò chuyện app cắt ảnh từng công thức cho model đọc ảnh chép ra LaTeX — một lần cho mỗi công thức, lưu lại dùng mãi. Trang đang hỏi chờ tối đa 30 giây, các trang khác chạy nền.">Công thức → LaTeX khi trò chuyện
+    <select id="formula_ocr"><option value="ocr">Model OCR ở mục 2 (mặc định PaddleOCR-VL, chạy local)</option>
+      <option value="see">Model xem ảnh ở trên</option><option value="off">Tắt — chỉ chép chữ từ PDF</option></select></label>
 
   <h3 class="sec">4. Lập bảng thuật ngữ</h3>
   <label style="flex-direction:row;align-items:center;gap:6px" title="Bảng thuật ngữ chỉ tốn một lượt gọi cho mỗi tài liệu, nên đáng dùng model mạnh hơn model dịch (vd. Nemotron Ultra free trên OpenRouter, ~15 giây)"><input type="checkbox" id="gloss_same"> Dùng đúng server/model đang dịch</label>
