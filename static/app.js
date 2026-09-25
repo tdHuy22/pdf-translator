@@ -289,6 +289,7 @@ function buildPages() {
       pageBox(i, "translated", `<div class="ph"><span>Chưa dịch</span><button onclick="translatePages([${i}])">Dịch trang này</button></div>`));
   }
   cols.querySelectorAll(".page").forEach(el => { RO.observe(el); IO.observe(el); });
+  window.viewLayout?.();
 }
 
 // ================================================================ Lớp chữ: bôi đen chọn chữ, tô vàng theo đoạn
@@ -992,7 +993,8 @@ $("ask").onsubmit = async e => {
 // Trang đang xem (để LLM lấy đúng phần tài liệu làm ngữ cảnh khi không bôi đen gì)
 function visiblePage() {
   let best = null, top = Infinity;
-  document.querySelectorAll('.page[data-kind="original"]').forEach(el => {
+  document.querySelectorAll('.page').forEach(el => {             // cả hai bản: chế độ xem một cột ẩn một bản
+    if (!el.offsetParent) return;
     const r = el.getBoundingClientRect();
     if (r.bottom > 80 && Math.abs(r.top) < top) { top = Math.abs(r.top); best = +el.dataset.p; }
   });

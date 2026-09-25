@@ -99,10 +99,10 @@ function focusNote(n) {
 }
 /** Cuộn tới chỗ của ghi chú trong bài (vệt tô của nó, hoặc đầu trang). */
 function goTo(n) {
-  const m = markOf(n), el = pageOf(n.page, m ? m.side : "original");
+  const m = markOf(n), el = viewVisible(n.page, m ? m.side : "original");   // bản đó đang ẩn (xem một cột) → bản kia
   if (!el) return;
   const layer = el.querySelector(".layer"), k = +layer?.dataset.w ? el.clientWidth / +layer.dataset.w : 1;
-  const r = m?.rects?.[0];
+  const r = el.dataset.kind === m?.side ? m.rects?.[0] : null;
   window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY + (r ? r[1] * k : 0) - 140, behavior:"smooth" });
 }
 
