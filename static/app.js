@@ -45,10 +45,12 @@ function loadSettings() {
   let s = {};
   try { s = JSON.parse(localStorage.getItem("llm") || "{}"); } catch {}
   const P = id => PRESETS[id] || {};
-  s = { preset:"ollama", base_url:P("ollama").base_url, model:P("ollama").model, temperature:0.2, concurrency:1, glossary:"", glossary_auto:true, ...s };
-  s = { ocr_preset:"ollama", chat_preset:"ollama", translator:"llm", length_ratio:1.3, page_span:0, ocr_mode:"auto",
-        ocr_engine:"rapidocr", ocr_lang:"eng", ocr_vlm_base_url:"http://localhost:11434/v1", ocr_vlm_model:PADDLE_OCR,
-        ocr_vlm_concurrency:4, ocr_custom_url:"", google_fallback:true, chat_same:true, chat_base_url:"",
+  // Mặc định: OpenRouter (có sẵn, luôn còn); OCR bằng Vision LLM thì server TUF (PaddleOCR-VL) nếu còn trong danh sách
+  const ocrDef = PRESETS.tuf ? "tuf" : "openrouter";
+  s = { preset:"openrouter", base_url:P("openrouter").base_url, model:P("openrouter").model, temperature:0.2, concurrency:1, glossary:"", glossary_auto:true, ...s };
+  s = { ocr_preset:ocrDef, chat_preset:"openrouter", translator:"llm", length_ratio:1.3, page_span:0, ocr_mode:"auto",
+        ocr_engine:"rapidocr", ocr_lang:"eng", ocr_vlm_base_url:P(ocrDef).base_url, ocr_vlm_model:P(ocrDef).vision,
+        ocr_vlm_concurrency:P(ocrDef).parallel || 1, ocr_custom_url:"", google_fallback:true, chat_same:true, chat_base_url:"",
         chat_model:"", gloss_preset:"openrouter", gloss_same:true, gloss_base_url:P("openrouter").base_url,
         gloss_model:P("openrouter").gloss, align_llm:true, align_same:false, align_preset:"chatgpt",
         align_base_url:P("chatgpt").base_url, align_model:P("chatgpt").model, sync_marks:false, see_on:true, see_preset:"openrouter",
@@ -77,6 +79,12 @@ function loadSettings() {
   }
   // v5: model xem ảnh mặc định cũ bị OpenRouter gỡ → đổi sang mặc định mới
   if (ver < 5 && GONE_MODELS.includes($("see_model").value)) $("see_model").value = SEE_MODEL;
+  // v6: bỏ preset llama.cpp / LM Studio local → ô nào còn chọn chúng chuyển sang OpenRouter (điền Base URL + model)
+  if (ver < 6) document.querySelectorAll("select.provider-sel").forEach(sel => {
+    if (!["llamacpp", "lmstudio"].includes(s[sel.id])) return;
+    sel.value = "openrouter";
+    sel.dispatchEvent(new Event("change"));
+  });
   // nhà cung cấp đã lưu không còn (đã xoá) → "Tùy chỉnh", giữ nguyên Base URL và model đang có
   document.querySelectorAll("select.provider-sel").forEach(sel => { if (!sel.value) sel.value = "custom"; });
   fillKeys();
@@ -84,7 +92,7 @@ function loadSettings() {
   saveSettings();
 }
 function saveSettings() {
-  const s = { settings_v: 5 };
+  const s = { settings_v: 6 };
   FIELDS.forEach(f => s[f] = $(f).value);
   CHECKS.forEach(f => s[f] = $(f).checked);
   try { localStorage.setItem("llm", JSON.stringify(s)); } catch {}
@@ -445,7 +453,7 @@ $("dtab").onclick = async e => {
     if (!confirm(`Xoá hẳn “${name}”?\nBản dịch, tô vàng và bảng thuật ngữ của tài liệu này sẽ mất, không hoàn tác được.`)) return;
     await fetch(`/api/docs/${id}`, { method:"DELETE" });
     if (doc?.id === id) {                     // xoá đúng bài đang mở → về màn hình trống
-      doc = null; resetDocView(); $("cols").innerHTML = ""; setStatus("Chưa mở file");
+      doc = null; resetDocView(); $("stackO").innerHTML = $("stackT").innerHTML = ""; setStatus("Chưa mở file");
       ["btnAll","btnDl","btnDlOrg","btnGloss","btnChat","btnNotes","range"].forEach(b => $(b).disabled = true);
       try { localStorage.removeItem("last_doc"); } catch {}
     }
@@ -456,24 +464,28 @@ $("dtab").onclick = async e => {
 function pageBox(i, kind, inner) {
   return `<div class="page" data-p="${i}" data-kind="${kind}"><span class="num">${i+1}</span>${inner}<div class="layer"></div></div>`;
 }
+/** Mỗi bản vào khung xem của nó (#stackO | #stackT), cuộn và thu phóng độc lập — xem view.js. */
 function buildPages() {
-  const cols = $("cols");
-  cols.innerHTML = `<div class="colhead">Bản gốc</div><div class="colhead">Bản dịch tiếng Việt</div>`;
+  let o = "", t = "";
   for (let i = 0; i < doc.pages; i++) {
-    cols.insertAdjacentHTML("beforeend",
-      pageBox(i, "original", `<img loading="lazy" src="/api/${doc.id}/page/${i}/original.png">`) +
-      pageBox(i, "translated", `<div class="ph"><span>Chưa dịch</span><button onclick="translatePages([${i}])">Dịch trang này</button></div>`));
+    o += pageBox(i, "original", `<img loading="lazy" src="/api/${doc.id}/page/${i}/original.png">`);
+    t += pageBox(i, "translated", `<div class="ph"><span>Chưa dịch</span><button onclick="translatePages([${i}])">Dịch trang này</button></div>`);
   }
-  cols.querySelectorAll(".page").forEach(el => { RO.observe(el); IO.observe(el); });
-  window.viewLayout?.();
+  $("stackO").innerHTML = o;
+  $("stackT").innerHTML = t;
+  $("cols").querySelectorAll(".page").forEach(el => { RO.observe(el); IO[el.dataset.kind].observe(el); });
+  window.viewReset?.();
 }
 
 // ================================================================ Lớp chữ: bôi đen chọn chữ, tô vàng theo đoạn
 // Lớp chữ dựng theo đơn vị của PDF (1px = 1pt) rồi thu cả lớp bằng transform scale, nên chỉ cần tính một lần
 // và tự khớp khi đổi bề rộng cửa sổ.
 const RO = new ResizeObserver(es => es.forEach(e => fitLayer(e.target)));
-const IO = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) loadLayer(e.target); }),
-                                    { rootMargin: "400px" });
+// Mỗi khung xem một observer lấy chính khung làm gốc: rootMargin chỉ nới vùng của gốc, gốc là cửa sổ thì trang sắp
+// cuộn tới trong khung vẫn bị khung cắt mất, lớp chữ không được nạp trước.
+const IO = Object.fromEntries([["original", "paneO"], ["translated", "paneT"]].map(([k, id]) =>
+  [k, new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) loadLayer(e.target); }),
+                               { root: $(id), rootMargin: "400px" })]));
 function fitLayer(el) {
   const layer = el.querySelector(".layer"), w = +layer?.dataset.w;
   if (w) layer.style.transform = `scale(${el.clientWidth / w})`;
@@ -794,9 +806,16 @@ document.addEventListener("selectionchange", () => {
   $("selSkip").disabled = !info.blocks.length;
   $("selRe").hidden = !doc?.done.has(info.page) || doc.keep.has(info.page) || allSkip;
   bar.classList.add("on");
-  bar.style.left = Math.max(8, info.rect.left + window.scrollX) + "px";
-  bar.style.top = (info.rect.bottom + window.scrollY + 6) + "px";
+  placeSelbar(info.rect);
 });
+// Thanh nổi đặt theo toạ độ màn hình (position:fixed): khung xem cuộn thì dời theo đoạn đang bôi đen
+function placeSelbar(r) {
+  $("selbar").style.left = Math.max(8, r.left) + "px";
+  $("selbar").style.top = (r.bottom + 6) + "px";
+}
+document.addEventListener("scroll", () => {
+  if ($("selbar").classList.contains("on") && sel?.range) placeSelbar(sel.range.getBoundingClientRect());
+}, { capture: true, passive: true });
 $("selMark").onclick = async () => {
   const info = sel, hit = marksHit(info);
   $("selbar").classList.remove("on");
@@ -1010,8 +1029,8 @@ function openRetranslate({ page, blocks = null, anchor = null, rect = null }) {
   $("rtChips").innerHTML = chips.map(c => `<button type="button" class="gchip">${esc(c)}</button>`).join("");
   const r = rect || anchor.getBoundingClientRect();
   pop.hidden = false;
-  pop.style.left = Math.max(8, Math.min(r.right + scrollX - pop.offsetWidth, scrollX + innerWidth - pop.offsetWidth - 8)) + "px";
-  pop.style.top = (r.bottom + scrollY + 6) + "px";
+  pop.style.left = Math.max(8, Math.min(r.right - pop.offsetWidth, innerWidth - pop.offsetWidth - 8)) + "px";
+  pop.style.top = Math.max(8, Math.min(r.bottom + 6, innerHeight - pop.offsetHeight - 8)) + "px";
   $("rtText").focus();
 }
 const closeRt = () => { $("rtPop").hidden = true; rtJob = null; };
@@ -1517,16 +1536,8 @@ async function restoreChat() {
   if (chatSessions.length) await openSession(chatSessions[0].id);
 }
 
-// Trang đang xem (để LLM lấy đúng phần tài liệu làm ngữ cảnh khi không bôi đen gì)
-function visiblePage() {
-  let best = null, top = Infinity;
-  document.querySelectorAll('.page').forEach(el => {             // cả hai bản: chế độ xem một cột ẩn một bản
-    if (!el.offsetParent) return;
-    const r = el.getBoundingClientRect();
-    if (r.bottom > 80 && Math.abs(r.top) < top) { top = Math.abs(r.top); best = +el.dataset.p; }
-  });
-  return best;
-}
+// Trang đang xem (để LLM lấy đúng phần tài liệu làm ngữ cảnh khi không bôi đen gì): trang ở đầu khung xem đang dùng
+const visiblePage = () => window.viewCurrentPage?.() ?? null;
 
 // ================================================================ Khởi động
 async function loadFonts() {

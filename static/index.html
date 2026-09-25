@@ -11,10 +11,7 @@
 <style>
   :root { --bg:#f3f4f6; --panel:#fff; --line:#d1d5db; --text:#111827; --muted:#6b7280; --accent:#2563eb; }
   * { box-sizing:border-box; }
-  body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); min-width:max-content; }
-  /* Phóng to rộng hơn màn hình thì trang cuộn ngang; thanh trên cùng và các bảng mở ra bên dưới nó giữ nguyên chỗ
-     (body rộng theo lưới trang nên sticky left mới có chỗ để bám; --vw = bề rộng khung nhìn, view.js đặt) */
-  header, #settings, #gloss, #docs, .bar { position:sticky; left:0; width:var(--vw,100vw); }
+  body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); }
   header { position:sticky; top:0; left:0; z-index:5; background:var(--panel); border-bottom:1px solid var(--line);
            padding:8px 12px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
   header h1 { font-size:16px; margin:0 12px 0 0; }
@@ -30,9 +27,19 @@
   input.bad { border-color:#dc2626; background:#fef2f2; }
   .bar { height:3px; background:transparent; }
   .bar > div { height:100%; background:var(--accent); width:0; transition:width .3s; }
-  .cols { display:grid; grid-template-columns:repeat(var(--ncol,2), var(--colw,1fr)); justify-content:center; gap:12px; padding:12px; }
-  .cols.only-translated > .page[data-kind="original"], .cols.only-translated > .colhead:nth-child(1),
-  .cols.only-original > .page[data-kind="translated"], .cols.only-original > .colhead:nth-child(2) { display:none; }
+  /* Hai khung xem độc lập (bản gốc | bản dịch): mỗi khung cuộn và thu phóng riêng, ở giữa là thanh kéo chia bề rộng.
+     Cao = màn hình trừ thanh trên cùng (--paneh, view.js đặt); trang rộng hơn khung thì cuộn ngang trong khung. */
+  .cols { position:relative; display:flex; height:var(--paneh, calc(100vh - 48px)); }
+  .vpane { position:relative; overflow:auto; overscroll-behavior:contain; min-width:0; flex:1 1 0; }
+  #paneO { flex:0 0 calc((100% - 6px) * var(--split, .5)); }
+  .cols.only-original #paneO, .cols.only-translated #paneT { flex:1 1 0; }
+  .cols.only-original #paneT, .cols.only-translated #paneO, .cols.only-original #split, .cols.only-translated #split { display:none; }
+  #split { flex:0 0 6px; cursor:col-resize; background:var(--line); }
+  #split:hover, body.splitting #split { background:var(--accent); }
+  body.splitting { user-select:none; cursor:col-resize; }
+  body.splitting .vpane { pointer-events:none; }
+  .stack { display:flex; flex-direction:column; align-items:center; gap:12px; padding:12px; width:max-content; min-width:100%; }
+  .vpane .page { width:var(--pgw, 600px); flex:none; }
   /* Thanh chế độ xem + thu phóng: góc dưới trái, không chiếm chỗ trên thanh trên cùng */
   #viewbar { position:fixed; left:12px; bottom:12px; z-index:8; display:flex; gap:2px; align-items:center;
              background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:3px;
@@ -42,20 +49,25 @@
   #viewbar button:hover { background:#f3f4f6; }
   #viewbar .sep { width:1px; height:18px; background:var(--line); margin:0 3px; }
   #zoomPct { min-width:48px; }
-  #lens { position:fixed; z-index:30; width:240px; height:240px; border-radius:50%; pointer-events:none;
+  /* Kính lúp chữ nhật ngang: đọc trọn một dòng chữ; ⌥ + lăn chuột đổi độ phóng (số ở góc) */
+  #lens { position:fixed; z-index:30; width:440px; height:260px; border-radius:12px; pointer-events:none;
           border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.25), 0 8px 24px rgba(0,0,0,.35);
           background-color:#fff; background-repeat:no-repeat; }
   #lens[hidden] { display:none; }
-  .colhead { font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; }
-  .pair { display:contents; }
+  #lens::after { content:attr(data-k); position:absolute; right:6px; bottom:4px; font-size:10px; color:#fff;
+                 background:rgba(0,0,0,.45); border-radius:3px; padding:0 4px; }
+  #zoomWho { font-size:11px; color:var(--muted); padding-left:2px; }
+  #linkScroll.on { border-color:var(--line); background:#eef2ff; }
   .page { position:relative; overflow:hidden; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.15); }
-  .page img { width:100%; display:block; }
+  /* tỉ lệ A4/Letter tạm cho tới khi ảnh nạp xong: không thì trang chưa nạp cao 0, cả chục ảnh "lazy" lọt vào khung cùng lúc */
+  .page img { width:100%; display:block; aspect-ratio:auto 612 / 792; }
   .page .ph { aspect-ratio:0.77; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; color:var(--muted); font-size:13px; }
   .tools { position:absolute; top:6px; right:6px; display:flex; gap:4px; z-index:3; }
   .tools button { font-size:11px; padding:2px 6px; opacity:.85; }
   .num { position:absolute; top:6px; left:6px; z-index:3; font-size:11px; background:rgba(0,0,0,.55); color:#fff; padding:1px 6px; border-radius:4px; }
-  .empty { padding:80px 20px; text-align:center; color:var(--muted); grid-column:1/-1; }
-  @media (max-width:700px){ .cols{ grid-template-columns:1fr; } }
+  .empty { position:absolute; inset:0; padding:80px 20px; text-align:center; color:var(--muted); pointer-events:none; }
+  .cols:has(.page) .empty { display:none; }
+  @media (max-width:700px){ .cols { flex-direction:column; } #paneO { flex:1 1 0; } #split { display:none; } }
 
   /* ---- Lớp chữ trong suốt đè lên ảnh trang: bôi đen chọn chữ, tô vàng theo đoạn ---- */
   .layer { position:absolute; top:0; left:0; z-index:1; transform-origin:0 0; }
@@ -69,7 +81,7 @@
   .hl.wait { background:rgba(250,204,21,.22); outline:1px dashed rgba(202,138,4,.8); }
   .ln { position:absolute; white-space:pre; transform-origin:0 0; color:transparent; cursor:text; }
   .ln::selection { background:rgba(37,99,235,.32); }
-  #selbar { position:absolute; z-index:20; display:none; gap:4px; background:var(--panel);
+  #selbar { position:fixed; z-index:20; display:none; gap:4px; background:var(--panel);
             border:1px solid var(--line); border-radius:8px; padding:4px; box-shadow:0 4px 14px rgba(0,0,0,.2); }
   #selbar.on { display:flex; }
   #selbar button { font-size:12px; padding:4px 8px; }
@@ -99,7 +111,7 @@
   body.skipmode .page .blk { pointer-events:auto; cursor:pointer; }
   body.skipmode .page .blk:hover { outline:2px solid rgba(220,38,38,.7); }
   #skipMode.on { background:#fee2e2; border-color:#fca5a5; font-weight:600; }
-  #rtPop { position:absolute; z-index:25; width:360px; background:var(--panel); border:1px solid var(--line); border-radius:10px;
+  #rtPop { position:fixed; z-index:25; width:360px; background:var(--panel); border:1px solid var(--line); border-radius:10px;
            box-shadow:0 8px 28px rgba(0,0,0,.22); padding:10px; display:flex; flex-direction:column; gap:6px; font-size:13px; }
   #rtPop[hidden] { display:none; }
   .rthead { display:flex; justify-content:space-between; align-items:center; }
@@ -496,18 +508,23 @@
   <button data-mode="both" title="Xem song song hai bản">Cả hai</button>
   <button data-mode="translated" title="Chỉ xem bản dịch (trang to gấp đôi)">Dịch</button>
   <span class="sep"></span>
-  <button id="zoomOut" title="Thu nhỏ (⌘/Ctrl + lăn chuột)">−</button>
+  <span id="zoomWho" title="Khung đang chỉnh (khung chuột vừa rê vào)"></span>
+  <button id="zoomOut" title="Thu nhỏ khung đang chỉnh (⌘/Ctrl + lăn chuột trên khung)">−</button>
   <button id="zoomPct" title="Bấm: về vừa khung">100%</button>
-  <button id="zoomIn" title="Phóng to (⌘/Ctrl + lăn chuột)">+</button>
+  <button id="zoomIn" title="Phóng to khung đang chỉnh (⌘/Ctrl + lăn chuột trên khung)">+</button>
   <button id="zoomFit" title="Vừa bề rộng khung">⤢</button>
+  <button id="linkScroll" title="Cuộn cùng nhau: cuộn một bản thì bản kia theo tới cùng trang (mặc định tắt — hai bản cuộn độc lập)">🔗</button>
   <span class="sep"></span>
   <button id="skipMode" title="Bấm vào đoạn trên trang để đánh dấu / bỏ đánh dấu KHÔNG DỊCH (bản dịch giữ nguyên chữ gốc). Bấm lại nút này để thôi">⛔ Chọn đoạn</button>
   <span class="sep"></span>
-  <span class="hint" title="Giữ phím ⌥ Option / Alt và rê chuột trên trang để soi chữ nhỏ">⌥ kính lúp</span>
+  <span class="hint" title="Giữ phím ⌥ Option / Alt và rê chuột trên trang để soi chữ nhỏ; ⌥ + lăn chuột: đổi độ phóng">⌥ kính lúp</span>
 </div>
 <div id="lens" hidden></div>
 
 <div class="cols" id="cols">
+  <div class="vpane" id="paneO" data-kind="original"><div class="stack" id="stackO"></div></div>
+  <div id="split" title="Kéo để chia bề rộng hai khung · bấm đúp: chia đôi"></div>
+  <div class="vpane" id="paneT" data-kind="translated"><div class="stack" id="stackT"></div></div>
   <div class="empty">Chọn một file PDF bài báo để bắt đầu. Bản gốc hiển thị bên trái, bản dịch tiếng Việt giữ nguyên bố cục bên phải.</div>
 </div>
 

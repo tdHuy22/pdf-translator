@@ -102,7 +102,7 @@ function goTo(n) {
   if (!el) return;
   const layer = el.querySelector(".layer"), k = +layer?.dataset.w ? el.clientWidth / +layer.dataset.w : 1;
   const r = el.dataset.kind === m?.side ? m.rects?.[0] : null;
-  window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY + (r ? r[1] * k : 0) - 140, behavior:"smooth" });
+  viewScrollTo(el, r ? r[1] * k : 0);
 }
 
 // ---------------- Dấu 📝 trên vệt tô có ghi chú, và số ghi chú của trang ở góc bản gốc

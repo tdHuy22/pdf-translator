@@ -12,18 +12,21 @@ Chạy nền và bật/tắt bằng `restart.sh` (log ghi vào `app.log`):
 ```
 Thử nhanh với file mẫu trong `samples/` (`sample_text.pdf`, `sample_scan.pdf` là bản scan).
 
-Mã nguồn: `app.py` (toàn bộ phía server), `store.py` (lưu tài liệu xuống đĩa), `notes.py` (ghi chú), `chats.py` (phiên trò chuyện), `static/index.html` (bố cục + CSS), `static/app.js` (giao diện), `static/render.js` (Markdown + công thức + code cho câu trả lời LLM và ghi chú), `static/notes.js` (ghi chú), `static/view.js` (thu phóng, chế độ xem, kính lúp, bề rộng khung chat). File tĩnh được trả kèm `Cache-Control: no-cache` nên sửa xong tải lại trang là thấy ngay.
+Mã nguồn: `app.py` (toàn bộ phía server), `store.py` (lưu tài liệu xuống đĩa), `notes.py` (ghi chú), `chats.py` (phiên trò chuyện), `static/index.html` (bố cục + CSS), `static/app.js` (giao diện), `static/render.js` (Markdown + công thức + code cho câu trả lời LLM và ghi chú), `static/notes.js` (ghi chú), `static/view.js` (hai khung xem, thu phóng, chế độ xem, kính lúp, bề rộng khung chat). File tĩnh được trả kèm `Cache-Control: no-cache` nên sửa xong tải lại trang là thấy ngay.
 
 ## LLM hỗ trợ (mọi API tương thích OpenAI)
-| Nhà cung cấp | Base URL | Ghi chú |
-|---|---|---|
-| Ollama | http://localhost:11434/v1 | `ollama pull qwen2.5:7b` |
-| llama.cpp | http://localhost:8080/v1 | `llama-server -m model.gguf -c 8192` |
-| LM Studio | http://localhost:1234/v1 | |
-| OpenRouter | https://openrouter.ai/api/v1 | cần API key |
-| OpenAI | https://api.openai.com/v1 | cần API key |
+Có sẵn (API cloud, cần API key; không sửa/xoá được):
 
-Server khác (vLLM, proxy riêng…) thì lưu thành **nhà cung cấp của bạn**: ⚙️ Cấu hình → mục 7 (tên, Base URL, key, model mặc định cho dịch / OCR / thuật ngữ), hoặc nút 💾 cạnh mỗi ô “Nhà cung cấp” để lưu nhanh Base URL + model đang nhập. Lưu trên server trong `data/providers.json` (không chứa key — key vẫn lưu theo Base URL trong `data/keys.json`); lần đầu chạy app gieo sẵn server TUF và proxy ChatGPT vào đây. API: `GET/POST /api/providers`, `DELETE /api/providers/<id>`.
+| Nhà cung cấp | Base URL | Model mặc định | Ghi chú |
+|---|---|---|---|
+| OpenRouter | https://openrouter.ai/api/v1 | `google/gemini-2.5-flash` | **mặc định** của app; có nhiều model `:free` |
+| OpenAI | https://api.openai.com/v1 | `gpt-4.1-mini` | |
+| Claude (Anthropic) | https://api.anthropic.com/v1 | `claude-opus-5` | lớp tương thích OpenAI của Anthropic: đọc ảnh được; bỏ qua `response_format` và file PDF (📎 Nguyên PDF tự lùi về chữ) |
+| DeepSeek | https://api.deepseek.com/v1 | `deepseek-flash` | `deepseek-flash` đọc được ảnh, `deepseek-v4-pro` thì không |
+
+**Nhà cung cấp của bạn** (gieo sẵn lần đầu chạy, sửa/xoá được): Ollama local (`http://localhost:11434/v1`), server TUF (llama.cpp, mặc định cho OCR Vision LLM nếu còn), proxy ChatGPT. Preset llama.cpp / LM Studio local đã bỏ (26/09/2026) — cài đặt cũ còn chọn chúng tự chuyển sang OpenRouter; server kiểu này vẫn dùng được qua “Tùy chỉnh” hoặc lưu thành nhà cung cấp của bạn.
+
+Server khác (vLLM, llama.cpp, LM Studio, proxy riêng…) thì lưu thành **nhà cung cấp của bạn**: ⚙️ Cấu hình → mục 7 (tên, Base URL, key, model mặc định cho dịch / OCR / thuật ngữ), hoặc nút 💾 cạnh mỗi ô “Nhà cung cấp” để lưu nhanh Base URL + model đang nhập. Lưu trên server trong `data/providers.json` (không chứa key — key vẫn lưu theo Base URL trong `data/keys.json`); lần đầu chạy app gieo sẵn Ollama local, server TUF và proxy ChatGPT vào đây (bản cài cũ: Ollama được chèn thêm một lần, đánh dấu bằng `data/.providers_v2`). API: `GET/POST /api/providers`, `DELETE /api/providers/<id>`.
 Ô **Model** là ô gõ-để-lọc: bấm vào là hiện danh sách model của server (nhớ 24 giờ, ↻ để tải lại), gõ vài từ để lọc (`qwen 27` khớp `qwen/qwen3.8-27b:free`), ↑↓ Enter để chọn; model của OpenRouter có nhãn `free`, `👁 ảnh` (đọc được ảnh) và độ dài ngữ cảnh.
 
 ## OCR (PDF scan)
@@ -222,9 +225,11 @@ Khung bên phải có hai tab **💬 Trò chuyện | 📝 Ghi chú** (nút 📝 
 
 ## Đọc, trò chuyện, kiểm soát bản dịch (25/09/2026)
 
-**Khung đọc** — thanh ở góc dưới trái:
-- **Gốc | Cả hai | Dịch**: xem một bản thì trang to gấp đôi. **− % +** (hoặc ⌘/Ctrl + lăn chuột, chụm hai ngón trên trackpad) phóng từ 40% tới 400%, giữ nguyên chỗ đang đọc; rộng hơn màn hình thì cuộn ngang. Ảnh trang được vẽ lại nét hơn khi phóng (server vẽ PNG ở zoom 3–4 thay vì 2). Lớp chữ, tô vàng, ghi chú vẫn dùng được ở mọi mức phóng (phóng ngay trên khung đọc, không mở khung riêng chứa bản sao của trang).
-- **Kính lúp**: giữ ⌥ Option / Alt khi rê chuột trên trang → vòng soi ×2,5 (tải riêng ảnh ×4 của trang cho nét, trong lúc chờ soi tạm ảnh đang hiện).
+**Khung đọc** — bản gốc và bản dịch nằm trong **hai khung xem độc lập**: mỗi khung tự cuộn (dọc lẫn ngang) và tự thu phóng, không còn kéo nhau lên xuống. Thanh ở giữa kéo để chia bề rộng hai khung (nhớ lại; bấm đúp: chia đôi). Thanh ở góc dưới trái:
+- **Gốc | Cả hai | Dịch**: xem một bản thì khung đó chiếm cả chỗ. Mỗi khung nhớ chỗ đang đọc, ẩn rồi hiện lại vẫn ở đúng chỗ.
+- **− % +** áp cho **khung đang chỉnh** (khung chuột vừa rê vào, tên hiện cạnh số %); ⌘/Ctrl + lăn chuột hoặc chụm hai ngón trên trackpad thì phóng khung dưới con trỏ, quanh đúng điểm con trỏ. Từ 40% tới 400%, mỗi khung nhớ mức riêng. Ảnh trang được vẽ lại nét hơn khi phóng (server vẽ PNG ở zoom 3–4 thay vì 2). Lớp chữ, tô vàng, ghi chú vẫn dùng được ở mọi mức phóng.
+- **🔗 Cuộn cùng nhau** (mặc định tắt): cuộn khung đang dùng thì khung kia theo tới cùng trang, cùng vị trí trên trang.
+- **Kính lúp**: giữ ⌥ Option / Alt khi rê chuột trên trang → khung soi chữ nhật 440×260 (đọc trọn một dòng), phóng ×1,8; ⌥ + lăn chuột đổi độ phóng trong khoảng ×1,4–×3 (nhớ lại, số hiện ở góc kính). Tải riêng ảnh ×4 của trang cho nét, trong lúc chờ soi tạm ảnh đang hiện.
 - **Khung trò chuyện kéo rộng/hẹp** ở mép trái (nhớ lại bề rộng, bấm đúp về mặc định, nút ⤢ mở nửa màn hình).
 
 **Trò chuyện**:

@@ -1,6 +1,6 @@
 """VietPaper: dịch bài báo PDF sang tiếng Việt, giữ nguyên bố cục.
 
-- Dịch: mọi API tương thích OpenAI (OpenRouter, OpenAI, Ollama, llama.cpp, LM Studio) + Google Translate (fallback).
+- Dịch: mọi API tương thích OpenAI (OpenRouter, OpenAI, Claude, DeepSeek, Ollama, llama.cpp…) + Google Translate (fallback).
 - OCR cho PDF scan: PP-DocLayoutV3 chia vùng + RapidOCR PP-OCR (local, mặc định), Tesseract (local),
   OCR.space (API miễn phí), vision LLM (PaddleOCR-VL / GLM-OCR đọc từng vùng, Unlimited-OCR cả trang).
 """
@@ -52,9 +52,9 @@ OCRSPACE_DEMO = "helloworld"
 
 class Config(BaseModel):
     # LLM
-    base_url: str = "http://localhost:11434/v1"
+    base_url: str = "https://openrouter.ai/api/v1"
     api_key: str = ""
-    model: str = "qwen3.5:latest"
+    model: str = "google/gemini-2.5-flash"
     temperature: float = 0.2
     glossary: str = ""
     glossary_auto: bool = True     # tự lập bảng thuật ngữ một lần cho mỗi tài liệu (một lượt gọi LLM)
@@ -78,10 +78,10 @@ class Config(BaseModel):
     ocr_lang: str = "eng"
     ocr_api_key: str = OCRSPACE_DEMO  # key demo của OCR.space, nên đăng ký key riêng (miễn phí)
     # OCR bằng vision LLM (OpenAI-compatible): PP-DocLayout + RapidOCR định vị đoạn, VLM đọc chữ
-    ocr_vlm_base_url: str = "http://localhost:11434/v1"
+    ocr_vlm_base_url: str = "http://100.64.0.1:8080/v1"   # server TUF (PaddleOCR-VL trên llama.cpp)
     ocr_vlm_api_key: str = ""
-    ocr_vlm_model: str = "hf.co/PaddlePaddle/PaddleOCR-VL-1.6-GGUF:latest"
-    ocr_vlm_concurrency: int = 4   # số vùng gửi cùng lúc; llama-server chạy -np 1 (vd. TUF) nên để 1
+    ocr_vlm_model: str = "paddleocr-vl"
+    ocr_vlm_concurrency: int = 1   # số vùng gửi cùng lúc; llama-server chạy -np 1 (vd. TUF) nên để 1, Ollama/API cloud 4
     # OCR qua endpoint HTTP tuỳ chỉnh
     ocr_custom_url: str = ""
     ocr_custom_api_key: str = ""
@@ -397,24 +397,28 @@ load_keys()
 # ================================================================ Nhà cung cấp LLM
 # Mỗi nhà cung cấp = một server OpenAI-compatible + model mặc định cho từng việc: model (dịch, trò chuyện, căn vệt tô),
 # vision (OCR), gloss (lập bảng thuật ngữ; không có thì như model dịch), parallel (số vùng OCR gửi cùng lúc).
-# Có sẵn: BUILTIN (không sửa/xoá được). Của người dùng: data/providers.json — không chứa key (key lưu theo base_url,
-# xem keys.json ở trên). Lần đầu chạy thì gieo sẵn hai server riêng của người dùng trước đây nằm trong danh sách có sẵn.
+# Có sẵn: BUILTIN (API cloud, không sửa/xoá được). Của người dùng: data/providers.json — không chứa key (key lưu theo
+# base_url, xem keys.json ở trên). Lần đầu chạy thì gieo sẵn Ollama local và các server riêng của người dùng.
+# 26/09/2026: bỏ preset llama.cpp / LM Studio local; Ollama chuyển từ có sẵn sang của người dùng (sửa/xoá được).
 PADDLE_OCR = "hf.co/PaddlePaddle/PaddleOCR-VL-1.6-GGUF:latest"   # OCR tốt nhất đã đo (18/09/2026)
 BUILTIN_PROVIDERS = [
-    {"id": "ollama", "name": "Ollama (local)", "base_url": "http://localhost:11434/v1", "model": "qwen3.5:latest",
-     "vision": PADDLE_OCR, "parallel": 4},
-    {"id": "llamacpp", "name": "llama.cpp server (local)", "base_url": "http://localhost:8080/v1", "model": "local",
-     "vision": "local", "parallel": 1},
-    {"id": "lmstudio", "name": "LM Studio (local)", "base_url": "http://localhost:1234/v1", "model": "", "vision": "",
-     "parallel": 1},
     # gloss: bench_glossary 21/09/2026 — Nemotron Ultra free lọc/dịch tốt hơn hẳn 4b
     {"id": "openrouter", "name": "OpenRouter", "base_url": "https://openrouter.ai/api/v1",
      "model": "google/gemini-2.5-flash", "vision": "google/gemini-2.5-flash", "parallel": 4,
      "gloss": "nvidia/nemotron-3-ultra-550b-a55b:free"},
     {"id": "openai", "name": "OpenAI", "base_url": "https://api.openai.com/v1", "model": "gpt-4.1-mini",
      "vision": "gpt-4.1-mini", "parallel": 4},
+    # Lớp tương thích OpenAI của Anthropic: nhận ảnh (image_url), bỏ qua response_format và kiểu nội dung "file"
+    {"id": "claude", "name": "Claude (Anthropic)", "base_url": "https://api.anthropic.com/v1", "model": "claude-opus-5",
+     "vision": "claude-opus-5", "parallel": 4},
+    # deepseek-flash đọc được ảnh, deepseek-v4-pro thì không (api-docs.deepseek.com, 25/09/2026)
+    {"id": "deepseek", "name": "DeepSeek", "base_url": "https://api.deepseek.com/v1", "model": "deepseek-flash",
+     "vision": "deepseek-flash", "parallel": 4},
 ]
+OLLAMA_PROVIDER = {"id": "ollama", "name": "Ollama (local)", "base_url": "http://localhost:11434/v1",
+                   "model": "qwen3.5:latest", "vision": PADDLE_OCR, "parallel": 4}
 SEED_PROVIDERS = [
+    OLLAMA_PROVIDER,
     # 4b chứ không phải 9b: bench 21/09/2026 hai model ngang nhau về nghĩa mà 4b nhanh gấp 4 lần (nằm trọn trên GPU)
     {"id": "tuf", "name": "llama.cpp – server TUF (Tailscale)", "base_url": "http://100.64.0.1:8080/v1",
      "model": "4b", "vision": "paddleocr-vl", "parallel": 1},
@@ -437,13 +441,23 @@ class Provider(BaseModel):
     parallel: int = 1
 
 
+PROVIDERS_V2 = DATA / ".providers_v2"   # đã chuyển Ollama vào danh sách của người dùng (một lần; xoá rồi thì thôi)
+
+
 def user_providers() -> list[dict]:
     if not PROVIDERS_FILE.exists():
         save_providers(SEED_PROVIDERS)
+        PROVIDERS_V2.touch()
     try:
-        return [x for x in json.loads(PROVIDERS_FILE.read_text()) if isinstance(x, dict) and x.get("id")]
+        items = [x for x in json.loads(PROVIDERS_FILE.read_text()) if isinstance(x, dict) and x.get("id")]
     except (OSError, ValueError):
         return []
+    if not PROVIDERS_V2.exists():
+        if not any(x["id"] == "ollama" for x in items):
+            items = [OLLAMA_PROVIDER, *items]
+            save_providers(items)
+        PROVIDERS_V2.touch()
+    return items
 
 
 def save_providers(items: list[dict]) -> None:
