@@ -1,9 +1,9 @@
-"""Lưu tài liệu xuống đĩa: khởi động lại app vẫn mở lại được bản dịch, tô vàng, bảng thuật ngữ.
+"""Lưu tài liệu xuống đĩa: khởi động lại app vẫn mở lại được bản dịch, tô vàng, bảng thuật ngữ, ghi chú.
 
 Mỗi tài liệu một thư mục `data/docs/{id}/`:
     src.pdf     bản gốc người dùng tải lên (không bao giờ sửa)
     out.pdf     bản dịch đang dựng dở (trang chưa dịch vẫn là trang gốc)
-    state.json  mọi thứ còn lại: tên, trang đã dịch, bản dịch từng đoạn, khối đã trích, tô vàng, thuật ngữ…
+    state.json  mọi thứ còn lại: tên, trang đã dịch, bản dịch từng đoạn, khối đã trích, tô vàng, thuật ngữ, ghi chú…
 
 Ghi nguyên tử (file tạm + os.replace): tắt app giữa chừng thì còn bản cũ nguyên vẹn chứ không có file hỏng một nửa.
 out.pdf ghi TRƯỚC state.json, và state.json chỉ ghi nhận trang đã có trong out.pdf trên đĩa (`disk_done`): tắt app
@@ -47,13 +47,42 @@ def _read_state(doc_id: str) -> dict | None:
         return None
 
 
+def exists(doc_id: str) -> bool:
+    f = folder(doc_id)
+    return bool(f) and (f / "state.json").exists() and (f / "src.pdf").exists()
+
+
+# id → (mtime của state.json, tóm tắt): state.json có cả khối đã trích và bản dịch (vài trăm KB mỗi bài), đọc lại
+# hết mỗi lần tải lên (tìm file trùng) hay mở 📚 Tài liệu là thừa — chỉ đọc lại bài nào vừa đổi
+_summaries: dict[str, tuple[float, dict]] = {}
+
+
+def _summary(f: Path) -> dict | None:
+    try:
+        mtime = f.stat().st_mtime
+    except OSError:
+        return None
+    doc_id = f.parent.name
+    if (hit := _summaries.get(doc_id)) and hit[0] == mtime:
+        return hit[1]
+    if not (st := _read_state(doc_id)):
+        return None
+    size = sum(p.stat().st_size for p in f.parent.iterdir() if p.is_file())
+    info = {"id": doc_id, "name": st["name"], "title": st.get("title", ""), "pages": st["pages"],
+            "done": len(st.get("done", [])), "marks": sum(len(v) for v in st.get("marks", {}).values()),
+            "notes": sum(bool(x.get("text", "").strip()) for x in st.get("notes", [])),
+            "updated": st.get("updated", 0), "size": size, "sha256": st.get("sha256", "")}
+    _summaries[doc_id] = (mtime, info)
+    return info
+
+
+def _all() -> list[dict]:
+    return [x for f in (ROOT.glob("*/state.json") if ROOT.exists() else ()) if (x := _summary(f))]
+
+
 def find(sha: str) -> str | None:
     """Tài liệu đã tải lên trước đây có đúng nội dung này (tải lại cùng file → mở lại bản cũ, không dịch lại)."""
-    for f in ROOT.glob("*/state.json") if ROOT.exists() else ():
-        st = _read_state(f.parent.name)
-        if st and st.get("sha256") == sha and (f.parent / "src.pdf").exists():
-            return f.parent.name
-    return None
+    return next((x["id"] for x in _all() if x["sha256"] == sha and exists(x["id"])), None)
 
 
 def create(doc_id: str, data: bytes) -> Path:
@@ -63,12 +92,21 @@ def create(doc_id: str, data: bytes) -> Path:
     return f / "src.pdf"
 
 
+def _gone(d: dict) -> bool:
+    """Tài liệu đã bị xoá (🗑) trong lúc một việc của nó còn chạy (đang dịch, đang lập bảng thuật ngữ): bỏ qua việc
+    ghi — nếu không thì ghi vào thư mục không còn là lỗi 500, còn tạo lại thư mục thì tài liệu đã xoá sống lại."""
+    f = folder(d["id"])
+    return not f or not f.exists()
+
+
 def save_pdf(d: dict) -> None:
     """Ghi bản dịch đang dựng. Gọi khi đang giữ d["lock"] (không để trang khác chèn vào giữa lúc ghi).
     garbage=4 (gộp cả stream trùng nội dung): mỗi trang dịch nhúng lại nguyên font, garbage=3 không gộp được nên bài
     15 trang ra 16,6 MB và mỗi lần ghi chậm dần tới ~1 s; garbage=4 còn 4 MB, ~0,6 s/lần, không tăng theo số trang
     (nó dọn luôn tài liệu trong bộ nhớ nên lần sau không phải gộp lại từ đầu). Đo 21/09/2026 trên
     attention-is-all-you-need; so với 30 s+ để dịch một trang thì không đáng kể."""
+    if _gone(d):
+        return
     done = set(d["done"])
     _write(folder(d["id"]) / "out.pdf", d["out"].tobytes(garbage=4, deflate=True))
     d["disk_done"] = done
@@ -96,10 +134,12 @@ def save_state(d: dict) -> None:
                    for p, (k, b, o) in list(d["blocks"].items())},
         "marks": {str(p): list(v) for p, v in list(d["marks"].items()) if v},
     }
-    for k in ("title", "gloss", "gloss_extra", "num_ctx"):
+    for k in ("title", "gloss", "gloss_extra", "num_ctx", "notes"):
         if k in d:
-            st[k] = d[k]
+            st[k] = list(d[k]) if isinstance(d[k], list) else d[k]
     with _locks.setdefault(d["id"], threading.Lock()):
+        if _gone(d):
+            return
         _write(folder(d["id"]) / "state.json", json.dumps(st, ensure_ascii=False).encode("utf-8"))
     d["created"] = st["created"]
 
@@ -124,7 +164,7 @@ def load(doc_id: str) -> dict | None:
         "blocks": {int(p): ((tuple(x["key"]), x["sess"]), x["blocks"], x["ocr"]) for p, x in st.get("blocks", {}).items()},
         "marks": ints(st.get("marks", {})),
     }
-    for k in ("title", "gloss", "gloss_extra", "num_ctx"):
+    for k in ("title", "gloss", "gloss_extra", "num_ctx", "notes"):
         if k in st:
             d[k] = st[k]
     return d
@@ -132,15 +172,7 @@ def load(doc_id: str) -> dict | None:
 
 def list_docs() -> list[dict]:
     """Tài liệu đã lưu, mới dùng gần nhất trước."""
-    out = []
-    for f in ROOT.glob("*/state.json") if ROOT.exists() else ():
-        st = _read_state(f.parent.name)
-        if st:
-            size = sum(p.stat().st_size for p in f.parent.iterdir() if p.is_file())
-            out.append({"id": f.parent.name, "name": st["name"], "title": st.get("title", ""), "pages": st["pages"],
-                        "done": len(st.get("done", [])), "marks": sum(len(v) for v in st.get("marks", {}).values()),
-                        "updated": st.get("updated", 0), "size": size})
-    return sorted(out, key=lambda x: -x["updated"])
+    return sorted(({k: v for k, v in x.items() if k != "sha256"} for x in _all()), key=lambda x: -x["updated"])
 
 
 def delete(doc_id: str) -> bool:
@@ -149,4 +181,5 @@ def delete(doc_id: str) -> bool:
         return False
     shutil.rmtree(f)
     _locks.pop(doc_id, None)
+    _summaries.pop(doc_id, None)
     return True

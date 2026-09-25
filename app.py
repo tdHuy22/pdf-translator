@@ -20,6 +20,7 @@ import time
 import unicodedata
 import uuid
 from pathlib import Path
+from urllib.parse import quote
 from typing import NamedTuple
 
 import httpx
@@ -30,6 +31,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import notes as N
 import store
 
 BASE = Path(__file__).parent
@@ -87,6 +89,10 @@ class Config(BaseModel):
     gloss_base_url: str = ""
     gloss_api_key: str = ""
     gloss_model: str = ""
+    # Căn vệt tô vàng sang bản kia bằng LLM (để trống = dùng đúng cấu hình LLM dịch). Bật/tắt nằm ở giao diện.
+    align_base_url: str = ""
+    align_api_key: str = ""
+    align_model: str = ""
 
 
 SYSTEM_PROMPT = """You are an expert academic translator. Translate research paper text (usually English or Chinese) into natural, precise Vietnamese.
@@ -223,11 +229,38 @@ def is_self_hosted(url: str) -> bool:
     return a in (10, 127) or (a, b) == (192, 168) or (a == 172 and 16 <= b <= 31) or (a == 100 and 64 <= b <= 127)
 
 
+# Tham số tuỳ chọn mà một (url, model) từ chối — đã hỏi lại không có nó và được, nên lần sau khỏi gửi:
+# - "temperature": model suy nghĩ của OpenAI chỉ nhận giá trị mặc định (đo 24/09/2026: gpt-6-luna qua proxy ChatGPT OAuth
+#   trả 500 "Bad Request" khi có temperature, còn stream thì trả 200 rồi ngắt kết nối; gpt-5.6-terra thì nhận).
+# - "reasoning": model trên OpenRouter bắt buộc suy nghĩ thì báo lỗi khi bị tắt.
+_REFUSED: dict[tuple[str, str], set[str]] = {}
+
+
+def refused_param(body: dict, status: int, text: str) -> str | None:
+    """Lỗi này có phải do một tham số tuỳ chọn không: trả tên tham số nên bỏ để hỏi lại, hoặc None.
+    Chỉ nhận lỗi có nhắc tới tham số đó (hay "Bad Request" trơn của proxy ChatGPT) — lỗi khác như vượt ngữ cảnh,
+    429, sai key thì hỏi lại cũng vô ích, và không được làm mất temperature của những lượt dịch sau."""
+    t = text.lower()
+    if status not in (400, 422, 500):
+        return None
+    if "reasoning" in body and "reasoning" in t:
+        return "reasoning"
+    if "temperature" in body and ("temperature" in t or '"bad request"' in t):
+        return "temperature"
+    return None
+
+
 def no_think(cfg: "Config", base_url: str, body: dict) -> dict:
-    """Tắt chế độ suy nghĩ với server tự host (Ollama/llama.cpp/LM Studio); API cloud giữ nguyên tham số."""
+    """Tắt chế độ suy nghĩ: server tự host (Ollama/llama.cpp/LM Studio) bằng reasoning_effort/chat_template_kwargs,
+    OpenRouter bằng `reasoning` (phần lớn model free là model suy nghĩ: để nguyên thì phần nghĩ ăn hết trần token —
+    đo 25/09/2026, Nemotron Ultra dịch một trang chỉ ra 4/12 đoạn). API cloud khác giữ nguyên tham số."""
     if cfg.disable_thinking and is_self_hosted(base_url):
         body["reasoning_effort"] = "none"                          # Ollama
         body["chat_template_kwargs"] = {"enable_thinking": False}  # llama.cpp / vLLM (Qwen3, Qwen3.5…)
+    elif cfg.disable_thinking and "openrouter.ai" in base_url:
+        body["reasoning"] = {"enabled": False}
+    for k in _REFUSED.get((base_url, body.get("model", "")), ()):
+        body.pop(k, None)
     return body
 
 
@@ -321,6 +354,8 @@ def resolve_keys(cfg: "Config") -> "Config":
         cfg.chat_api_key = remember(cfg.chat_base_url, cfg.chat_api_key)
     if cfg.gloss_base_url:
         cfg.gloss_api_key = remember(cfg.gloss_base_url, cfg.gloss_api_key)
+    if cfg.align_base_url:
+        cfg.align_api_key = remember(cfg.align_base_url, cfg.align_api_key)
     return cfg
 
 
@@ -1902,6 +1937,10 @@ async def chat_json(cfg: Config, system: str, payload: dict, schema: dict, max_o
     try:
         async with httpx.AsyncClient(timeout=wait_for(cfg, max_out)) as client, llm_sem(cfg.base_url, slots):
             r = await client.post(url, headers=headers, json=body)
+            if r.status_code >= 400 and kind != "ollama" and (k := refused_param(body, r.status_code, r.text)):
+                body.pop(k)                                               # model không nhận tham số này → hỏi lại
+                if (r := await client.post(url, headers=headers, json=body)).status_code < 400:
+                    _REFUSED.setdefault((url, cfg.model), set()).add(k)
     except httpx.HTTPError as e:
         raise LLMError(f"Không kết nối được LLM tại {url}: {e!r}")
     if r.status_code >= 400:
@@ -2314,10 +2353,9 @@ async def build_glossary(cfg: Config, doc: pymupdf.Document) -> dict | None:
             await asyncio.sleep(5)
         try:
             # Model suy luận trên OpenRouter (Nemotron Ultra) mặc định nghĩ ~5.000 token: 225 giây cho một bảng, tắt
-            # đi còn 13 giây mà vẫn lọc/dịch tốt (đo 21/09/2026). Model không suy luận thì OpenRouter bỏ qua.
-            extra = {"reasoning": {"enabled": False}} if "openrouter.ai" in c.base_url else None
+            # đi (no_think) còn 13 giây mà vẫn lọc/dịch tốt (đo 21/09/2026)
             data = await chat_json(c, GLOSSARY_PROMPT.replace("{max_terms}", str(rows)), payload, GLOSSARY_SCHEMA,
-                                   max_out, extra=extra)
+                                   max_out)
             out = {int(it["id"]): (str(it["kind"]).strip().lower(), str(it.get("vi") or ""))
                    for it in data["items"] if "kind" in it}
             if not out:   # JSON hỏng, parse_json chỉ vớt được dạng {id, text} của lượt dịch
@@ -3009,7 +3047,44 @@ def doc_state(doc_id: str):
     d = get_doc(doc_id)
     return {"id": doc_id, "name": d["name"], "pages": d["out"].page_count, "done": sorted(d["done"]),
             "marks": {str(p): v for p, v in d["marks"].items() if v},
-            "terms": d.get("gloss", []), "extra": d.get("gloss_extra", []), "title": d.get("title", "")}
+            "terms": d.get("gloss", []), "extra": d.get("gloss_extra", []), "title": d.get("title", ""),
+            "notes": N.ordered(d.get("notes", []))}
+
+
+# ---------------- Ghi chú (xem notes.py)
+@app.get("/api/{doc_id}/notes")
+def get_notes(doc_id: str):
+    return {"notes": N.ordered(get_doc(doc_id).get("notes", []))}
+
+
+@app.post("/api/{doc_id}/notes")
+def save_note(doc_id: str, note: N.Note):
+    """Thêm (id rỗng, hoặc "general" lần đầu) hoặc sửa chữ của một ghi chú. Trả về ghi chú đã lưu."""
+    d = get_doc(doc_id)
+    if (saved := N.upsert(d.setdefault("notes", []), note, d["out"].page_count)) is None:
+        raise HTTPException(404, "Ghi chú này đã bị xoá")
+    store.save_state(d)
+    return saved
+
+
+@app.delete("/api/{doc_id}/notes/{note_id}")
+def delete_note(doc_id: str, note_id: str):
+    d = get_doc(doc_id)
+    notes = d.setdefault("notes", [])
+    before = len(notes)
+    notes[:] = [x for x in notes if x["id"] != note_id]   # sửa tại chỗ: đừng bỏ rơi ghi chú đang được thêm song song
+    if len(notes) == before:
+        raise HTTPException(404, "Không có ghi chú này")
+    store.save_state(d)
+    return {"deleted": note_id}
+
+
+@app.get("/api/{doc_id}/notes.md")
+def notes_md(doc_id: str):
+    d = get_doc(doc_id)
+    name = Path(d["name"] or "paper.pdf").stem + "_ghi-chu.md"
+    return Response(N.markdown(d.get("title", ""), d["name"], d.get("notes", [])), media_type="text/markdown; charset=utf-8",
+                    headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}"})
 
 
 class Mark(BaseModel):
@@ -3026,6 +3101,7 @@ class Mark(BaseModel):
     peer: list[list[float]] = []    # khung câu tương ứng ở bản kia
     ps: int = 0                     # vị trí ký tự của câu tương ứng đó (để biết vệt nào đang bị bôi đè)
     pe: int = 0
+    via: str = ""                   # "llm": `peer` là đúng cụm tương ứng do LLM tìm; rỗng: cả câu tương ứng
 
 
 class MarkEdit(BaseModel):
@@ -3049,6 +3125,120 @@ def set_marks(doc_id: str, edit: MarkEdit):
     marks.extend(m.model_dump() for m in edit.add)
     store.save_state(d)
     return {"page": edit.page, "marks": marks}
+
+
+# ---------------- Căn vệt tô bằng LLM
+# Bôi đen vài chữ ở một bản → hỏi LLM cụm nào ở bản kia nói đúng điều đó, để tô đúng cụm thay vì cả câu.
+# LLM chép lại NGUYÊN VĂN cụm đó; server tìm lại cụm trong câu bên kia để ra vị trí ký tự. Không tìm thấy (model
+# sửa chữ, bịa, trả JSON rác) → giao diện giữ vệt tô cả câu như khi không có LLM, không bao giờ tô bậy.
+ALIGN_PROMPT = """You align a highlighted phrase between a research-paper passage and its translation (English/Chinese <-> Vietnamese).
+Input JSON: {"source": "...", "target": "..."}. In "source", the highlighted part is wrapped in [[ and ]]. "target" is the corresponding text in the other language.
+Return JSON {"match": "..."}: the part of "target" that translates EXACTLY the highlighted words — no more, no less.
+- Copy it character for character from "target" (same spelling, accents, spaces and punctuation). Never translate, paraphrase or fix it.
+- Do NOT extend it to words that translate the non-highlighted words around it, even if that makes a nicer phrase. A highlighted single word usually matches one or two words.
+- If the highlighted part cuts a word in half, match the whole translated word. If nothing in "target" corresponds, return "".
+Examples:
+{"source": "The [[encoder]] maps an input sequence to continuous representations.", "target": "Bộ mã hoá ánh xạ chuỗi đầu vào thành các biểu diễn liên tục."} -> {"match": "Bộ mã hoá"}
+{"source": "These models [[were trained on]] eight P100 GPUs for 12 hours.", "target": "Các mô hình này được huấn luyện trên tám GPU P100 trong 12 giờ."} -> {"match": "được huấn luyện trên"}
+{"source": "Chúng tôi [[đề xuất]] một kiến trúc mạng mới, Transformer.", "target": "We propose a new network architecture, the Transformer."} -> {"match": "propose"}"""
+ALIGN_SCHEMA = {"type": "object", "properties": {"match": {"type": "string"}}, "required": ["match"]}
+_ALIGN_CACHE: dict[tuple, dict] = {}
+_QUOTES = str.maketrans({"“": '"', "”": '"', "„": '"', "‘": "'", "’": "'", "–": "-", "—": "-", "\u00a0": " "})
+
+
+def align_cfg(cfg: Config) -> Config:
+    """Server/model căn vệt tô: để trống thì dùng đúng server đang dịch. temperature 0: cần chép đúng, không cần hay."""
+    return side_cfg(cfg, cfg.align_base_url, cfg.align_api_key, cfg.align_model).model_copy(update={"temperature": 0.0})
+
+
+def _norm_map(text: str) -> tuple[str, list[int]]:
+    """Chữ đã chuẩn hoá để so (NFC, chữ thường, ngoặc kép/gạch nối kiểu in ấn → ASCII, gộp khoảng trắng) kèm vị trí
+    ký tự gốc của từng ký tự, để tìm được rồi thì trả về đúng vị trí trong chữ gốc."""
+    out, pos = [], []
+    for i, ch in enumerate(text):
+        for c in unicodedata.normalize("NFC", ch).translate(_QUOTES):
+            c = c.lower() if len(c.lower()) == 1 else c
+            if c.isspace():
+                if not out or out[-1] == " ":
+                    continue
+                c = " "
+            out.append(c)
+            pos.append(i)
+    return "".join(out), pos
+
+
+def locate(match: str, target: str, hint: float) -> tuple[int, int] | None:
+    """Vị trí [đầu, cuối) của `match` trong `target`: đúng từng chữ trước, không có thì so sau khi chuẩn hoá, rồi bỏ
+    dấu câu thừa ở hai đầu. Xuất hiện nhiều lần ("attention" hai lần trong câu) → lấy chỗ gần `hint` nhất
+    (vị trí tương đối 0–1 của phần bôi đen trong câu bên này)."""
+    def best(hay: str, needle: str) -> int | None:
+        hits, at = [], hay.find(needle)
+        while at >= 0 and needle:
+            hits.append(at)
+            at = hay.find(needle, at + 1)
+        if not hits:
+            return None
+        return min(hits, key=lambda a: abs((a + len(needle) / 2) / max(len(hay), 1) - hint))
+    match = match.strip()
+    if not match:
+        return None
+    if (a := best(target, match)) is not None:
+        return a, a + len(match)
+    hay, pos = _norm_map(target)
+    for needle in (match, match.strip(" .,;:!?\"'()[]")):
+        needle = _norm_map(needle)[0].strip()
+        if len(needle) >= 1 and (a := best(hay, needle)) is not None:
+            return pos[a], pos[a + len(needle) - 1] + 1
+    return None
+
+
+class AlignAsk(BaseModel):
+    cfg: Config
+    src: str                        # câu (hoặc các câu) chứa phần bôi đen
+    s: int                          # phần bôi đen: [s, e) trong `src`
+    e: int
+    dst: str                        # câu tương ứng ở bản kia (lệch số câu thì cả đoạn)
+
+
+@app.post("/api/{doc_id}/align")
+async def align(doc_id: str, ask: AlignAsk):
+    """Cụm ở `dst` tương ứng với phần bôi đen trong `src`: {"s", "e"} (vị trí ký tự trong `dst`) hoặc
+    {"s": null} kèm lý do — khi đó giao diện giữ vệt tô cả câu."""
+    if doc_id not in DOCS and not store.exists(doc_id):   # chỉ kiểm tài liệu có thật, khỏi nạp cả PDF từ đĩa
+        raise HTTPException(404, "Không tìm thấy tài liệu")
+    cfg = align_cfg(resolve_keys(ask.cfg))
+    s, e = max(0, ask.s), min(len(ask.src), ask.e)
+    if not ask.dst.strip() or e <= s:
+        return {"s": None, "reason": "không có chữ để căn"}
+    key = (cfg.base_url, cfg.model, ask.src, s, e, ask.dst)
+    if key in _ALIGN_CACHE:
+        return {**_ALIGN_CACHE[key], "cached": True}
+    marked = f"{ask.src[:s]}[[{ask.src[s:e]}]]{ask.src[e:]}"
+    t0 = time.perf_counter()
+    hint = ((s + e) / 2) / max(len(ask.src), 1)
+    match, hit = "", None
+    # Trả rỗng / trả cụm không có thật / trả chữ không phải JSON: hỏi lại đúng câu đó một lần. Đo 24/09/2026:
+    # gpt-oss thỉnh thoảng trả {"match": ""} ở lần hỏi đầu rồi hỏi lại thì đúng ("chi tiết" → "details").
+    for _ in range(2):
+        try:
+            # đầu ra chỉ là chữ chép lại từ `dst`: trần token theo độ dài `dst` (tiếng Việt ~2,5 ký tự/token)
+            data = await chat_json(cfg, ALIGN_PROMPT, {"source": marked, "target": ask.dst}, ALIGN_SCHEMA,
+                                   max_out=len(ask.dst) // 2 + 3 * (e - s) + 96)
+        except LLMError as err:
+            return {"s": None, "reason": f"LLM lỗi: {err}"[:300]}
+        except ValueError:                  # model trả chữ không phải JSON
+            continue
+        match = str(data.get("match") or "") if isinstance(data, dict) else ""
+        if hit := locate(match, ask.dst, hint):
+            break
+    res = {"s": hit[0], "e": hit[1], "match": ask.dst[hit[0]:hit[1]]} if hit else \
+          {"s": None, "reason": f"LLM trả về cụm không có trong câu bên kia: {match[:120]!r}" if match else "LLM không tìm thấy cụm tương ứng"}
+    res["ms"] = round((time.perf_counter() - t0) * 1000)
+    if hit:                             # chỉ nhớ khi căn được: model trả rỗng thất thường, lần tô sau hỏi lại
+        if len(_ALIGN_CACHE) > 2000:
+            _ALIGN_CACHE.clear()
+        _ALIGN_CACHE[key] = res
+    return res
 
 
 _HEADING = re.compile(r"\d+(?:\.\d+)*\.?\s+[A-Z][\w ,:()/&'\-–]{2,70}")
@@ -3085,18 +3275,23 @@ def page_pair(d: dict, n: int) -> str:
     return "\n".join(parts)
 
 
+def side_cfg(cfg: Config, base_url: str, api_key: str, model: str) -> Config:
+    """Cấu hình cho một việc phụ (trò chuyện, thuật ngữ, căn vệt tô) có thể chạy trên server riêng: để trống base URL
+    thì dùng đúng server + key đang dịch. Có server riêng thì CHỈ dùng key của server đó (resolve_keys đã điền key
+    đã nhớ theo base URL) — không bao giờ lấy key của server dịch gửi sang server khác."""
+    if not base_url:
+        return cfg.model_copy(update={"model": model or cfg.model})
+    return cfg.model_copy(update={"base_url": base_url, "api_key": api_key, "model": model or cfg.model})
+
+
 def gloss_cfg(cfg: Config) -> Config:
     """Server/model lập bảng thuật ngữ: để trống trong cấu hình thì dùng đúng server đang dịch."""
-    return cfg.model_copy(update={"base_url": cfg.gloss_base_url or cfg.base_url,
-                                  "api_key": cfg.gloss_api_key or cfg.api_key,
-                                  "model": cfg.gloss_model or cfg.model})
+    return side_cfg(cfg, cfg.gloss_base_url, cfg.gloss_api_key, cfg.gloss_model)
 
 
 def chat_cfg(cfg: Config) -> Config:
     """Server/model để trò chuyện: để trống trong cấu hình thì dùng đúng server đang dịch."""
-    return cfg.model_copy(update={"base_url": cfg.chat_base_url or cfg.base_url,
-                                  "api_key": cfg.chat_api_key or cfg.api_key,
-                                  "model": cfg.chat_model or cfg.model})
+    return side_cfg(cfg, cfg.chat_base_url, cfg.chat_api_key, cfg.chat_model)
 
 
 class ChatAsk(BaseModel):
@@ -3105,12 +3300,18 @@ class ChatAsk(BaseModel):
     page: int | None = None       # trang đang xem
     selection: str = ""           # chữ người dùng bôi đen
     side: str = ""                # bôi đen ở bản nào: "original" | "translated"
+    note_ids: list[str] = []      # ghi chú gửi kèm ("💬 Hỏi lại" một ghi chú)
 
 
 def chat_context(d: dict, ask: ChatAsk, budget: int) -> str:
-    """Phần tài liệu gửi kèm câu hỏi, cắt theo `budget` token: đoạn bôi đen trước, rồi trang đang xem,
+    """Phần tài liệu gửi kèm câu hỏi, cắt theo `budget` token: ghi chú được chọn ("Hỏi lại"), đoạn bôi đen, rồi trang đang xem,
     rồi lan dần sang các trang bên cạnh."""
     parts, used = [], 0
+    if ask.note_ids and (txt := N.context(d.get("notes", []), ask.note_ids, budget)):
+        # ghi chú người đọc chọn gửi kèm: tối đa `budget` ký tự ≈ 1/4–2/5 ngân sách token (2,5–4 ký tự/token),
+        # phần còn lại cho đoạn bôi đen và các trang
+        parts.append(txt)
+        used += est_tokens(txt)
     if ask.selection.strip():
         sel = ask.selection.strip()[:4000]
         where = "bản dịch tiếng Việt" if ask.side == "translated" else "bản gốc"
@@ -3147,32 +3348,52 @@ async def chat_stream(cfg: Config, system: str, messages: list[dict], num_ctx: i
     else:
         url = cfg.base_url.rstrip("/") + "/chat/completions"
         body = no_think(cfg, url, {"model": cfg.model, "messages": msgs, "stream": True, "temperature": 0.3})
-    try:
-        async with httpx.AsyncClient(timeout=wait_for(cfg, 4096)) as client, llm_sem(cfg.base_url, slots):
-            async with client.stream("POST", url, headers=headers, json=body) as r:
-                if r.status_code >= 400:
-                    raise LLMError(f"Lỗi LLM {r.status_code}: {(await r.aread()).decode()[:300]}")
-                async for line in r.aiter_lines():
-                    line = line.strip()
-                    if not line or line.startswith(":"):
-                        continue
-                    if line.startswith("data:"):
-                        line = line[5:].strip()
-                    if line == "[DONE]":
-                        break
-                    try:
-                        obj = json.loads(line)
-                    except ValueError:
-                        continue
-                    ch = obj.get("choices") or [{}]
-                    piece = (ch[0].get("delta") or ch[0].get("message") or {}).get("content") \
-                        or (obj.get("message") or {}).get("content") or ""
-                    if piece:
-                        yield piece
-                    if obj.get("done"):
-                        break
-    except httpx.HTTPError as e:
-        raise LLMError(f"Không kết nối được LLM tại {url}: {e!r}")
+    got = False           # đã nhận được chữ nào chưa (chưa thì hỏi lại được mà người dùng không thấy gì lạ)
+    dropped = None        # tham số đã bỏ để hỏi lại; hỏi lại được thì nhớ cho lần sau
+    for attempt in range(2):
+        try:
+            async with httpx.AsyncClient(timeout=wait_for(cfg, 4096)) as client, llm_sem(cfg.base_url, slots):
+                async with client.stream("POST", url, headers=headers, json=body) as r:
+                    if r.status_code >= 400:
+                        text = (await r.aread()).decode(errors="replace")
+                        if not attempt and kind != "ollama" and (k := refused_param(body, r.status_code, text)):
+                            body.pop(k)                                  # model không nhận tham số này → hỏi lại
+                            dropped = k
+                            continue
+                        raise LLMError(f"Lỗi LLM {r.status_code}: {text[:300]}")
+                    async for line in r.aiter_lines():
+                        line = line.strip()
+                        if not line or line.startswith(":"):
+                            continue
+                        if line.startswith("data:"):
+                            line = line[5:].strip()
+                        if line == "[DONE]":
+                            break
+                        try:
+                            obj = json.loads(line)
+                        except ValueError:
+                            continue
+                        ch = obj.get("choices") or [{}]
+                        piece = (ch[0].get("delta") or ch[0].get("message") or {}).get("content") \
+                            or (obj.get("message") or {}).get("content") or ""
+                        if piece:
+                            got = True
+                            yield piece
+                        if obj.get("done"):
+                            break
+            if dropped:
+                _REFUSED.setdefault((url, cfg.model), set()).add(dropped)
+            return
+        except httpx.HTTPError as e:
+            # Proxy ChatGPT OAuth với gpt-6-luna: có temperature thì trả 200, gửi một mẩu rỗng rồi NGẮT kết nối
+            # (đo 24/09/2026) — chưa ra chữ nào thì bỏ temperature và hỏi lại. Chỉ lỗi ngắt kết nối này: hết giờ chờ
+            # hay không kết nối được thì hỏi lại cũng vô ích.
+            if (not attempt and not got and kind != "ollama" and "temperature" in body
+                    and isinstance(e, httpx.RemoteProtocolError)):
+                body.pop("temperature")
+                dropped = "temperature"
+                continue
+            raise LLMError(f"Không kết nối được LLM tại {url}: {e!r}")
 
 
 @app.post("/api/{doc_id}/chat")
@@ -3222,15 +3443,21 @@ def download(doc_id: str):
     # Cắt font (MuPDF, không cần fontTools) trên bản sao để không đụng tài liệu đang dịch dở: chỉ giữ ký tự đã dùng —
     # Times New Roman của macOS ~800 KB/kiểu chữ còn vài chục KB (đo 19/09/2026: ảnh trang và chữ trích giống hệt)
     doc = pymupdf.open("pdf", d["out"].tobytes(garbage=4))
+    by_mark, loose = N.plan(d["marks"], d.get("notes", []))
     for n, marks in d["marks"].items():    # chữ đã tô vàng → annotation highlight thật trong PDF
-        # vệt tô ở bản dịch thì lấy khung của chính nó, tô ở bản gốc thì lấy khung câu tương ứng bên bản dịch
-        rects = [r for m in marks for r in (m["rects"] if m["side"] == "translated" else m["peer"])]
-        page = doc[n] if rects else None   # phải giữ tham chiếu trang: trang bị thu hồi là annot "not bound"
-        for r in rects:
-            annot = page.add_highlight_annot(pymupdf.Rect(r))
-            annot.set_colors(stroke=(1, 0.88, 0.25))
-            annot.set_opacity(0.4)         # chữ bên dưới vẫn đọc được
-            annot.update()
+        # vệt tô ở bản dịch thì lấy khung của chính nó, tô ở bản gốc thì lấy khung cụm/câu tương ứng bên bản dịch
+        if n >= doc.page_count or not any(N.mark_rects(m) for m in marks):
+            continue
+        page = doc[n]                      # phải giữ tham chiếu trang: trang bị thu hồi là annot "not bound"
+        for m in marks:
+            for k, r in enumerate(N.mark_rects(m)):
+                annot = page.add_highlight_annot(pymupdf.Rect(r))
+                annot.set_colors(stroke=(1, 0.88, 0.25))
+                annot.set_opacity(0.4)     # chữ bên dưới vẫn đọc được
+                if k == 0 and m["id"] in by_mark:   # ghi chú của vệt tô → nội dung popup của highlight đầu tiên
+                    annot.set_info(content=by_mark[m["id"]], title="VietPaper")
+                annot.update()
+    N.add_loose(doc, loose)                # ghi chú của trang / cả bài → biểu tượng ghi chú ở lề trên
     try:
         doc.subset_fonts()
     except Exception as e:  # noqa: BLE001 — tính năng mới của MuPDF; lỗi thì nhúng nguyên font như trước

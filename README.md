@@ -12,7 +12,7 @@ Chạy nền và bật/tắt bằng `restart.sh` (log ghi vào `app.log`):
 ```
 Thử nhanh với file mẫu trong `samples/` (`sample_text.pdf`, `sample_scan.pdf` là bản scan).
 
-Mã nguồn: `app.py` (toàn bộ phía server), `store.py` (lưu tài liệu xuống đĩa), `static/index.html` (bố cục + CSS), `static/app.js` (giao diện). File tĩnh được trả kèm `Cache-Control: no-cache` nên sửa xong tải lại trang là thấy ngay.
+Mã nguồn: `app.py` (toàn bộ phía server), `store.py` (lưu tài liệu xuống đĩa), `notes.py` (ghi chú), `static/index.html` (bố cục + CSS), `static/app.js` (giao diện), `static/render.js` (Markdown + công thức cho câu trả lời LLM và ghi chú), `static/notes.js` (ghi chú). File tĩnh được trả kèm `Cache-Control: no-cache` nên sửa xong tải lại trang là thấy ngay.
 
 ## LLM hỗ trợ (mọi API tương thích OpenAI)
 | Nhà cung cấp | Base URL | Ghi chú |
@@ -38,7 +38,9 @@ Mã nguồn: `app.py` (toàn bộ phía server), `store.py` (lưu tài liệu xu
 
 **Model layout PP-DocLayoutV3** được ghim đúng commit và kiểm tra SHA-256 khi tải; tải lỗi (mất mạng) thì app gộp dòng theo khoảng cách như cũ và 10 phút sau mới thử tải lại.
 
-**Model local có chế độ suy nghĩ** (Qwen3/3.5, DeepSeek-R1…): giữ bật "Tắt thinking cho model local", nếu không mỗi trang có thể mất hàng chục phút.
+**Model có chế độ suy nghĩ** (Qwen3/3.5, DeepSeek-R1, phần lớn model free trên OpenRouter…): giữ bật "Tắt thinking", nếu không mỗi trang có thể mất hàng chục phút. Server tự host nhận `reasoning_effort: "none"` + `chat_template_kwargs.enable_thinking=false`; OpenRouter nhận `reasoning: {enabled: false}` — áp dụng cho mọi lượt gọi (dịch, thuật ngữ, trò chuyện, căn vệt tô). Trước 25/09/2026 chỉ lượt lập thuật ngữ và căn vệt tô tắt được trên OpenRouter: dịch một trang bằng Nemotron Ultra free chỉ ra 4/12 đoạn sau 13 lượt gọi (phần nghĩ ăn hết trần token); sau khi sửa: 12/12 đoạn, 1 lượt gọi, 40 giây.
+
+**Tham số bị từ chối**: model nào báo lỗi vì `temperature` (model suy nghĩ của OpenAI, vd. `gpt-6-luna` qua proxy ChatGPT) hay vì không cho tắt suy nghĩ thì app bỏ đúng tham số đó, hỏi lại một lần, và nhớ cho các lượt sau — chỉ khi lỗi có nhắc tới tham số đó và lần hỏi lại thành công. Lỗi khác (vượt ngữ cảnh, 429, sai key, mất kết nối) không làm mất `temperature` của các lượt dịch sau.
 
 Chế độ OCR: **Tự động** (OCR trang không có lớp chữ, **hoặc lớp chữ đọc ra rác** — PDF cũ có font thiếu bảng mã, trên 25% ký tự là ký tự thay thế/vùng dùng riêng), **Luôn OCR**, **Tắt**.
 
@@ -158,8 +160,32 @@ Chấm nghĩa: trọng tài là **`gpt-oss`** (20B, khác họ với Qwen 2b/4b/
 Trên mỗi ảnh trang có một **lớp chữ trong suốt** dựng từ chính lớp chữ của PDF (bản gốc lấy từ file gốc, bản dịch lấy từ trang đã dựng), mỗi dòng được kéo giãn ngang cho khớp đúng bề rộng dòng thật — nên bôi đen, copy chữ như đọc PDF bình thường. Dòng của mỗi đoạn được xếp lại theo thứ tự đọc: trang dịch đổ chữ Việt trước rồi mới dán công thức (dạng vector) đè lên, nên theo thứ tự nội dung PDF thì chữ của công thức rơi xuống cuối đoạn (`"… = 6 lớp giống nhau. … N x x dmodel"`). Công thức nằm **lọt giữa** khoảng ngang của một dòng (`"… nhỏ hơn |i| ."`) thì dòng đó được cắt ra để chen công thức vào đúng chỗ. Chỉ xếp trong phạm vi từng đoạn nên bài hai cột không bị trộn cột.
 - **Rê chuột** lên một đoạn: đoạn tương ứng ở bản kia hiện **viền xanh** (chỉ để đối chiếu, không phải tô vàng). Số hiệu đoạn giống nhau ở hai bản (bản dịch được đặt lại đúng theo từng đoạn gốc) nên việc ghép cặp là chính xác, không phải đoán theo vị trí.
 - **Bôi đen** → thanh nổi hiện hai nút:
-  - **🖍 Tô vàng**: tô **đúng phần chữ đã bôi đen** — vài chữ thì tô vài chữ. Bên bản kia tô **câu tương ứng**: chữ hai bản khác nhau nên không khớp được từng ký tự, nhưng trong một đoạn thì thứ tự câu giữ nguyên (prompt cấm model gộp/tách đoạn) nên câu thứ k bên này là câu thứ k bên kia; số câu hai bên lệch nhau thì mới tô cả đoạn. Bộ tách câu bỏ qua dấu chấm của viết tắt (`et al.`, `Fig.`, `e.g.`), chữ cái đầu tên người (`J. Smith`) và số thập phân, và nhập dấu chú thích đứng lẻ (`†`, `‡` — bản dịch hay đẩy xuống cuối câu) vào câu trước. Bôi đè lên vệt cũ thì nút đổi thành "Bỏ tô vàng". Lưu theo tài liệu trên đĩa (tải lại trang, khởi động lại app vẫn còn) và ghi thành **annotation highlight thật trong PDF tải về** (một annotation cho mỗi khung chữ, đúng phần đã tô).
+  - **🖍 Tô vàng**: tô **đúng phần chữ đã bôi đen** — vài chữ thì tô vài chữ. Bên bản kia tô **câu tương ứng**: chữ hai bản khác nhau nên không khớp được từng ký tự, nhưng trong một đoạn thì thứ tự câu giữ nguyên (prompt cấm model gộp/tách đoạn) nên câu thứ k bên này là câu thứ k bên kia; số câu hai bên lệch nhau thì mới tô cả đoạn. Bộ tách câu bỏ qua dấu chấm của viết tắt (`et al.`, `Fig.`, `e.g.`), chữ cái đầu tên người (`J. Smith`) và số thập phân, và nhập dấu chú thích đứng lẻ (`†`, `‡` — bản dịch hay đẩy xuống cuối câu) vào câu trước. Bôi đè lên vệt cũ thì nút đổi thành "Bỏ tô vàng". Bật **căn bằng LLM** thì bên bản kia thu về đúng cụm tương ứng (mục dưới). Lưu theo tài liệu trên đĩa (tải lại trang, khởi động lại app vẫn còn) và ghi thành **annotation highlight thật trong PDF tải về** (một annotation cho mỗi khung chữ, đúng phần đã tô).
   - **💬 Giải thích đoạn này**: mở khung trò chuyện với đoạn đang chọn đính kèm.
+- **Căn vệt tô bằng LLM** (⚙️ Cấu hình → mục 5, mặc định bật, **`gpt-6-luna` qua proxy ChatGPT** – 24/09/2026, xem bảng dưới): bôi đen vài chữ rồi tô vàng → bản kia sáng **ngay** cả câu tương ứng (nhạt, viền đứt), LLM trả lời xong (~3 giây với `gpt-6-luna`) thì thu về **đúng cụm tương ứng**: "eschewing recurrence" → "loại bỏ sự hồi tiếp", "bộ nhớ ngắn hạn dài" → "long short-term memory". Hai chiều (bôi đen ở bản gốc hay bản dịch đều được). Chọn model riêng hoặc "dùng đúng server/model đang dịch"; bỏ tích thì luôn tô cả câu như trước.
+  - App gửi câu chứa phần bôi đen (phần đó bọc `[[…]]`) và câu tương ứng bên kia (lệch số câu thì cả đoạn), LLM **chép nguyên văn** cụm tương ứng (`POST /api/<id>/align`, temperature 0, JSON ép khung). Server tìm lại cụm đó trong câu bên kia (so thẳng, không có thì bỏ qua hoa/thường, khoảng trắng, ngoặc kép kiểu in; trùng nhiều chỗ thì lấy chỗ gần vị trí phần bôi đen nhất). **Không tìm thấy → giữ tô cả câu**, không bao giờ tô bậy.
+  - Không hỏi LLM khi không cần: bôi đen gần trọn các câu (≥ 90% chữ) mà số câu hai bản khớp nhau thì cả câu đã là đáp án. Bỏ vệt tô lúc LLM chưa trả lời thì kết quả bị bỏ. Kết quả lưu vào vệt tô (`via: "llm"`) nên mở lại bài, PDF tải về đều có đúng cụm, không hỏi lại.
+  - **Độ chính xác** (24/09/2026, `scripts/bench_align.py --gold bench/align_gold.json`): 60 cụm từ bài FIDES, chọn ngẫu nhiên kiểu người bôi đen (1/3 là chiều Việt → Anh), đáp án ghi tay — đáp án là đoạn liền nhỏ nhất ở bản kia chứa bản dịch của mọi chữ đã bôi đen, nên bản dịch chen chữ vào giữa thì đáp án gồm luôn ("perform future" → "thực hiện các lời gọi công cụ sau này"):
+
+    | Model | Chạy ở đâu | Đúng | Thiếu/thừa một phần | Sai chỗ | Trung vị / chậm nhất |
+    |---|---|---|---|---|---|
+    | **`gpt-6-luna`** (mặc định) | proxy ChatGPT OAuth trên TUF | **56** | 4 | 0 | 3,0 s / 12,1 s |
+    | `gpt-oss` (20B) | llama.cpp TUF | 56 | 3 | 0 (+1 không tìm thấy) | 5,3 s / 14,7 s |
+    | `gpt-5.6-terra` | proxy ChatGPT OAuth trên TUF | 53 | 7 | 0 | 1,9 s / 5,5 s |
+    | `qwen/qwen3.8-27b:free` | OpenRouter (free) | 51 | 9 | 0 | 1,0 s / 3,8 s |
+    | `4b` | llama.cpp TUF | 45–46 | 13–14 | 0 (+1 không tìm thấy) | 0,8 s / 1,5 s |
+    | `nvidia/nemotron-3-ultra-550b-a55b:free` | OpenRouter (free) | 45 | 15 | 0 | 1,6 s / 38,6 s |
+    | `dots-studio/dots-3-note-preview:free` | OpenRouter (free) | 41 | 19 | 0 | 1,5 s / 3,7 s |
+    | `9b` | llama.cpp TUF | 37 | 23 | 0 | 2,1 s / 10,1 s |
+    | `inclusionai/ling-3.0-flash-fin:free` | OpenRouter (free) | 37 | 21 | **2** | 1,0 s / 1,9 s |
+
+    Không đo được (24/09/2026): Gemma 4 31B/26B, GLM 5.2, Laguna, Nemotron Super (OpenRouter free, liên tục 429/quá tải), Inkling (403 với tài khoản này), Nemotron 3.5 Lightning (treo > 60 s), nex-n2.5-pro (8–17 s/lần, dừng giữa chừng), `gpt-5.6-luna` (thử 3 cụm thì thiếu chữ 2 — dừng cho đỡ tốn hạn mức tài khoản free), `gpt-5.5` (proxy báo không có). Bench mặc định dùng `qwen/qwen3.8-27b:free` trên OpenRouter (nhanh, không tốn tiền); model free trên OpenRouter được gọi với `reasoning: {enabled: false}`.
+
+    **Proxy ChatGPT** (`http://192.168.1.10:10531/v1`, tài khoản ChatGPT web **free**, chỉ vào được trong mạng LAN): hết hạn mức hoặc máy không ở cùng mạng thì lượt căn báo lỗi → giữ tô cả câu, đổi sang OpenRouter trong ⚙️ Cấu hình. `gpt-6-luna` **không nhận `temperature`**: không stream thì trả 500 "Bad Request", stream thì trả 200 rồi ngắt kết nối — app tự hỏi lại không có `temperature` và nhớ model đó (áp dụng cho mọi chỗ gọi LLM: dịch, thuật ngữ, trò chuyện). Có preset "ChatGPT (proxy OAuth trên TUF)" ở mục dịch / trò chuyện / thuật ngữ / căn vệt tô.
+
+    Không model nào tô sai chỗ; lỗi là thiếu chữ ("secrecy if" → "bí mật tường minh", thiếu "nếu") hoặc thừa chữ. 4 cụm `gpt-6-luna` còn sai thì 2 là cụm cắt đôi từ ("[Nội] dung công[cụ]"), vốn không có đáp án rõ. Đã thử và **bỏ**: prompt chỉ có luật, không ví dụ (`4b` ~18/30 theo mắt chấm, hay lấy thừa); bắt model kê bản dịch từng chữ rồi server tô từ mảnh đầu tới mảnh cuối (`4b` 46/60, chậm gấp đôi); cho `4b` tự kiểm lại câu trả lời của mình (43/60, tệ hơn). Giữ lại: **hỏi lại một lần** khi model trả rỗng/trả cụm không có thật — `gpt-oss` thỉnh thoảng trả `""` ở lần hỏi đầu rồi hỏi lại thì đúng (51 → 56 cùng với việc nhận thêm "các thiết kế", "tấn công" là đáp án đúng).
+  - **Nếu chọn model trên router llama.cpp TUF**: router chỉ giữ một model trong bộ nhớ — đang ở `4b` mà gọi `gpt-oss` thì mất ~11 s nạp, quay về `4b` ~6 s. Căn bằng `gpt-oss` trong lúc đang dịch bằng `4b` là mỗi lần tô hai bên phải nạp lại model.
+  - TUF chỉ có 1 lượt song song: đang "Dịch tất cả" thì lượt căn phải xếp hàng sau trang đang dịch (vệt vẫn là cả câu, viền đứt, tới khi xong).
 - **Tải lại trang** không mất gì: app nhớ tài liệu cuối và lấy lại bản dịch, tô vàng, bảng thuật ngữ từ server (`GET /api/<id>/state`). Khởi động lại app cũng không mất — xem mục dưới.
 
 ## Lưu tài liệu, mở lại PDF đã tải lên (21/09/2026)
@@ -177,12 +203,27 @@ Mỗi PDF tải lên được lưu trong `data/docs/<id>/` (`store.py`): `src.pd
   - Câu trả lời LLM là dữ liệu không tin được (bài báo có thể chứa câu dặn model làm gì đó): HTML thô trong câu trả lời **không bao giờ thành thẻ** (dấu `<` bị thoát, hiện ra đúng là chữ), và mọi thẻ trình duyệt **tự tải** khi hiện ra (`img`, `video`, `iframe`…) bị bỏ — nếu không, một câu kiểu "chèn ảnh `https://…/?q=<tóm tắt cuộc trò chuyện>`" là đủ để nội dung bị gửi ra ngoài lúc câu trả lời hiện lên. Link thường vẫn giữ (phải bấm mới đi).
   - Sửa `static/render.js` xong thì mở **http://127.0.0.1:8000/render-test.html**: 21 ca (công thức 4 kiểu dấu, `$5` không phải công thức, `$` trong code, bảng, LaTeX hỏng, chặn tự tải…) và giả lập chảy chữ từng ký tự, không cần server LLM.
 
+
+## Ghi chú (25/09/2026)
+
+Khung bên phải có hai tab **💬 Trò chuyện | 📝 Ghi chú** (nút 📝 Ghi chú trên thanh trên cùng mở thẳng tab ghi chú). Ghi chú lưu cùng tài liệu trên đĩa (`notes.py`, trong `state.json`) nên khởi động lại app vẫn còn; chữ ghi chú là Markdown, viết được `$công thức$` và bảng (dựng bằng `render.js` như câu trả lời LLM).
+
+- **Ghi chú chung cho cả bài**: ô ở đầu tab, tự lưu sau 1 giây ngừng gõ. Bản đang gõ được giữ trong trình duyệt tới khi server nhận, và gửi nốt khi đóng tab / chuyển sang bài khác (chuyển bài giữa lúc chờ vẫn lưu đúng bài cũ).
+- **Ghi chú cho một đoạn**: bôi đen → **📝 Ghi chú** trên thanh nổi. Đoạn chưa tô thì tô vàng luôn rồi gắn ghi chú vào vệt đó; bôi đè lên vệt có sẵn thì gắn vào vệt đó. Vệt có ghi chú hiện dấu **📝** ở cuối (cả hai bản), góc trang gốc hiện số ghi chú của trang — bấm để mở đúng ghi chú. Bỏ vệt tô **không xoá** ghi chú (thẻ ghi chú hiện "vệt tô đã bỏ").
+- **Lưu câu trả lời LLM**: nút **📌 Lưu thành ghi chú** dưới mỗi câu trả lời — giữ nguyên Markdown/LaTeX, kèm câu hỏi, tên model, đoạn đã bôi đen lúc hỏi (và gắn vào vệt tô nếu đoạn đó đã được tô).
+- **Hỏi lại**: nút **💬 Hỏi lại** trên một ghi chú → sang tab trò chuyện, ghi chú đó được gửi kèm câu hỏi kế tiếp (`note_ids` trong `/api/<id>/chat`, trước đoạn bôi đen và các trang, tối đa ~1/4 ngân sách ngữ cảnh).
+- Mỗi thẻ: tới chỗ đó trong bài, ✏️ sửa (Ctrl+Enter lưu, xoá hết chữ = xoá ghi chú), 📋 chép Markdown, 🗑 xoá.
+- **Xuất**: **⬇ Xuất .md** (`GET /api/<id>/notes.md`: ghi chú chung, rồi theo trang, kèm đoạn trích và câu hỏi LLM). **PDF tải về** có ghi chú: ghi chú của vệt tô là nội dung popup của highlight đó; ghi chú của trang / vệt đã bỏ / cả bài là biểu tượng ghi chú ở lề trên trang.
+- API: `GET/POST /api/<id>/notes` (POST không có id = thêm, có id = sửa chữ; id `general` = ghi chú chung), `DELETE /api/<id>/notes/<note_id>`. `/state` và `📚 Tài liệu` có số ghi chú.
+
 ## API key
 Key lưu **theo từng server**, nên đổi qua lại OpenRouter → Ollama → OpenRouter không phải gõ lại:
 - trong trình duyệt (`localStorage`), và
 - một bản trên máy chạy app (`data/keys.json`, quyền `600`) — xoá dữ liệu duyệt web hoặc mở app từ máy khác vẫn dịch được. Request gửi key rỗng thì server tự điền key đã nhớ của base URL đó.
 
 Server **không bao giờ trả key đầy đủ** về giao diện, chỉ trả dạng che (`sk-o…9f2c`) để hiện vào ô nhập. Xoá một key: `curl -X DELETE "http://127.0.0.1:8000/api/keys?slot=<base_url>"`.
+
+Trò chuyện / lập thuật ngữ / căn vệt tô chạy trên **server riêng** thì chỉ dùng key của server đó; để trống base URL mới dùng chung server + key đang dịch. (Trước 25/09/2026, ô key để trống thì app lấy key của server dịch gửi sang — với cấu hình mặc định, key OpenRouter bị gửi tới proxy ChatGPT mỗi lần tô vàng.)
 
 ## Font bản dịch
 Bản dịch tự dùng font **cùng loại với chữ gốc** (có chân / không chân / đơn cách), giữ đậm-nghiêng. Chế độ "auto" chọn font có **độ rộng chữ gần font gốc nhất** (đo từ PDF): bài LaTeX dùng Times (0,44 em/chữ) → Times New Roman (0,44), thay vì Source Serif 4 (0,51) làm chữ phải co. Font nhúng được cắt chỉ còn ký tự đã dùng (MuPDF, không cần cài thêm) nên PDF tải về thường nhỏ hơn cả bản gốc.

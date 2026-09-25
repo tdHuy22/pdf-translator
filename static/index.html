@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VietPaper – Dịch bài báo PDF</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📄</text></svg>">
 <link rel="stylesheet" href="/vendor/katex.min.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📄</text></svg>">
 <style>
@@ -43,6 +44,8 @@
   .blk.peer { outline:2px solid rgba(37,99,235,.4); outline-offset:1px; border-radius:3px; }
   /* Vệt tô vàng: đúng phần chữ đã bôi đen. multiply để chữ bên dưới vẫn đọc được */
   .hl { position:absolute; pointer-events:none; background:rgba(250,204,21,.55); mix-blend-mode:multiply; border-radius:2px; }
+  /* Cả câu tương ứng, đang chờ LLM tìm đúng cụm: nhạt hơn, viền đứt */
+  .hl.wait { background:rgba(250,204,21,.22); outline:1px dashed rgba(202,138,4,.8); }
   .ln { position:absolute; white-space:pre; transform-origin:0 0; color:transparent; cursor:text; }
   .ln::selection { background:rgba(37,99,235,.32); }
   #selbar { position:absolute; z-index:20; display:none; gap:4px; background:var(--panel);
@@ -90,7 +93,6 @@
           background:var(--panel); border-left:1px solid var(--line); flex-direction:column; }
   body.chat #chat { display:flex; }
   .chead { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid var(--line); font-size:14px; }
-  .chead b { flex:1; }
   #msgs { flex:1; overflow:auto; padding:10px; display:flex; flex-direction:column; gap:10px; }
   .msg { font-size:13px; line-height:1.5; white-space:pre-wrap; padding:8px 10px; border-radius:10px; }
   .msg.me { background:#e0e7ff; align-self:flex-end; max-width:88%; }
@@ -128,6 +130,43 @@
   #selbox span { flex:1; max-height:4.5em; overflow:hidden; }
   #ask { display:flex; gap:6px; padding:8px; border-top:1px solid var(--line); }
   #q { flex:1; font:inherit; font-size:13px; padding:6px; border:1px solid var(--line); border-radius:6px; resize:vertical; }
+  /* ---- Tab trò chuyện / ghi chú ---- */
+  .tabs { flex:1; display:flex; gap:4px; }
+  .tabs button { font:inherit; font-size:13px; padding:4px 8px; border:1px solid transparent; border-radius:6px;
+                 background:transparent; cursor:pointer; color:var(--muted); }
+  .tabs button.on { border-color:var(--line); background:#f3f4f6; color:inherit; font-weight:600; }
+  #noteCount { font-weight:normal; font-size:11px; color:var(--muted); }
+  .pane { flex:1; min-height:0; display:flex; flex-direction:column; }
+  .pane[hidden] { display:none; }
+  #notesPane { overflow:auto; padding:8px 10px; gap:10px; }
+  .nhead { display:flex; justify-content:space-between; align-items:center; font-size:12px; }
+  .nhead a { color:var(--accent); text-decoration:none; }
+  .hint { font-size:12px; color:var(--muted); }
+  .ngen { display:flex; flex-direction:column; gap:4px; font-size:13px; font-weight:600; }
+  .ngen textarea, .note textarea { font:inherit; font-size:13px; font-weight:normal; padding:6px; border:1px solid var(--line);
+                                   border-radius:6px; resize:vertical; width:100%; box-sizing:border-box; }
+  .note { border:1px solid var(--line); border-radius:8px; padding:7px 9px; font-size:13px; line-height:1.5; background:#fff; }
+  .note.draft { border-color:#facc15; background:#fffbeb; }
+  .note.flash { box-shadow:0 0 0 3px rgba(250,204,21,.7); transition:box-shadow .3s; }
+  .nmeta { font-size:11px; color:var(--muted); display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .nmeta a { color:var(--accent); cursor:pointer; text-decoration:none; }
+  .nquote { border-left:3px solid #facc15; padding-left:6px; margin:4px 0; font-size:12px; color:var(--muted);
+            max-height:4.5em; overflow:hidden; }
+  .nbody > :first-child { margin-top:0; } .nbody > :last-child { margin-bottom:0; }
+  .nbody p, .nbody ul, .nbody ol { margin:.4em 0; } .nbody ul, .nbody ol { padding-left:1.3em; }
+  .nbody table { border-collapse:collapse; display:block; overflow-x:auto; font-size:.92em; }
+  .nbody th, .nbody td { border:1px solid var(--line); padding:2px 5px; }
+  .nbody .katex-display { overflow-x:auto; overflow-y:hidden; }
+  .nbody code { background:rgba(0,0,0,.06); padding:.1em .3em; border-radius:4px; }
+  #notebox { font-size:12px; color:var(--muted); padding:6px 10px; border-top:1px solid var(--line);
+             background:#eef2ff; display:flex; gap:6px; align-items:flex-start; }
+  #notebox[hidden] { display:none; }
+  #notebox span { flex:1; max-height:4.5em; overflow:hidden; }
+  /* Dấu 📝 cuối vệt tô có ghi chú (toạ độ PDF trong .layer đã thu phóng) và số ghi chú của trang */
+  .ndot { position:absolute; z-index:4; font-size:9px; line-height:1; cursor:pointer; pointer-events:auto;
+          background:#fef3c7; border:1px solid #f59e0b; border-radius:3px; padding:0 1px; }
+  .pnote { position:absolute; top:4px; right:6px; z-index:4;   /* dưới thanh trên cùng (header z-index 5) */ font-size:11px; cursor:pointer; background:#fef3c7;
+           border:1px solid #f59e0b; border-radius:4px; padding:0 4px; }
   @media (max-width:900px){ body.chat .cols { margin-right:0; } #chat { width:100%; } }
 </style>
 </head>
@@ -141,6 +180,7 @@
   <button id="btnDl" disabled>Tải PDF đã dịch</button>
   <button id="btnGloss" disabled>📒 Thuật ngữ</button>
   <button id="btnChat" disabled>💬 Hỏi về tài liệu</button>
+  <button id="btnNotes" disabled>📝 Ghi chú</button>
   <button id="btnSet">⚙️ Cấu hình</button>
   <span id="status">Chưa mở file</span>
 </header>
@@ -161,6 +201,7 @@
       <option value="lmstudio">LM Studio (local)</option>
       <option value="openrouter">OpenRouter</option>
       <option value="openai">OpenAI</option>
+      <option value="chatgpt">ChatGPT (proxy OAuth trên TUF, mạng LAN)</option>
       <option value="custom">Tùy chỉnh (OpenAI-compatible)</option>
     </select></label>
   <label class="tr-llm">Base URL <input id="base_url"></label>
@@ -231,6 +272,7 @@
       <option value="lmstudio">LM Studio (local)</option>
       <option value="openrouter">OpenRouter</option>
       <option value="openai">OpenAI</option>
+      <option value="chatgpt">ChatGPT (proxy OAuth trên TUF, mạng LAN)</option>
       <option value="custom">Tùy chỉnh (OpenAI-compatible)</option>
     </select></label>
   <label class="chat-opt">Base URL <input id="chat_base_url"></label>
@@ -249,6 +291,7 @@
       <option value="lmstudio">LM Studio (local)</option>
       <option value="openrouter">OpenRouter</option>
       <option value="openai">OpenAI</option>
+      <option value="chatgpt">ChatGPT (proxy OAuth trên TUF, mạng LAN)</option>
       <option value="custom">Tùy chỉnh (OpenAI-compatible)</option>
     </select></label>
   <label class="gloss-opt">Base URL <input id="gloss_base_url"></label>
@@ -257,7 +300,27 @@
     <span style="display:flex;gap:4px"><input id="gloss_model" style="flex:1"><button id="btnGlossModels" type="button">Tải DS</button></span>
     <select id="gloss_models" style="display:none;margin-top:4px"></select></label>
 
-  <h3 class="sec">5. Font bản dịch</h3>
+  <h3 class="sec">5. Căn vệt tô vàng bằng LLM</h3>
+  <label style="flex-direction:row;align-items:center;gap:6px" title="Bôi đen vài chữ rồi tô vàng: bản kia sáng NGAY cả câu tương ứng, vài giây sau LLM trả lời thì thu lại đúng cụm tương ứng. Tắt: bản kia luôn tô cả câu."><input type="checkbox" id="align_llm"> Tô đúng cụm tương ứng ở bản kia (mỗi lần tô hỏi LLM một lượt nhỏ)</label>
+  <label class="align-on" style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="align_same"> Dùng đúng server/model đang dịch</label>
+  <label class="align-opt">Nhà cung cấp
+    <select id="align_preset">
+      <option value="ollama">Ollama (local)</option>
+      <option value="llamacpp">llama.cpp server (local)</option>
+      <option value="tuf">llama.cpp – server TUF (Tailscale)</option>
+      <option value="lmstudio">LM Studio (local)</option>
+      <option value="openrouter">OpenRouter</option>
+      <option value="openai">OpenAI</option>
+      <option value="chatgpt">ChatGPT (proxy OAuth trên TUF, mạng LAN)</option>
+      <option value="custom">Tùy chỉnh (OpenAI-compatible)</option>
+    </select></label>
+  <label class="align-opt">Base URL <input id="align_base_url"></label>
+  <label class="align-opt">API key <input id="align_api_key" type="password" placeholder="(để trống nếu local)"></label>
+  <label class="align-opt">Model
+    <span style="display:flex;gap:4px"><input id="align_model" style="flex:1"><button id="btnAlignModels" type="button">Tải DS</button></span>
+    <select id="align_models" style="display:none;margin-top:4px"></select></label>
+
+  <h3 class="sec">6. Font bản dịch</h3>
   <label>Font có chân (chữ gốc serif) <select id="font_serif" class="font-sel" data-kind="serif"></select></label>
   <label>Font không chân (chữ gốc sans) <select id="font_sans" class="font-sel" data-kind="sans"></select></label>
   <label>Font đơn cách (code) <select id="font_mono" class="font-sel" data-kind="mono"></select></label>
@@ -290,16 +353,34 @@
 <div id="selbar" onmousedown="event.preventDefault()">
   <button id="selAsk">💬 Giải thích đoạn này</button>
   <button id="selMark">🖍 Tô vàng</button>
+  <button id="selNote" title="Tô vàng đoạn này (nếu chưa tô) và viết ghi chú cho nó">📝 Ghi chú</button>
 </div>
 
 <aside id="chat">
-  <div class="chead"><b>💬 Hỏi về tài liệu</b>
+  <div class="chead">
+    <div class="tabs"><button id="tabChat" class="on" type="button">💬 Trò chuyện</button>
+      <button id="tabNotes" type="button">📝 Ghi chú <span id="noteCount"></span></button></div>
     <button id="chatClear" title="Xoá hội thoại">🗑</button>
     <button id="chatClose">✕</button></div>
-  <div id="msgs"></div>
-  <div id="selbox" hidden><span id="seltext"></span><button id="selDrop" title="Bỏ đoạn đang chọn">✕</button></div>
-  <form id="ask"><textarea id="q" rows="2" placeholder="Hỏi về bài báo… (Enter để gửi)"></textarea>
-    <button class="primary" type="submit">Gửi</button></form>
+  <div id="chatPane" class="pane">
+    <div id="msgs"></div>
+    <div id="notebox" hidden><span id="notetext"></span><button id="noteDrop" title="Không gửi kèm ghi chú này">✕</button></div>
+    <div id="selbox" hidden><span id="seltext"></span><button id="selDrop" title="Bỏ đoạn đang chọn">✕</button></div>
+    <form id="ask"><textarea id="q" rows="2" placeholder="Hỏi về bài báo… (Enter để gửi)"></textarea>
+      <button class="primary" type="submit">Gửi</button></form>
+  </div>
+  <div id="notesPane" class="pane" hidden>
+    <div class="nhead"><span class="hint" id="nsum"></span><a id="notesMd" href="#">⬇ Xuất .md</a></div>
+    <label class="ngen"><span>Ghi chú chung cho cả bài <span id="genState" class="hint"></span></span>
+      <textarea id="genNote" rows="4" placeholder="Ý chính, câu hỏi còn bỏ ngỏ, việc cần đọc thêm… (tự lưu)"></textarea></label>
+    <div id="noteDraft" class="note draft" hidden>
+      <div class="nmeta" id="draftWhere"></div>
+      <textarea id="draftText" rows="4" placeholder="Viết ghi chú… (Ctrl+Enter để lưu; Markdown và $công thức$ đều được)"></textarea>
+      <div class="msgbar"><button id="draftSave" class="primary" type="button">Lưu ghi chú</button>
+        <button id="draftCancel" type="button">Huỷ</button></div>
+    </div>
+    <div id="noteList"></div>
+  </div>
 </aside>
 
 <div class="cols" id="cols">
@@ -312,5 +393,6 @@
 <script src="/vendor/katex.min.js"></script>
 <script src="/render.js"></script>
 <script src="/app.js"></script>
+<script src="/notes.js"></script>  <!-- ghi chú: dùng chung biến của app.js (doc, MARKS, $…), phải nạp sau -->
 </body>
 </html>

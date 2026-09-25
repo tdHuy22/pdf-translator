@@ -55,7 +55,7 @@ async def run(mode: str, name: str, pno: int) -> dict:
     cfg = app.Config()
     d = {"src": path, "out": pymupdf.open(path), "blocks": {}}
     blocks, _ = await app.page_blocks(d, pno, cfg)
-    context = await app.block_context(d, pno, cfg, blocks)
+    context = await app.block_context(d, [pno], cfg, blocks)   # nhận danh sách trang (nhóm trang gộp)
     info = await doc_info(cfg, path) if mode == "B" else {}
     if mode == "A":
         app._servers[cfg.base_url] = ("other", 4096)

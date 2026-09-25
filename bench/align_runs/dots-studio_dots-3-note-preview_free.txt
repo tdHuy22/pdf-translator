@@ -1,0 +1,24 @@
+/Users/macos/Documents/Claude/pdf-translator/.venv/lib/python3.11/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+[llm] https://openrouter.ai/api/v1 (dots-studio/dots-3-note-preview:free): other, ngữ cảnh 512000 token, 4 lượt song song
+  #0  một phần       'including'                            → 'kể cả qua'                                      (đáp án 'kể cả')
+  #3  một phần       'content: "Find'                       → 'Tìm kênh'                                       (đáp án 'Nội dung người dùng: "Tìm')
+  #4  một phần       'tool'                                 → 'các lệnh gọi công cụ'                           (đáp án 'công cụ')
+  #9  một phần       'secrecy if'                           → 'thỏa bí mật tường minh nếu'                     (đáp án 'bí mật tường minh nếu')
+  #11 một phần       'bước thực thi, tương'                 → 'steps of execution, which corresponds to an '   (đáp án 'steps of execution')
+  #12 một phần       'inductively to multiple evaluation'   → 'mở rộng cấu trúc này quy nạp cho nhiều bước '   (đáp án 'quy nạp cho nhiều bước đánh giá')
+  #13 một phần       'additionally, one can'                → 'hoặc đồng thời, có thể đưa một LLM cách ly'     (đáp án 'đồng thời, có thể')
+  #17 một phần       'vụ bạn có thể'                        → 'tasks that you can accomplish with your own '   (đáp án 'tasks that you can')
+  #35 một phần       'liệu tiếp tục nếu mọi'                → 'to proceed only if all recipients'              (đáp án 'data to proceed only if all')
+  #36 một phần       'User content: "Find'                  → 'Tìm kênh có số tin nhắn ít nhất'                (đáp án 'Nội dung người dùng: "Tìm')
+  #40 một phần       'policy-enforcing planners'            → 'thực thi chính sách'                            (đáp án 'bộ lập kế hoạch thực thi chính sách')
+  #46 một phần       'achieve'                              → 'được'                                           (đáp án 'đạt được')
+  #47 một phần       'thức hóa thành Thuật'                 → 'formalized as Algorithm 1'                      (đáp án 'formalized as Algorithm')
+  #50 một phần       'ban đầu'                              → 'initial state'                                  (đáp án 'initial')
+  #51 một phần       'Algorithm'                            → 'Thuật toán 7'                                   (đáp án 'Thuật toán')
+  #53 một phần       'giải mật'                             → 'robust declassification'                        (đáp án 'declassification')
+  #55 một phần       'LLM then'                             → 'sau đó'                                         (đáp án 'LLM sau đó')
+  #58 một phần       'Algorithm'                            → 'Thuật toán 6'                                   (đáp án 'Thuật toán')
+  #59 một phần       'chi tiết'                             → 'key implementation details'                     (đáp án 'details')
+
+dots-studio/dots-3-note-preview:free: đúng 41 · một phần 19 · sai 0 · không tìm thấy 0 · lỗi LLM 0 / 60 · trung vị 1.5s, chậm nhất 3.7s

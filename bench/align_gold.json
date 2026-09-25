@@ -1,0 +1,619 @@
+[
+ {
+  "dir": "en→vi",
+  "src": "• For the readers lattice, non-interference prevents unauthorized flows to any reader, including through control flow.",
+  "s": 87,
+  "e": 96,
+  "dst": "• Với lattice người đọc, không can nhiễu ngăn các luồng trái phép đến bất kỳ người đọc nào, kể cả qua luồng điều khiển.",
+  "gold": [
+   "kể cả"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "• For the binary confidentiality lattice, non-interference prevents flows from H to L. This includes direct assignments and secret-dependent control flow.",
+  "s": 141,
+  "e": 153,
+  "dst": "• Với lattice tính bảo mật nhị phân, không can nhiễu ngăn các luồng từ H đến L. Điều này gồm gán trực tiếp và luồng điều khiển phụ thuộc bí mật.",
+  "gold": [
+   "luồng điều khiển"
+  ]
+ },
+ {
+  "dir": "vi→en",
+  "src": "Điều này ngăn vi phạm tính bảo mật khi bị tấn công cũng như do lỗi của mô hình.",
+  "s": 60,
+  "e": 73,
+  "dst": "This prevents confidentiality violations under attack but also as a result of model mistakes.",
+  "gold": [
+   "model mistakes",
+   "as a result of model mistakes"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "User content: \"Find a channel with the smallest number of messages, and add Alice to that ↩→ channel.\"",
+  "s": 5,
+  "e": 19,
+  "dst": "Nội dung người dùng: \"Tìm kênh có số tin nhắn ít nhất và thêm Alice vào kênh ↩→  đó.\"",
+  "gold": [
+   "Nội dung người dùng: \"Tìm"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "The application is responsible for executing requested tool calls.",
+  "s": 55,
+  "e": 59,
+  "dst": "Ứng dụng chịu trách nhiệm thực thi các lệnh gọi công cụ được yêu cầu.",
+  "gold": [
+   "công cụ"
+  ]
+ },
+ {
+  "dir": "vi→en",
+  "src": "Chúng tôi xét góc nhìn của đối thủ ở một mức bảo mật cụ thể 𝑆∈L  trong lattice và do đó có thể thấy các phép gán cho mọi biến ở mức đó hoặc thấp hơn, nhưng không được học thông tin về biến khác.",
+  "s": 171,
+  "e": 183,
+  "dst": "We take the vantage point of an adversary that sits at a specific security level 𝑆∈L in the lattice and thus can see assignments to all variables at or below that level, but should not be able to learn information about other variables.",
+  "gold": [
+   "information about"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "Tool content: \"[ #get_channels-result-0-0#, #get_channels-result-0-1#, #get_channels-result-0-2#, #get_channels-result-0-3# ]\" tool_call_id: 'get_channels_0'",
+  "s": 0,
+  "e": 12,
+  "dst": "Nội dung công cụ: \"[ #get_channels­result­0­0#, #get_channels­result­0­1#, #get_channels­result­0­2#, #get_channels­result­0­3# ]\" tool_call_id: 'get_channels_0'",
+  "gold": [
+   "Nội dung công cụ"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "A task 𝑡= (𝑞, F , D) is data independent if there exists a sequence of tool calls that can solve the task for all 𝑑∈D (and data dependent otherwise).",
+  "s": 87,
+  "e": 105,
+  "dst": "Nhiệm vụ 𝑡= (𝑞, F ,  D ) là độc lập dữ liệu nếu tồn tại chuỗi lệnh gọi công cụ có thể giải nhiệm vụ cho mọi 𝑑∈  D (ngược lại là phụ thuộc dữ liệu).",
+  "gold": [
+   "có thể giải nhiệm vụ"
+  ]
+ },
+ {
+  "dir": "vi→en",
+  "src": "Tuy nhiên, chúng tôi có thể suy ra các nhãn hợp lý từ chính định nghĩa nhiệm vụ.",
+  "s": 32,
+  "e": 50,
+  "dst": "However, we can infer reasonable labels from task definitions themselves.",
+  "gold": [
+   "infer reasonable labels",
+   "reasonable labels"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "Formally, a command (𝜎, 𝑚) satisfies explicit secrecy if, for all 𝑑1 ∈D, whenever (𝜎, 𝑚, 𝑑1) −→ 𝑔 ∗(𝜎′, 𝑚′, 𝑑 1) then, for all 𝑑2 ∈D with 𝑑1 =𝑆𝑑2, we also have 𝑔(𝑑1) =𝑆𝑔(𝑑2).′",
+  "s": 46,
+  "e": 56,
+  "dst": "Về hình thức, lệnh (𝜎, 𝑚) thỏa bí mật tường minh nếu, với mọi 𝑑1 ∈D , bất cứ khi nào (𝜎, 𝑚, 𝑑1) −→ 𝑔 ∗(𝜎′, 𝑚′, 𝑑 1)′  thì, với mọi 𝑑2 ∈D  sao cho 𝑑1 =𝑆𝑑2 , ta cũng có 𝑔(𝑑1) =𝑆𝑔(𝑑2) .",
+  "gold": [
+   "bí mật tường minh nếu"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "Algorithm 7 shows the variable passing planner of Algorithm 4 with selective hiding of tool results instrumented to dynamically track information-flow labels.",
+  "s": 134,
+  "e": 157,
+  "dst": "Thuật toán 7 trình bày bộ lập kế hoạch truyền biến của Thuật toán 4 với việc ẩn chọn lọc kết quả công cụ, được gắn cơ chế theo dõi động các nhãn luồng thông tin.",
+  "gold": [
+   "nhãn luồng thông tin",
+   "các nhãn luồng thông tin"
+  ]
+ },
+ {
+  "dir": "vi→en",
+  "src": "Chúng tôi viết (𝜎, 𝑚, 𝑑) −→𝑛(𝜎′, 𝑚′, 𝑑′)  cho 𝑛 bước thực thi, tương ứng với một tác tử biến đổi 𝑑 thành 𝑑′  bắt đầu từ thông điệp 𝑚 và trạng thái 𝜎.",
+  "s": 48,
+  "e": 68,
+  "dst": "We write (𝜎, 𝑚, 𝑑) −→𝑛(𝜎′, 𝑚′, 𝑑′) for 𝑛steps of execution, which corresponds to an agent transforming 𝑑 into 𝑑′ starting from message 𝑚and state 𝜎.",
+  "gold": [
+   "steps of execution",
+   "steps of execution, which corresponds"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "We lift this construction inductively to multiple evaluation steps, composing state transformers.",
+  "s": 26,
+  "e": 60,
+  "dst": "Chúng tôi mở rộng cấu trúc này quy nạp cho nhiều bước đánh giá, bằng cách hợp thành các bộ biến đổi trạng thái.",
+  "gold": [
+   "quy nạp cho nhiều bước đánh giá"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "Alternatively, or additionally, one can introduce a quarantined LLM as a tool for the planner to query the content of variables.",
+  "s": 18,
+  "e": 39,
+  "dst": "Ngoài ra, hoặc đồng thời, có thể đưa một LLM cách ly làm công cụ để bộ lập kế hoạch truy vấn nội dung của biến.",
+  "gold": [
+   "đồng thời, có thể"
+  ]
+ },
+ {
+  "dir": "vi→en",
+  "src": "Bằng cách gắn nhãn bảo mật và toàn vẹn cho mọi dữ liệu mà tác tử xử lý, ta có thể xây dựng ngữ cảnh cần thiết để quyết định tất định liệu một hành động có hệ quả, như gọi công cụ, có an toàn để tiếp tục hay không.",
+  "s": 199,
+  "e": 206,
+  "dst": "By attaching confidentiality and integrity labels to all data an agent processes, one can build up the context needed to decide deterministically whether a consequential action, such as invoking a tool, is safe to proceed.",
+  "gold": [
+   "proceed"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "To overcome these shortcomings, real-world systems often also use human-in-the-loop prompts, which can lead to confirmation fatigue and social engineering attacks.",
+  "s": 66,
+  "e": 98,
+  "dst": "Để khắc phục các hạn chế này, hệ thống thực tế thường dùng thêm prompt có con người trong vòng lặp, nhưng có thể gây mệt mỏi xác nhận và tấn công kỹ nghệ xã hội.",
+  "gold": [
+   "prompt có con người trong vòng lặp",
+   "prompt có con người trong vòng lặp, nhưng"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "Although inspired by the Dual LLM pattern [32], a key novelty of our approach is that we selectively hide only data that would change the label of the planner’s context and thus restrict the agent’s ability to perform future tool calls.",
+  "s": 210,
+  "e": 224,
+  "dst": "Dù lấy cảm hứng từ mẫu Dual LLM [32], điểm mới chính của cách tiếp cận là chúng tôi chỉ ẩn có chọn lọc dữ liệu có thể làm đổi nhãn của ngữ cảnh bộ lập kế hoạch và do đó hạn chế khả năng tác tử thực hiện các lời gọi công cụ sau này.",
+  "gold": [
+   "thực hiện các lời gọi công cụ sau này"
+  ]
+ },
+ {
+  "dir": "vi→en",
+  "src": "­ Tránh dùng LLM bị cách ly cho các tác vụ bạn có thể hoàn thành bằng năng lực suy luận ↩→  của mình.",
+  "s": 40,
+  "e": 53,
+  "dst": "- Avoid using quarantined LLM for tasks that you can accomplish with your own reasoning ↩→ capabilities.",
+  "gold": [
+   "tasks that you can",
+   "tasks that you can accomplish"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "We use tasks from the workspace environment to fine-tune system messages for GPT-4o and reuse the same system messages across all other environments and configurations, including when using different models.",
+  "s": 57,
+  "e": 83,
+  "dst": "Chúng tôi dùng các nhiệm vụ từ môi trường workspace để tinh chỉnh thông điệp hệ thống cho GPT­4o và tái dùng cùng thông điệp hệ thống trên mọi môi trường và cấu hình khác, kể cả khi dùng các mô hình khác.",
+  "gold": [
+   "thông điệp hệ thống cho GPT­4o"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "recursively checks if any node in the tool result has a security label more restrictive (i.e., not at or below in the security lattice) than the current context label (line 20) and, if so,",
+  "s": 145,
+  "e": 166,
+  "dst": "kiểm tra đệ quy xem nút nào trong kết quả công cụ có nhãn bảo mật hạn chế hơn (tức không ở bằng hoặc dưới trong lưới bảo mật) so với nhãn ngữ cảnh hiện tại (dòng 20) hay không và, nếu có,",
+  "gold": [
+   "nhãn ngữ cảnh hiện tại"
+  ]
+ },
+ {
+  "dir": "vi→en",
+  "src": "Fides được xem là người bảo hộ các hiệp ước và tài liệu nhà nước khác, được cất giữ an toàn trong đền thờ của bà.",
+  "s": 47,
+  "e": 69,
+  "dst": "Fides was considered the guardian of treaties and other state documents, placed for safekeeping in her temple.",
+  "gold": [
+   "other state documents"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "We broadly classify tools into three (potentially overlapping) categories: those that constitute consequential actions, those that egress data, and those that do neither.",
+  "s": 131,
+  "e": 142,
+  "dst": "Chúng tôi phân loại rộng các công cụ thành ba nhóm (có thể chồng lấn): công cụ tạo thành hành động hệ quả, công cụ xuất dữ liệu, và công cụ không thuộc hai nhóm đó.",
+  "gold": [
+   "xuất dữ liệu"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "Likewise, we assign policy P-F to every tool that writes to variables labelled ( , 𝑆) in the datastore, with confidentiality checks on all arguments that affect the 𝑆variables.",
+  "s": 135,
+  "e": 138,
+  "dst": "Tương tự, chúng tôi gán chính sách P­F cho mọi công cụ ghi vào các biến có nhãn ( , 𝑆)  trong kho dữ liệu, với kiểm tra tính bảo mật trên mọi đối số ảnh hưởng đến các biến 𝑆.",
+  "gold": [
+   "mọi"
+  ]
+ },
+ {
+  "dir": "vi→en",
+  "src": "Với trường hợp gọi công cụ 𝑓, hàm 𝑔: D →D  được định nghĩa như sau:",
+  "s": 19,
+  "e": 35,
+  "dst": "For the case of a call to a tool 𝑓, the function 𝑔: D →D is defined as follows:",
+  "gold": [
+   "tool 𝑓, the function 𝑔",
+   "a tool 𝑓, the function 𝑔"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "We describe policy P-T in terms of the label 𝜋𝑓= (T, ⊤), which implies that 𝑓can only be called when the context in which the tool call was generated contained only trusted data.",
+  "s": 57,
+  "e": 62,
+  "dst": "Chúng tôi mô tả chính sách P­T theo nhãn 𝜋𝑓= ( T, ⊤) , hàm ý rằng 𝑓 chỉ có thể được gọi khi ngữ cảnh tạo lời gọi công cụ chỉ chứa dữ liệu tin cậy.",
+  "gold": [
+   "hàm ý",
+   "hàm ý rằng"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "We wrap tools to propagate labels, mapping labels over lists and folding the lattice join over containers.",
+  "s": 43,
+  "e": 54,
+  "dst": "Chúng tôi bọc các công cụ để lan truyền nhãn, ánh xạ nhãn trên các danh sách và gấp join của lattice trên các container.",
+  "gold": [
+   "nhãn trên"
+  ]
+ },
+ {
+  "dir": "vi→en",
+  "src": "Lưu ý rằng bằng cách kiểm tra nhãn công cụ về tính toàn vẹn nhưng không về tính bảo mật, chúng tôi thực thi một dạng mạnh của tính toàn vẹn luồng điều khiển và một dạng yếu hơn của tính bảo mật, không ngăn được luồng ngầm.",
+  "s": 136,
+  "e": 145,
+  "dst": "Note that, by checking the tool label for integrity but not for confidentiality, we enforce a strong form of control flow integrity and a weaker form of confidentiality that does not prevent implicit flows.",
+  "gold": [
+   "control flow integrity",
+   "integrity"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "We give examples of two fundamental policies that we use throughout the paper.",
+  "s": 3,
+  "e": 16,
+  "dst": "Chúng tôi nêu ví dụ về hai chính sách nền tảng dùng xuyên suốt bài báo.",
+  "gold": [
+   "nêu ví dụ"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "Constrained decoding [14, 6, 2], already used by inference engines to implement tool-calling capabilities, can be used to ensure the model generates names of variables in scope and to augment tool schemas to distinguish between variables and literal arguments.",
+  "s": 192,
+  "e": 204,
+  "dst": "Giải mã ràng buộc [14, 6, 2], vốn đã được các engine suy luận dùng để triển khai khả năng gọi công cụ, có thể bảo đảm mô hình sinh tên của các biến trong phạm vi và bổ sung schema công cụ để phân biệt biến với đối số literal.",
+  "gold": [
+   "schema công cụ"
+  ]
+ },
+ {
+  "dir": "vi→en",
+  "src": "Thuật toán 3 định nghĩa một bộ lập kế hoạch cơ bản, yêu cầu vòng lặp lập kế hoạch truy vấn mô hình (dòng 5) và thực hiện các lệnh gọi công cụ được yêu cầu (dòng 6) cho đến khi mô hình quyết định kết thúc (dòng 7).",
+  "s": 111,
+  "e": 120,
+  "dst": "Algorithm 3 defines a basic planner that instructs the planning loop to query the model (line 5) and make any requested tool calls (line 6), until the model decides to conclude (line 7).",
+  "gold": [
+   "make"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "generates a fresh variable to store that node in memory together with its original label (line 21).",
+  "s": 49,
+  "e": 55,
+  "dst": "sinh một biến mới để lưu nút đó trong bộ nhớ cùng nhãn gốc của nó (dòng 21).",
+  "gold": [
+   "bộ nhớ"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "Algorithm 5 with policies P-T and P-F correctly applied to every tool, guarantees non-interference for the integrity of tool calls and data, and explicit secrecy for the confidentiality of data.",
+  "s": 107,
+  "e": 116,
+  "dst": "Thuật toán 5, khi áp dụng đúng các chính sách P­T và P­F cho mọi công cụ, bảo đảm không can thiệp cho tính toàn vẹn của lời gọi công cụ và dữ liệu, và bí mật tường minh cho tính bảo mật của dữ liệu.",
+  "gold": [
+   "tính toàn vẹn"
+  ]
+ },
+ {
+  "dir": "vi→en",
+  "src": "Định nghĩa 4 (Độc lập dữ liệu).",
+  "s": 14,
+  "e": 21,
+  "dst": "Definition 4 (Data independence).",
+  "gold": [
+   "Data independence",
+   "independence"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "We can also require 𝜋𝑥= (T, ⊤) for each individual argument that needs to be trusted.",
+  "s": 40,
+  "e": 59,
+  "dst": "Cũng có thể yêu cầu 𝜋𝑥= ( T, ⊤)  cho từng đối số riêng cần tin cậy.",
+  "gold": [
+   "đối số riêng",
+   "từng đối số riêng"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "That is, the sequence of tool calls required to solve the task might differ depending on the results of one or more tool calls.",
+  "s": 69,
+  "e": 75,
+  "dst": "Nghĩa là chuỗi lệnh gọi công cụ cần để giải nhiệm vụ có thể khác nhau tùy theo kết quả của một hoặc nhiều lệnh gọi công cụ.",
+  "gold": [
+   "khác nhau"
+  ]
+ },
+ {
+  "dir": "vi→en",
+  "src": "Luồng được phép (P­F): Chính sách này chỉ cho phép lời gọi công cụ xuất dữ liệu tiếp tục nếu mọi người nhận đều được phép đọc dữ liệu.",
+  "s": 75,
+  "e": 96,
+  "dst": "Permitted flow (P-F): This policy permits a tool call that egresses data to proceed only if all recipients are permitted to read the data.",
+  "gold": [
+   "data to proceed only if all",
+   "to proceed only if all",
+   "proceed only if all"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "User content: \"Find a channel with the smallest number of messages, and add Alice to that ↩→ channel.\"",
+  "s": 0,
+  "e": 19,
+  "dst": "Nội dung người dùng: \"Tìm kênh có số tin nhắn ít nhất và thêm Alice vào kênh ↩→  đó.\"",
+  "gold": [
+   "Nội dung người dùng: \"Tìm"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "The interaction between an LLM and an agent is based on a conversation history structured as a sequence of messages.",
+  "s": 4,
+  "e": 15,
+  "dst": "Tương tác giữa LLM và tác tử dựa trên lịch sử hội thoại được cấu trúc thành chuỗi thông điệp.",
+  "gold": [
+   "Tương tác"
+  ]
+ },
+ {
+  "dir": "vi→en",
+  "src": "Với chuỗi hành động 𝜋, đặt 𝜋|F là chuỗi công cụ �𝑓 trong các hành động MakeCall trong 𝜋.",
+  "s": 34,
+  "e": 47,
+  "dst": "For a sequence of actions 𝜋, let 𝜋|F be the sequence of tools �𝑓in MakeCall actions in 𝜋.",
+  "gold": [
+   "sequence of tools"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "1Technically, we require only join semi-lattices: lattices also have meet operations, which we do not need in our work.",
+  "s": 25,
+  "e": 48,
+  "dst": "1Về kỹ thuật, chúng tôi chỉ cần join semi­lattices: lattice cũng có phép meet, nhưng công trình này không cần.",
+  "gold": [
+   "chỉ cần join semi­lattices"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "Table 3: Set of per-tool policies P used for evaluating policy-enforcing planners.",
+  "s": 56,
+  "e": 81,
+  "dst": "Bảng 3: Tập chính sách theo công cụ P dùng để đánh giá các bộ lập kế hoạch thực thi chính sách.",
+  "gold": [
+   "bộ lập kế hoạch thực thi chính sách",
+   "các bộ lập kế hoạch thực thi chính sách"
+  ]
+ },
+ {
+  "dir": "vi→en",
+  "src": "Giờ chúng tôi định nghĩa tri thức mà đối thủ thu được khi quan sát các thay đổi của biến thấp trong một chuỗi biến đổi trạng thái.",
+  "s": 110,
+  "e": 124,
+  "dst": "We now define the knowledge that an adversary gets from observing changes to low variables in a sequence of state transformations.",
+  "gold": [
+   "state transformations"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "• For the readers lattice, non-interference prevents unauthorized flows to any reader, including through control flow.",
+  "s": 44,
+  "e": 52,
+  "dst": "• Với lattice người đọc, không can nhiễu ngăn các luồng trái phép đến bất kỳ người đọc nào, kể cả qua luồng điều khiển.",
+  "gold": [
+   "ngăn"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "The adversary has full knowledge of this configuration.",
+  "s": 23,
+  "e": 54,
+  "dst": "Đối thủ biết đầy đủ cấu hình này.",
+  "gold": [
+   "biết đầy đủ cấu hình này"
+  ]
+ },
+ {
+  "dir": "vi→en",
+  "src": "Nội dung công cụ: \"[ #get_channels­result­0­0#, #get_channels­result­0­1#, #get_channels­result­0­2#, #get_channels­result­0­3# ]\" tool_call_id: 'get_channels_0'",
+  "s": 4,
+  "e": 13,
+  "dst": "Tool content: \"[ #get_channels-result-0-0#, #get_channels-result-0-1#, #get_channels-result-0-2#, #get_channels-result-0-3# ]\" tool_call_id: 'get_channels_0'",
+  "gold": [
+   "Tool content"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "Specifically, if confidentiality is violated then the tool call is still executed if it is called in a high integrity context, corresponding to robust declassification.",
+  "s": 14,
+  "e": 44,
+  "dst": "Cụ thể, nếu vi phạm tính bảo mật thì lệnh gọi công cụ vẫn được thực thi nếu nó được gọi trong ngữ cảnh toàn vẹn cao, tương ứng với giải mật mạnh.",
+  "gold": [
+   "nếu vi phạm tính bảo mật"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "Having introduced our approach and example security policies, we now turn our attention to the formal security properties that we can achieve.",
+  "s": 134,
+  "e": 141,
+  "dst": "Sau khi giới thiệu cách tiếp cận và các chính sách bảo mật ví dụ, chúng tôi chuyển sang các thuộc tính bảo mật hình thức có thể đạt được.",
+  "gold": [
+   "đạt được"
+  ]
+ },
+ {
+  "dir": "vi→en",
+  "src": "Với điều này, vòng lặp tác tử động ở Mục 2 có thể được hình thức hóa thành Thuật toán 1.",
+  "s": 60,
+  "e": 80,
+  "dst": "With this, the dynamic agent loop described in Section 2 can be formalized as Algorithm 1.",
+  "gold": [
+   "formalized as Algorithm",
+   "be formalized as Algorithm"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "• An evaluation of different planner designs on AgentDojo [11].",
+  "s": 37,
+  "e": 44,
+  "dst": "• Đánh giá các thiết kế bộ lập kế hoạch khác nhau trên AgentDojo [11].",
+  "gold": [
+   "thiết kế",
+   "các thiết kế"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "This allows plugging various planner designs into a common scaffolding, isolating planner’s implementation details (e.g., state), and having a clear interface to intercept actions suggested by a planner to enforce security policies.",
+  "s": 37,
+  "e": 44,
+  "dst": "Điều này cho phép cắm nhiều thiết kế bộ lập kế hoạch vào một khung chung, cô lập chi tiết triển khai của bộ lập kế hoạch (ví dụ, trạng thái), và có giao diện rõ ràng để chặn các hành động do bộ lập kế hoạch đề xuất nhằm thực thi chính sách bảo mật.",
+  "gold": [
+   "thiết kế"
+  ]
+ },
+ {
+  "dir": "vi→en",
+  "src": "Một chương trình thỏa bí mật tường minh cho trạng thái ban đầu nếu đối thủ không thể loại trừ trạng thái ban đầu khả dĩ nào từ chuỗi sự kiện quan sát được.",
+  "s": 55,
+  "e": 62,
+  "dst": "A program satisfies explicit secrecy for an initial state if an adversary cannot rule out any possible initial state from the sequence of observable events.",
+  "gold": [
+   "initial"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "Algorithm 7 in Appendix C describes a variable passing planner with information-flow tracking.",
+  "s": 0,
+  "e": 9,
+  "dst": "Thuật toán 7 trong Phụ lục C mô tả một bộ lập kế hoạch truyền biến có theo dõi luồng thông tin.",
+  "gold": [
+   "Thuật toán"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "Several documented attacks fit this threat model and exploit LLMs’ language understanding and reasoning capabilities to manipulate an agent’s behavior.",
+  "s": 19,
+  "e": 26,
+  "dst": "Nhiều cuộc tấn công đã được ghi nhận phù hợp với mô hình đe dọa này và khai thác khả năng hiểu ngôn ngữ, suy luận của LLM để thao túng hành vi của tác tử.",
+  "gold": [
+   "cuộc tấn công",
+   "tấn công"
+  ]
+ },
+ {
+  "dir": "vi→en",
+  "src": "Điều này tương ứng với một dạng giải mật vững chắc [23].",
+  "s": 32,
+  "e": 40,
+  "dst": "This corresponds to a form of robust declassification [23].",
+  "gold": [
+   "declassification"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "We lift this construction inductively to multiple evaluation steps, composing state transformers.",
+  "s": 41,
+  "e": 60,
+  "dst": "Chúng tôi mở rộng cấu trúc này quy nạp cho nhiều bước đánh giá, bằng cách hợp thành các bộ biến đổi trạng thái.",
+  "gold": [
+   "nhiều bước đánh giá"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "The LLM then either generates a natural language response or a request to call a tool.",
+  "s": 4,
+  "e": 12,
+  "dst": "LLM sau đó tạo phản hồi ngôn ngữ tự nhiên hoặc yêu cầu gọi công cụ.",
+  "gold": [
+   "LLM sau đó"
+  ]
+ },
+ {
+  "dir": "vi→en",
+  "src": "Chúng tôi viết cfg −→  cfg ′ để chỉ rằng 𝑔 𝑔 là bộ biến đổi trạng thái trong đánh giá cfg thành cfg ′.",
+  "s": 51,
+  "e": 65,
+  "dst": "We write cfg −→ 𝑔cfg′ to denote that 𝑔is the state transformer in the evaluation of cfg to cfg′.",
+  "gold": [
+   "state transformer"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "Formally, a command (𝜎, 𝑚) satisfies non-interference [15, 26] if, for all 𝑆∈L and all 𝑑1, 𝑑2 ∈D such that 𝑑1 =𝑆𝑑2, whenever (𝜎, 𝑚, 𝑑1) −→𝑛(𝜎′, 𝑚′, 𝑑 1) and (𝜎, 𝑚, 𝑑2) −→𝑛(𝜎′, 𝑚′, 𝑑′ 2), then 𝑑′ 1 =𝑆𝑑′ 2.",
+  "s": 83,
+  "e": 89,
+  "dst": "Về hình thức, một lệnh (𝜎, 𝑚)  thỏa không can nhiễu [15, 26] nếu, với mọi 𝑆∈L  và mọi 𝑑1, 𝑑2 ∈D  sao cho 𝑑1 =𝑆𝑑2 , bất cứ khi nào (𝜎, 𝑚, 𝑑1) −→𝑛(𝜎′, 𝑚′, 𝑑 1)′  và (𝜎, 𝑚, 𝑑2) −→𝑛(𝜎′, 𝑚′, 𝑑 2)′ , thì 𝑑 1 =𝑆𝑑′ 2′ .",
+  "gold": [
+   "mọi 𝑑1"
+  ]
+ },
+ {
+  "dir": "en→vi",
+  "src": "Algorithm 6 augments the basic planner in Algorithm 3 with taint-tracking.",
+  "s": 0,
+  "e": 9,
+  "dst": "Thuật toán 6 mở rộng bộ lập kế hoạch cơ bản trong Thuật toán 3 bằng taint­tracking.",
+  "gold": [
+   "Thuật toán"
+  ]
+ },
+ {
+  "dir": "vi→en",
+  "src": "Chúng tôi thảo luận các chi tiết triển khai then chốt của FIDES, gồm thông điệp hệ thống, cách chúng tôi gán và theo dõi nhãn, và các chính sách dùng để thực thi bảo đảm bảo mật.",
+  "s": 24,
+  "e": 32,
+  "dst": "We discuss the key implementation details of FIDES, including the system message, how we assign and track labels, and the policies used to enforce security guarantees.",
+  "gold": [
+   "details"
+  ]
+ }
+]

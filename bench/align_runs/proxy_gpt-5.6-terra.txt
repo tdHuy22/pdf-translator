@@ -1,0 +1,12 @@
+/Users/macos/Documents/Claude/pdf-translator/.venv/lib/python3.11/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+[llm] http://192.168.1.10:10531/v1 (gpt-5.6-terra): other, ngữ cảnh 32768 token, 4 lượt song song
+  #2  một phần       'do lỗi của mô'                        → 'model'                                          (đáp án 'model mistakes')
+  #9  một phần       'secrecy if'                           → 'nếu'                                            (đáp án 'bí mật tường minh nếu')
+  #11 một phần       'bước thực thi, tương'                 → 'steps of execution, which'                      (đáp án 'steps of execution')
+  #26 một phần       'vẹn luồng'                            → 'flow integrity'                                 (đáp án 'control flow integrity')
+  #36 một phần       'User content: "Find'                  → 'Tìm'                                            (đáp án 'Nội dung người dùng: "Tìm')
+  #44 một phần       'dung công'                            → 'content'                                        (đáp án 'Tool content')
+  #49 một phần       'designs'                              → 'thiết kế bộ lập kế hoạch'                       (đáp án 'thiết kế')
+
+gpt-5.6-terra: đúng 53 · một phần 7 · sai 0 · không tìm thấy 0 · lỗi LLM 0 / 60 · trung vị 1.9s, chậm nhất 5.5s

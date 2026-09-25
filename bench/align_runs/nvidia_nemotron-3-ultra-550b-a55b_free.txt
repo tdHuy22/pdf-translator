@@ -1,0 +1,20 @@
+/Users/macos/Documents/Claude/pdf-translator/.venv/lib/python3.11/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+[llm] https://openrouter.ai/api/v1 (nvidia/nemotron-3-ultra-550b-a55b:free): other, ngữ cảnh 1000000 token, 4 lượt song song
+  #3  một phần       'content: "Find'                       → 'Tìm'                                            (đáp án 'Nội dung người dùng: "Tìm')
+  #9  một phần       'secrecy if'                           → 'bí mật tường minh'                              (đáp án 'bí mật tường minh nếu')
+  #13 một phần       'additionally, one can'                → 'hoặc đồng thời, có thể đưa'                     (đáp án 'đồng thời, có thể')
+  #23 một phần       'công cụ 𝑓, hàm 𝑔'                     → 'a tool 𝑓, the function 𝑔: D →D'                 (đáp án 'tool 𝑓, the function 𝑔')
+  #27 một phần       'give examples'                        → 'nêu ví dụ về'                                   (đáp án 'nêu ví dụ')
+  #35 một phần       'liệu tiếp tục nếu mọi'                → 'egresses data to proceed only if all recipie'   (đáp án 'data to proceed only if all')
+  #36 một phần       'User content: "Find'                  → 'Tìm'                                            (đáp án 'Nội dung người dùng: "Tìm')
+  #39 một phần       'only join semi-lattices'              → 'join semi\xadlattices'                          (đáp án 'chỉ cần join semi\xadlattices')
+  #43 một phần       'knowledge of this configuration'      → 'biết đầy đủ'                                    (đáp án 'biết đầy đủ cấu hình này')
+  #46 một phần       'achieve'                              → 'có thể đạt được'                                (đáp án 'đạt được')
+  #47 một phần       'thức hóa thành Thuật'                 → 'formalized as'                                  (đáp án 'formalized as Algorithm')
+  #48 một phần       'designs'                              → 'thiết kế bộ lập kế hoạch'                       (đáp án 'thiết kế')
+  #50 một phần       'ban đầu'                              → 'initial state'                                  (đáp án 'initial')
+  #55 một phần       'LLM then'                             → 'sau đó tạo'                                     (đáp án 'LLM sau đó')
+  #59 một phần       'chi tiết'                             → 'implementation details'                         (đáp án 'details')
+
+nvidia/nemotron-3-ultra-550b-a55b:free: đúng 45 · một phần 15 · sai 0 · không tìm thấy 0 · lỗi LLM 0 / 60 · trung vị 1.6s, chậm nhất 38.6s

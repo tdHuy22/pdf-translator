@@ -10,6 +10,9 @@ const PRESETS = {  // model: model dịch mặc định, vision: model OCR mặc
   openrouter: { base_url: "https://openrouter.ai/api/v1", model: "google/gemini-2.5-flash", vision: "google/gemini-2.5-flash", parallel: 4,
                 gloss: "nvidia/nemotron-3-ultra-550b-a55b:free" },
   openai:     { base_url: "https://api.openai.com/v1", model: "gpt-4.1-mini", vision: "gpt-4.1-mini", parallel: 4 },
+  // Proxy OAuth tới tài khoản ChatGPT web (free) chạy trên TUF, chỉ vào được trong mạng LAN. gpt-6-luna căn vệt tô
+  // đúng nhất trong mọi model đã đo (bench_align 24/09/2026: 56/60, ~3 s/lần); không nhận `temperature` (app tự bỏ).
+  chatgpt:    { base_url: "http://192.168.1.10:10531/v1", model: "gpt-6-luna", parallel: 1 },
   custom:     {},
 };
 const $ = id => document.getElementById(id);
@@ -17,10 +20,12 @@ const $ = id => document.getElementById(id);
 const FIELDS = ["preset","ocr_preset","chat_preset","base_url","model","temperature","concurrency","glossary",
   "translator","length_ratio","page_span","ocr_mode","ocr_engine","ocr_lang","ocr_vlm_base_url","ocr_vlm_model",
   "ocr_vlm_concurrency","ocr_custom_url","chat_base_url","chat_model","gloss_preset","gloss_base_url","gloss_model",
+  "align_preset","align_base_url","align_model",
   "font_serif","font_sans","font_mono"];
-const CHECKS = ["glossary_auto","google_fallback","disable_thinking","chat_same","gloss_same"];
+const CHECKS = ["glossary_auto","google_fallback","disable_thinking","chat_same","gloss_same","align_llm","align_same"];
 // Ô API key → ô Base URL của server dùng key đó ("ocrspace" là dịch vụ cố định, không có base URL)
 const KEY_OF = { api_key:"base_url", ocr_vlm_api_key:"ocr_vlm_base_url", chat_api_key:"chat_base_url", gloss_api_key:"gloss_base_url",
+                 align_api_key:"align_base_url",
                  ocr_custom_api_key:"ocr_custom_url", ocr_api_key:"ocrspace" };
 let doc = null, stopFlag = false;
 
@@ -54,7 +59,8 @@ function loadSettings() {
         ocr_engine:"rapidocr", ocr_lang:"eng", ocr_vlm_base_url:"http://localhost:11434/v1", ocr_vlm_model:PADDLE_OCR,
         ocr_vlm_concurrency:4, ocr_custom_url:"", google_fallback:true, chat_same:true, chat_base_url:"",
         chat_model:"", gloss_preset:"openrouter", gloss_same:true, gloss_base_url:PRESETS.openrouter.base_url,
-        gloss_model:PRESETS.openrouter.gloss, font_serif:"auto", font_sans:"auto", font_mono:"auto", ...s };
+        gloss_model:PRESETS.openrouter.gloss, align_llm:true, align_same:false, align_preset:"chatgpt",
+        align_base_url:PRESETS.chatgpt.base_url, align_model:PRESETS.chatgpt.model, font_serif:"auto", font_sans:"auto", font_mono:"auto", ...s };
   const ver = s.settings_v || 1;
   // v2: model OCR mặc định đổi từ qwen3.5 sang PaddleOCR-VL — cập nhật cài đặt cũ còn để mặc định cũ
   if (ver < 2 && s.ocr_vlm_model === "qwen3.5:latest") s.ocr_vlm_model = PADDLE_OCR;
@@ -71,12 +77,18 @@ function loadSettings() {
   }
   CHECKS.forEach(f => $(f).checked = s[f] !== false && s[f] !== "false");
   if (ver < 3 && s.disable_thinking === undefined) $("disable_thinking").checked = true;
+  // v4: căn vệt tô mặc định đổi từ 4b trên TUF sang gpt-6-luna qua proxy ChatGPT — đổi cài đặt còn để mặc định cũ
+  if (ver < 4 && s.align_preset === "tuf" && s.align_model === "4b") {
+    $("align_preset").value = "chatgpt";
+    $("align_base_url").value = PRESETS.chatgpt.base_url;
+    $("align_model").value = PRESETS.chatgpt.model;
+  }
   fillKeys();
   toggleOpts();
   saveSettings();
 }
 function saveSettings() {
-  const s = { settings_v: 3 };
+  const s = { settings_v: 4 };
   FIELDS.forEach(f => s[f] = $(f).value);
   CHECKS.forEach(f => s[f] = $(f).checked);
   try { localStorage.setItem("llm", JSON.stringify(s)); } catch {}
@@ -87,11 +99,14 @@ function toggleOpts() {
   document.querySelectorAll(".tr-llm").forEach(el => el.style.display = useLlm ? "" : "none");
   document.querySelectorAll(".chat-opt").forEach(el => el.style.display = $("chat_same").checked ? "none" : "");
   document.querySelectorAll(".gloss-opt").forEach(el => el.style.display = $("gloss_same").checked ? "none" : "");
+  const align = $("align_llm").checked;
+  document.querySelectorAll(".align-on").forEach(el => el.style.display = align ? "" : "none");
+  document.querySelectorAll(".align-opt").forEach(el => el.style.display = align && !$("align_same").checked ? "" : "none");
 }
-["ocr_engine","translator","chat_same","gloss_same"].forEach(f => $(f).addEventListener("change", toggleOpts));
+["ocr_engine","translator","chat_same","gloss_same","align_llm","align_same"].forEach(f => $(f).addEventListener("change", toggleOpts));
 
 function cfg() {
-  const same = $("chat_same").checked, gsame = $("gloss_same").checked;
+  const same = $("chat_same").checked, gsame = $("gloss_same").checked, asame = $("align_same").checked;
   return { base_url:$("base_url").value, api_key:$("api_key").value, model:$("model").value,
            temperature: parseFloat($("temperature").value) || 0.2, glossary:$("glossary").value,
            glossary_auto: $("glossary_auto").checked,
@@ -111,6 +126,9 @@ function cfg() {
            gloss_base_url: gsame ? "" : $("gloss_base_url").value,
            gloss_api_key: gsame ? "" : $("gloss_api_key").value,
            gloss_model: gsame ? "" : $("gloss_model").value,
+           align_base_url: asame ? "" : $("align_base_url").value,
+           align_api_key: asame ? "" : $("align_api_key").value,
+           align_model: asame ? "" : $("align_model").value,
            font_serif:$("font_serif").value || "auto", font_sans:$("font_sans").value || "auto",
            font_mono:$("font_mono").value || "auto" };
 }
@@ -150,6 +168,7 @@ function bindProvider(ids, modelKey) {
 bindProvider({ preset:"preset", base:"base_url", key:"api_key", model:"model", btn:"btnModels", list:"models" }, "model");
 bindProvider({ preset:"ocr_preset", base:"ocr_vlm_base_url", key:"ocr_vlm_api_key", model:"ocr_vlm_model", btn:"btnOcrModels", list:"ocr_models", parallel:"ocr_vlm_concurrency" }, "vision");
 bindProvider({ preset:"chat_preset", base:"chat_base_url", key:"chat_api_key", model:"chat_model", btn:"btnChatModels", list:"chat_models" }, "model");
+bindProvider({ preset:"align_preset", base:"align_base_url", key:"align_api_key", model:"align_model", btn:"btnAlignModels", list:"align_models" }, "model");
 bindProvider({ preset:"gloss_preset", base:"gloss_base_url", key:"gloss_api_key", model:"gloss_model", btn:"btnGlossModels", list:"gloss_models", fallback:"model" }, "gloss");
 
 async function loadKeys() {
@@ -178,13 +197,14 @@ $("file").onchange = async e => {
   if ($("glossary_auto").checked && $("translator").value === "llm") loadGlossary(false, true);
 };
 function resetDocView() {
+  window.notesReset?.();                      // ghi chú chung đang chờ lưu được gửi ngay, về đúng bài đã gõ
   MARKS = {}; chatMsgs = []; $("msgs").innerHTML = ""; dropSel(); GLOSS = []; EXTRA = [];
   $("gloss").classList.remove("open"); $("gtab").innerHTML = ""; $("gextra").innerHTML = ""; $("gcount").textContent = "";
 }
 
 function openDoc() {
   buildPages();
-  ["btnAll","btnDl","btnGloss","btnChat"].forEach(b => $(b).disabled = false);
+  ["btnAll","btnDl","btnGloss","btnChat","btnNotes"].forEach(b => $(b).disabled = false);
   setStatus(`${doc.name} – ${doc.pages} trang` + (doc.scanned_pages ? ` (${doc.scanned_pages} trang scan → OCR)` : "") +
             (doc.done.size ? ` · đã dịch ${doc.done.size}` : ""));
 }
@@ -192,10 +212,14 @@ function openDoc() {
 // Mở một tài liệu đã lưu trên server (bản dịch, tô vàng, bảng thuật ngữ lưu trên đĩa — khởi động lại app vẫn còn).
 // Không có id: tài liệu mở gần nhất (tải lại trang là thấy lại đúng bài đang đọc).
 async function restoreDoc(id) {
+  const remembered = !id;
   if (!id) try { id = localStorage.getItem("last_doc"); } catch {}
   if (!id) return false;
   const r = await fetch(`/api/${id}/state`);
-  if (!r.ok) return false;
+  if (!r.ok) {                                // bài nhớ lần trước đã bị xoá → quên đi, khỏi hỏi lại mỗi lần mở app
+    if (remembered && r.status === 404) try { localStorage.removeItem("last_doc"); } catch {}
+    return false;
+  }
   const st = await r.json();
   stopFlag = true;                            // đang "Dịch tất cả" bài khác thì dừng, đừng dịch lẫn sang bài này
   doc = { id, pages: st.pages, name: st.name, scanned_pages: 0, done: new Set(st.done) };
@@ -205,6 +229,7 @@ async function restoreDoc(id) {
   GLOSS = st.terms || []; EXTRA = st.extra || [];
   openDoc();
   if (GLOSS.length) drawGlossary();
+  window.notesLoad?.(st.notes);
   for (const p of st.done) showTranslated({ page: p, cached: true }, {});
   return true;
 }
@@ -219,10 +244,10 @@ async function loadDocs() {
   let list = [];
   try { list = (await (await fetch("/api/docs")).json()).docs; } catch (e) { $("dcount").textContent = "lỗi: " + e.message; return; }
   $("dcount").textContent = list.length ? `${list.length} tài liệu · ${fmtSize(list.reduce((a, d) => a + d.size, 0))}` : "chưa có tài liệu nào";
-  $("dtab").innerHTML = list.length ? `<tr><th>Tài liệu</th><th>Đã dịch</th><th>Tô vàng</th><th>Lần cuối</th><th>Dung lượng</th><th></th></tr>` +
+  $("dtab").innerHTML = list.length ? `<tr><th>Tài liệu</th><th>Đã dịch</th><th>Tô vàng</th><th>Ghi chú</th><th>Lần cuối</th><th>Dung lượng</th><th></th></tr>` +
     list.map(d => `<tr data-id="${esc(d.id)}" class="${doc?.id === d.id ? "cur" : ""}">
       <td><a href="#" class="dopen"><b>${esc(d.title || d.name)}</b></a>${d.title ? `<div class="hint">${esc(d.name)}</div>` : ""}</td>
-      <td>${d.done}/${d.pages} trang</td><td>${d.marks || ""}</td><td>${fmtTime(d.updated)}</td><td>${fmtSize(d.size)}</td>
+      <td>${d.done}/${d.pages} trang</td><td>${d.marks || ""}</td><td>${d.notes || ""}</td><td>${fmtTime(d.updated)}</td><td>${fmtSize(d.size)}</td>
       <td><button class="ddel" title="Xoá hẳn bản gốc, bản dịch, tô vàng, thuật ngữ của tài liệu này">🗑</button></td></tr>`).join("") : "";
 }
 $("dtab").onclick = async e => {
@@ -236,7 +261,7 @@ $("dtab").onclick = async e => {
     await fetch(`/api/docs/${id}`, { method:"DELETE" });
     if (doc?.id === id) {                     // xoá đúng bài đang mở → về màn hình trống
       doc = null; resetDocView(); $("cols").innerHTML = ""; setStatus("Chưa mở file");
-      ["btnAll","btnDl","btnGloss","btnChat"].forEach(b => $(b).disabled = true);
+      ["btnAll","btnDl","btnGloss","btnChat","btnNotes"].forEach(b => $(b).disabled = true);
       try { localStorage.removeItem("last_doc"); } catch {}
     }
     loadDocs();
@@ -304,7 +329,10 @@ function buildLayer(el, data) {
   for (const [s, w] of spans) { const own = s.offsetWidth; if (own > 1) s.style.transform = `scaleX(${w / own})`; }
   fitLayer(el);
   paintMarks(+el.dataset.p);
-  fillPeer(+el.dataset.p, el.dataset.kind);
+  // tô bù sang bản kia CẢ HAI chiều: cần chữ của cả hai bản, và bản nào nạp xong trước là tuỳ lúc — trước đây chỉ
+  // gọi theo chiều của lớp vừa dựng, nên bản dịch nạp trước thì vệt tô ở bản gốc không bao giờ hiện bên dịch
+  fillPeer(+el.dataset.p, "original");
+  fillPeer(+el.dataset.p, "translated");
 }
 
 // Rê chuột lên một đoạn → đoạn tương ứng ở bản kia sáng mờ (số hiệu đoạn giống nhau ở hai bản)
@@ -401,12 +429,48 @@ function sentSpans(text) {
   return out.length ? out : [[0, text.length]];
 }
 
-/** Đoạn chữ tương ứng ở bản kia: các câu mà vùng chọn chạm tới; lệch số câu thì lấy cả đoạn. */
+/** Đoạn chữ tương ứng ở bản kia: các câu mà vùng chọn chạm tới; lệch số câu thì lấy cả đoạn.
+ *  Trả thêm `ctx` = [đầu, cuối) của các câu đó ở bản này, và `exact` = số câu hai bản khớp nhau. */
 function peerRange(srcText, dstText, s, e) {
   const A = sentSpans(srcText), B = sentSpans(dstText);
   const hit = A.map((r, i) => i).filter(i => A[i][1] > s && A[i][0] < e);
-  if (!hit.length || A.length !== B.length) return [0, dstText.length];
-  return [B[hit[0]][0], B[hit[hit.length - 1]][1]];
+  const ctx = hit.length ? [A[hit[0]][0], A[hit[hit.length - 1]][1]] : [0, srcText.length];
+  if (!hit.length || A.length !== B.length) return Object.assign([0, dstText.length], { ctx, exact: false });
+  return Object.assign([B[hit[0]][0], B[hit[hit.length - 1]][1]], { ctx, exact: true });
+}
+
+// ---------------- Căn bằng LLM: tô NGAY cả câu tương ứng (nhạt, viền đứt), LLM trả lời thì thu về đúng cụm.
+// Server kiểm cụm LLM trả về phải có thật trong câu bên kia; không có thì giữ nguyên cả câu (không bao giờ tô bậy).
+const WAIT = new Set();       // id các vệt đang chờ LLM
+/** Có cần hỏi LLM không: bôi đen gần hết các câu mà số câu hai bản khớp nhau thì cả câu đã là đáp án đúng. */
+function needAlign(srcText, m, pr) {
+  if (!$("align_llm").checked) return false;
+  const [cs, ce] = pr.ctx, letters = t => (t.match(/[\p{L}\p{N}]/gu) || []).length;
+  return !pr.exact || letters(srcText.slice(m.s, m.e)) < 0.9 * letters(srcText.slice(cs, ce));
+}
+async function alignMark(p, m, srcText, dstText, pr) {
+  const [cs, ce] = pr.ctx, [ps, pe] = pr, mine = doc;
+  WAIT.add(m.id);
+  let res = null;
+  try {
+    const r = await fetch(`/api/${doc.id}/align`, { method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ cfg: cfg(), src: srcText.slice(cs, ce), s: m.s - cs, e: m.e - cs, dst: dstText.slice(ps, pe) }) });
+    if (r.ok) res = await r.json();
+  } catch {}
+  WAIT.delete(m.id);
+  const cur = doc === mine && (MARKS[p] || []).find(x => x.id === m.id);  // vệt đã bị bỏ trong lúc chờ → thôi
+  if (!cur) return;
+  const el = pageOf(p, otherSide(m.side));
+  if (res?.s != null && el) {
+    const rects = offsetRects(el, m.block, ps + res.s, ps + res.e);
+    if (rects.length) {
+      Object.assign(cur, { ps: ps + res.s, pe: ps + res.e, peer: rects, via: "llm" });
+      await sendMarks(p, [cur], [cur.id]);
+      return;
+    }
+  }
+  if (res && res.s == null) setStatus("Căn vệt tô: " + res.reason + " → giữ tô cả câu");
+  paintMarks(p);
 }
 
 function paintMarks(p) {
@@ -415,14 +479,16 @@ function paintMarks(p) {
     if (!layer) continue;
     layer.querySelectorAll(".hl").forEach(x => x.remove());
     for (const m of MARKS[p] || []) {
+      const wait = m.side !== kind && WAIT.has(m.id);
       for (const r of (m.side === kind ? m.rects : m.peer) || []) {
         const d = document.createElement("div");
-        d.className = "hl";
+        d.className = wait ? "hl wait" : "hl";
         d.style.cssText = `left:${r[0]}px;top:${r[1]}px;width:${r[2]-r[0]}px;height:${r[3]-r[1]}px`;
         layer.appendChild(d);
       }
     }
   }
+  window.paintNoteDots?.(p);                  // dấu 📝 trên vệt tô có ghi chú (notes.js)
 }
 
 /** Bản kia mới dựng xong lớp chữ → tính nốt khung tương ứng cho các vệt tô đã có. */
@@ -430,20 +496,22 @@ async function fillPeer(p, kind) {
   const el = pageOf(p, kind), src = pageOf(p, otherSide(kind));
   const todo = (MARKS[p] || []).filter(m => m.side !== kind && !m.peer.length);
   if (!el || !src || !todo.length) return;
-  const add = [];
+  const add = [], later = [];
   for (const m of todo) {
     const a = blockText(src, m.block), b = blockText(el, m.block);
     if (!a.text || !b.text) continue;
-    const [ps, pe] = peerRange(a.text, b.text, m.s, m.e);
-    m.ps = ps;
-    m.pe = pe;
-    m.peer = offsetRects(el, m.block, ps, pe);
-    if (m.peer.length) add.push(m);
+    const pr = peerRange(a.text, b.text, m.s, m.e);
+    [m.ps, m.pe] = pr;
+    m.peer = offsetRects(el, m.block, m.ps, m.pe);
+    if (!m.peer.length) continue;
+    add.push(m);
+    if (needAlign(a.text, m, pr)) { WAIT.add(m.id); later.push([m, a.text, b.text, pr]); }
   }
   if (add.length) {
     await fetch(`/api/${doc.id}/marks`, { method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ page: p, add, remove: add.map(m => m.id) }) });
     paintMarks(p);
+    later.forEach(([m, a, b, pr]) => alignMark(p, m, a, b, pr));
   }
 }
 
@@ -468,22 +536,27 @@ function marksHit(info) {
 
 async function addMarks(info) {
   const el = pageOf(info.page, info.side), peer = pageOf(info.page, otherSide(info.side));
-  const add = [];
+  const add = [], later = [];
   for (const b of info.blocks) {
     const src = blockText(el, b);
     const off = rangeOffsets(info.range, src.map);
     if (!off) continue;
     const m = { id: rid(), block: b, side: info.side, s: off[0], e: off[1],
                 text: src.text.slice(off[0], off[1]).trim(),
-                rects: offsetRects(el, b, off[0], off[1]), peer: [], ps: 0, pe: 0 };
+                rects: offsetRects(el, b, off[0], off[1]), peer: [], ps: 0, pe: 0, via: "" };
     const dst = peer && peer.dataset.loaded === "1" ? blockText(peer, b) : null;
     if (dst?.text) {
-      [m.ps, m.pe] = peerRange(src.text, dst.text, off[0], off[1]);
+      const pr = peerRange(src.text, dst.text, off[0], off[1]);
+      [m.ps, m.pe] = pr;
       m.peer = offsetRects(peer, b, m.ps, m.pe);
+      if (m.peer.length && needAlign(src.text, m, pr)) { WAIT.add(m.id); later.push([m, src.text, dst.text, pr]); }
     }
     if (m.rects.length) add.push(m);
   }
-  if (add.length) await sendMarks(info.page, add, []);
+  if (!add.length) return [];
+  await sendMarks(info.page, add, []);                 // tô ngay cả câu, không chờ LLM
+  later.forEach(([m, a, b, pr]) => alignMark(info.page, m, a, b, pr));
+  return add;                                          // nút 📝 Ghi chú gắn ghi chú vào vệt vừa tô
 }
 
 async function sendMarks(page, add, remove) {
@@ -495,6 +568,7 @@ async function sendMarks(page, add, remove) {
   }
   MARKS[page] = (await r.json()).marks;
   paintMarks(page);
+  window.notesMarksChanged?.(page);
 }
 
 // ---------------- Bôi đen → thanh nổi
@@ -568,6 +642,11 @@ async function translatePages(pages, force = false) {
     throw e;
   }
   if (doc !== mine) return [];
+  if (force) {                // dịch lại: bản dịch đổi chữ và bố cục → tính lại khung bên dịch của các vệt tô ở bản gốc
+    for (const pg of res.pages) {
+      for (const m of MARKS[pg.page] || []) if (m.side === "original") Object.assign(m, { peer: [], ps: 0, pe: 0, via: "" });
+    }
+  }
   const done = [];
   for (const pg of res.pages) {
     doc.done.add(pg.page);
@@ -718,8 +797,8 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&l
 
 // ================================================================ Trò chuyện về tài liệu
 let chatMsgs = [], kept = null, streaming = false;
-const openChat = () => { document.body.classList.add("chat"); };
-$("btnChat").onclick = () => document.body.classList.toggle("chat");
+// mở khung bên phải ở tab trò chuyện (tab, và nút 💬 / 📝 trên thanh trên cùng: xem notes.js)
+const openChat = () => (window.showTab ? showTab("chat") : document.body.classList.add("chat"));
 $("chatClose").onclick = () => document.body.classList.remove("chat");
 $("chatClear").onclick = () => { chatMsgs = []; $("msgs").innerHTML = ""; dropSel(); };
 $("selDrop").onclick = () => dropSel();
@@ -764,6 +843,7 @@ function finishAi(el) {
     setTimeout(() => { copy.textContent = "📋 Chép"; }, 1500);
   };
   bar.appendChild(copy);
+  window.noteSaveButton?.(el, bar);                    // 📌 Lưu thành ghi chú (notes.js)
   el.appendChild(bar);
 }
 $("q").addEventListener("keydown", e => {
@@ -776,14 +856,17 @@ $("ask").onsubmit = async e => {
   streaming = true;
   $("q").value = "";
   const used = kept;                                   // đoạn bôi đen chỉ gửi kèm đúng câu hỏi này
-  bubble("me", q, used && used.text.slice(0, 300));
+  const extra = window.noteChatExtra?.() || { note_ids: [], page: null, quote: "" };   // ghi chú "💬 Hỏi lại"
+  bubble("me", q, used ? used.text.slice(0, 300) : extra.quote);
   chatMsgs.push({ role:"user", content:q });
   const out = aiBubble();
+  out._q = q; out._used = used; out._notePage = extra.page;   // cho nút 📌 Lưu thành ghi chú
   let acc = "";
   try {
     const r = await fetch(`/api/${doc.id}/chat`, { method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ cfg: cfg(), messages: chatMsgs, page: used ? used.page : visiblePage(),
-                             selection: used ? used.text : "", side: used ? used.side : "" }) });
+      body: JSON.stringify({ cfg: cfg(), messages: chatMsgs, page: used ? used.page : (extra.page ?? visiblePage()),
+                             selection: used ? used.text : "", side: used ? used.side : "",
+                             note_ids: extra.note_ids }) });
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
     const reader = r.body.getReader(), dec = new TextDecoder();
     for (;;) {
@@ -805,6 +888,7 @@ $("ask").onsubmit = async e => {
   }
   streaming = false;
   dropSel();
+  window.noteAfterSend?.();
 };
 // Trang đang xem (để LLM lấy đúng phần tài liệu làm ngữ cảnh khi không bôi đen gì)
 function visiblePage() {

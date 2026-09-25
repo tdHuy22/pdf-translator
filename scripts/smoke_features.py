@@ -100,11 +100,58 @@ with TestClient(A.app) as c:
                                      "selection":"BERT is designed to","side":"original"})
     ok("Mục lục bài:" in seen["system"] and "bôi đen" in seen["msg"] and "[Trang 1]" in seen["msg"], "ngữ cảnh chat đủ (mục lục + đoạn chọn + trang)")
 
+    print("3b. Căn vệt tô bằng LLM (LLM giả)")
+    src = "We call our particular attention [[X]] (Figure 2)."
+    dst = "Chúng tôi gọi cơ chế attention riêng này là “Scaled Dot-Product Attention” (Hình 2)."
+    reply = {}
+    async def fj(cfg, system, payload, schema, max_out=0, est_in=0, extra=None):
+        reply["payload"] = payload
+        return reply["out"]
+    real_json, A.chat_json = A.chat_json, fj
+    def ask(s, e, out):
+        reply["out"] = out
+        A._ALIGN_CACHE.clear()
+        return c.post(f"/api/{did}/align", json={"cfg": cfg, "src": src, "s": s, "e": e, "dst": dst}).json()
+    s0 = src.index("Figure 2")
+    r = ask(s0, s0 + 8, {"match": "Hình 2"})
+    ok(dst[r["s"]:r["e"]] == "Hình 2" and "[[Figure 2]]" in reply["payload"]["source"], "LLM trả đúng cụm → tô đúng cụm (Figure 2 → Hình 2)")
+    r = ask(s0, s0 + 8, {"match": "hình  2"})
+    ok(dst[r["s"]:r["e"]] == "Hình 2", "khác hoa/thường, thừa khoảng trắng vẫn tìm ra")
+    r = ask(s0, s0 + 8, {"match": "Hình số 2"})
+    ok(r["s"] is None and "không có trong câu" in r["reason"], "cụm không có thật trong câu bên kia → giữ tô cả câu")
+    tries = iter([{"match": ""}, {"match": "Hình 2"}])
+    async def fj2(*a, **k): return next(tries)
+    A.chat_json = fj2
+    A._ALIGN_CACHE.clear()
+    r = c.post(f"/api/{did}/align", json={"cfg": cfg, "src": src, "s": s0, "e": s0 + 8, "dst": dst}).json()
+    ok(r.get("match") == "Hình 2", "lần đầu trả rỗng → hỏi lại một lần")
+    A.chat_json = fj
+    r = ask(s0, s0 + 8, {"items": []})
+    ok(r["s"] is None, "JSON rác → giữ tô cả câu")
+    async def fbad(*a, **k): raise ValueError("LLM không trả về JSON")
+    A.chat_json = fbad
+    A._ALIGN_CACHE.clear()
+    r = c.post(f"/api/{did}/align", json={"cfg": cfg, "src": src, "s": s0, "e": s0 + 8, "dst": dst})
+    ok(r.status_code == 200 and r.json()["s"] is None, "model trả chữ không phải JSON → giữ tô cả câu (không lỗi 500)")
+    A.chat_json = real_json
+
     print("4. API key")
     A.resolve_keys(A.Config(base_url="https://api.openai.com/v1", api_key="sk-proj-ABCDEFGH1234"))
     ok(c.get("/api/keys").json()["keys"] == {"https://api.openai.com/v1": "sk-p…1234"}, "chỉ trả key dạng che")
     ok(A.resolve_keys(A.Config(base_url="https://api.openai.com/v1")).api_key == "sk-proj-ABCDEFGH1234", "gửi rỗng → tự điền lại")
     c.request("DELETE", "/api/keys", params={"slot":"https://api.openai.com/v1"})
+    k = A.resolve_keys(A.Config(base_url="https://openrouter.ai/api/v1", api_key="sk-or-SECRET123456",
+                                align_base_url="http://192.168.1.10:10531/v1", chat_base_url="http://10.0.0.9/v1"))
+    ok(A.align_cfg(k).api_key == "" and A.chat_cfg(k).api_key == "" and A.gloss_cfg(k).api_key == "sk-or-SECRET123456",
+       "server riêng cho căn/trò chuyện không nhận key của server dịch (chỉ dùng chung khi để trống base URL)")
+    c.request("DELETE", "/api/keys", params={"slot": "https://openrouter.ai/api/v1"})
+    body = {"model": "m", "temperature": 0.2, "reasoning": {"enabled": False}}
+    ok(A.refused_param(body, 400, '{"error":{"message":"the request exceeds the available context size"}}') is None
+       and A.refused_param(body, 429, "rate limited temperature") is None,
+       "lỗi vượt ngữ cảnh / 429 không làm mất temperature")
+    ok(A.refused_param(body, 500, '{"error":{"message":"Bad Request"}}') == "temperature"
+       and A.refused_param(body, 400, "Reasoning is mandatory for this endpoint") == "reasoning",
+       "proxy từ chối temperature / model bắt buộc suy nghĩ → bỏ đúng tham số đó rồi hỏi lại")
 
     print("5. Khôi phục sau khi tải lại trang")
     st = c.get(f"/api/{did}/state").json()
@@ -152,8 +199,49 @@ with TestClient(A.app) as c:
     c.delete("/api/user_terms/blocked", params={"term": gone})
     ok(key(gone) not in A.user_terms()["blocked"], "bấm ↺ → bỏ ẩn")
 
+    print("8. Ghi chú")
+    g = c.post(f"/api/{did}/notes", json={"id": "general", "text": "Ý chính: pre-train hai chiều."}).json()
+    g2 = c.post(f"/api/{did}/notes", json={"id": "general", "text": "Ý chính: **pre-train** hai chiều."}).json()
+    ok(g["id"] == g2["id"] == "general" and len(c.get(f"/api/{did}/notes").json()["notes"]) == 1,
+       "ghi chú chung: sửa lại vẫn là một ghi chú")
+    mk = c.post(f"/api/{did}/notes", json={"text": "Câu này là định nghĩa MLM", "page": 0, "mark_id": "m1",
+                                          "quote": "vài chữ"}).json()
+    llm = c.post(f"/api/{did}/notes", json={"text": "$\\mathrm{softmax}$ là…", "page": 0, "source": "llm",
+                                           "quote": "BERT is designed to", "meta": {"question": "Giải thích?", "model": "m"}}).json()
+    ns = c.get(f"/api/{did}/notes").json()["notes"]
+    ok([x["id"] for x in ns] == ["general", mk["id"], llm["id"]] and ns[2]["source"] == "llm",
+       "thứ tự: ghi chú chung → theo trang; giữ nguồn LLM + câu hỏi")
+    c.post(f"/api/{did}/chat", json={"cfg": cfg, "messages": [{"role": "user", "content": "Hỏi lại?"}], "page": 0,
+                                     "note_ids": [mk["id"]]})
+    ok("Câu này là định nghĩa MLM" in seen["msg"] and "Ý chính" not in seen["msg"],
+       "💬 Hỏi lại: đúng ghi chú được chọn đi kèm câu hỏi")
+    A.DOCS.clear()
+    ok(c.get(f"/api/{did}/state").json()["notes"] == ns, "ghi chú còn nguyên sau khi khởi động lại app")
+    pdf = pymupdf.open("pdf", c.get(f"/api/{did}/download").content)
+    info = [(a.type[1], a.info["content"]) for a in pdf[0].annots()]
+    ok(("Highlight", "Câu này là định nghĩa MLM") in info, "PDF tải về: ghi chú của vệt tô = nội dung popup của highlight")
+    loose = [t for k, t in info if k == "Text"]
+    ok(len(loose) == 1 and "pre-train" in loose[0] and "softmax" in loose[0], "ghi chú chung + ghi chú trang → biểu tượng ghi chú ở trang 1")
+    md = c.get(f"/api/{did}/notes.md")
+    ok(md.status_code == 200 and "## Ghi chú chung" in md.text and "## Trang 1" in md.text and "> vài chữ" in md.text
+       and "Giải thích?" in md.text, "xuất .md: ghi chú chung, theo trang, kèm đoạn trích và câu hỏi LLM")
+    c.post(f"/api/{did}/marks", json={"page": 0, "add": [], "remove": ["m1"]})
+    ok(any(x["id"] == mk["id"] for x in c.get(f"/api/{did}/notes").json()["notes"]), "bỏ vệt tô không xoá ghi chú của nó")
+    pdf = pymupdf.open("pdf", c.get(f"/api/{did}/download").content)
+    ok(any(a.type[1] == "Text" and "Câu này là định nghĩa MLM" in a.info["content"] for a in pdf[0].annots()),
+       "ghi chú của vệt đã bỏ vẫn có trong PDF (biểu tượng ghi chú)")
+    ok(c.post(f"/api/{did}/notes", json={"id": "khongcon", "text": "x"}).status_code == 404,
+       "sửa ghi chú đã bị xoá → 404, không tạo bản trùng")
+    ok(c.delete(f"/api/{did}/notes/{llm['id']}").status_code == 200
+       and c.delete(f"/api/{did}/notes/{llm['id']}").status_code == 404, "xoá ghi chú")
+    ok(c.post(f"/api/{did}/notes", json={"text": "x", "page": 999}).json()["page"] is None, "số trang lạ → ghi chú cả bài")
+    ok(c.get("/api/docs").json()["docs"][0]["notes"] == 3, "danh sách tài liệu đếm số ghi chú")
+
+    d_live = A.DOCS[did]
     ok(c.delete(f"/api/docs/{did}").status_code == 200 and c.get(f"/api/{did}/state").status_code == 404,
        "xoá tài liệu → không mở lại được nữa")
+    A.store.save_state(d_live)                      # một việc của bài (đang dịch / lập thuật ngữ) xong SAU khi bài bị xoá
+    ok(not A.store.folder(did).exists(), "việc còn chạy của bài đã xoá không lỗi, không làm bài sống lại")
 
 print("\nTẤT CẢ ĐỀU ĐẠT" if not FAIL else f"\n{len(FAIL)} MỤC SAI: " + "; ".join(FAIL))
 sys.exit(1 if FAIL else 0)
