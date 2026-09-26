@@ -572,7 +572,7 @@ m2 = A.model_meta({"id": "local"})
 ok(m == {"id": "a/b:free", "name": "", "ctx": 262144, "vision": True, "free": True} and m2["vision"] is None and m2["free"] is None,
    "thông tin model: OpenRouter có ctx/ảnh/free, server khác để trống (không đoán)")
 
-print("10. Dịch hàng loạt bằng dòng lệnh (scripts/batch_translate.py)")
+print("15. Dịch hàng loạt bằng dòng lệnh (scripts/batch_translate.py)")
 sys.path.insert(0, str(ROOT / "scripts"))
 import batch_translate as BT  # noqa: E402
 
@@ -582,7 +582,8 @@ async def batch(*argv):
     ap_args = BT.argparse.Namespace(paths=[str(ROOT / "data/gqa.pdf")], pages="", force=False, out=str(outdir),
                                     format=["translated"], jobs=2, span=2, model="", base_url="", translator="",
                                     config="", set=["base_url=http://x/v1", "model=m", "ocr_mode=off",
-                                                    "google_fallback=false", "formula_ocr=off"], effective={})
+                                                    "google_fallback=false", "formula_ocr=off"], effective={},
+                                    provider="openrouter")
     for kv in argv:
         k, v = kv.split("=", 1)
         setattr(ap_args, k, v.split(",") if k == "format" else [v] if k == "set" else v)
@@ -608,10 +609,25 @@ try:
     ok(False, "gõ nhầm tên trường cấu hình phải báo lỗi")
 except SystemExit as e:
     ok("modle" in str(e), "gõ nhầm tên trường cấu hình → báo lỗi, không lặng lẽ bỏ qua")
+async def cfg_of(provider, *sets):
+    ns = BT.argparse.Namespace(provider=provider, config="", set=list(sets), model="", base_url="", translator="",
+                               effective={})
+    async with A.httpx.AsyncClient(transport=A.httpx.ASGITransport(app=A.app), base_url="http://t") as c:
+        return await BT.build_config(c, ns)
+dflt, tuf = asyncio.run(cfg_of("openrouter")), asyncio.run(cfg_of("tuf"))
+ok(dflt == {"base_url": "https://openrouter.ai/api/v1", "model": A.FREE_MODEL} and dflt["model"].endswith(":free")
+   and A.Config().model == A.FREE_MODEL, "mặc định (script và app): OpenRouter, model free")
+ok(tuf["base_url"].endswith(":8080/v1") and tuf["model"] == "4b" and asyncio.run(cfg_of("tuf", "model=9b"))["model"] == "9b",
+   "--provider tuf: Base URL + model của nhà cung cấp đã lưu; --set/--model vẫn đè được")
+try:
+    asyncio.run(cfg_of("khong-co"))
+    ok(False, "nhà cung cấp không có phải báo lỗi")
+except SystemExit as e:
+    ok("openrouter" in str(e), "nhà cung cấp không có → báo lỗi kèm danh sách")
 ok(BT.parse_range("2-3,5", 6) == [1, 2, 4] and BT.parse_range("5-", 6) == [4, 5] and BT.parse_range("", 2) == [0, 1],
    "dải trang: 2-3,5 / 5- / rỗng")
 
-print("11. Số dòng ở lề (bản nộp ICLR/ACL: 000, 001… cả hai lề)")
+print("16. Số dòng ở lề (bản nộp ICLR/ACL: 000, 001… cả hai lề)")
 ln = pymupdf.open()
 ln.insert_pdf(pymupdf.open(ROOT / "data/bert.pdf"), from_page=2, to_page=2)
 pg = ln[0]

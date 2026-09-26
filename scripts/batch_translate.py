@@ -1,13 +1,19 @@
 """Dịch hàng loạt PDF bằng dòng lệnh, qua app đang chạy (./restart.sh start): bài dịch xong nằm luôn trong "Tài liệu
 đã lưu" của giao diện, và chạy lại cùng file thì chỉ dịch tiếp các trang còn thiếu (app nhận ra file đã tải lên).
 
-  .venv/bin/python scripts/batch_translate.py bai1.pdf bai2.pdf
+  .venv/bin/python scripts/batch_translate.py bai1.pdf bai2.pdf              # OpenRouter, model free mặc định
   .venv/bin/python scripts/batch_translate.py ~/Papers/ --out ~/Papers/vi --format translated,dual-side
-  .venv/bin/python scripts/batch_translate.py bai.pdf --pages 1-5,8 --model inclusionai/ling-3.0-flash-fin:free -j 2
+  .venv/bin/python scripts/batch_translate.py --list-providers               # nhà cung cấp đã lưu trong app
+  .venv/bin/python scripts/batch_translate.py bai.pdf --provider tuf -j 2    # dịch bằng server TUF
+  .venv/bin/python scripts/batch_translate.py bai.pdf --provider             # chọn nhà cung cấp từ danh sách
+  .venv/bin/python scripts/batch_translate.py bai.pdf --pages 1-5,8 --model dots-studio/dots-3-note-preview:free
   .venv/bin/python scripts/batch_translate.py bai.pdf --set temperature=0 --set skip_refs=false --force
 
-Cấu hình dịch = mặc định của app (Config trong app.py), sửa bằng --model/--base-url/--translator, --config (file JSON
-các trường của Config) hoặc --set trường=giá_trị. Key API không cần truyền: app lấy key đã nhớ theo base_url.
+Nhà cung cấp (--provider, theo id hoặc tên) lấy từ app — có sẵn (OpenRouter, OpenAI…) và của bạn (⚙️ Cấu hình → mục 7):
+đặt Base URL + model dịch của nhà cung cấp đó. Mặc định: OpenRouter với model free (FREE_MODEL trong app.py).
+Còn lại = mặc định của app (Config trong app.py), sửa bằng --model/--base-url/--translator, --config (file JSON các
+trường của Config) hoặc --set trường=giá_trị (thứ tự ưu tiên tăng dần: nhà cung cấp < --config < --set < --model…).
+Key API không cần truyền: app lấy key đã nhớ theo base_url.
 --format: translated (bản dịch), dual-side (song ngữ cạnh nhau), dual-alt (song ngữ xen trang), original (bản gốc có tô).
 """
 import argparse
@@ -62,10 +68,36 @@ def value(v: str):
         return v
 
 
+def show_providers(ps: list[dict]) -> None:
+    for i, p in enumerate(ps, 1):
+        tag = "" if p.get("builtin") else " ★"
+        model = p.get("model") or "(chưa đặt model dịch → cần --model)"
+        print(f"  {i:>2}. {p['id']:<12} {p['name']}{tag}\n      {p['base_url']}  ·  {model}")
+
+
+def pick_provider(ps: list[dict], want: str) -> dict:
+    """want: id hoặc tên nhà cung cấp (không phân biệt hoa thường), số thứ tự, hoặc "?" = hỏi."""
+    if want == "?":
+        if not sys.stdin.isatty():
+            sys.exit("--provider không kèm tên chỉ dùng được khi chạy trong terminal; ghi rõ --provider <id>")
+        show_providers(ps)
+        want = input(f"Chọn nhà cung cấp [1–{len(ps)}, Enter = openrouter]: ").strip() or "openrouter"
+    if want.isdigit() and 1 <= int(want) <= len(ps):
+        return ps[int(want) - 1]
+    for p in ps:
+        if want.casefold() in (p["id"].casefold(), p["name"].casefold()):
+            return p
+    sys.exit(f"Không có nhà cung cấp {want!r}. Có: {', '.join(p['id'] for p in ps)} (xem --list-providers)")
+
+
 async def build_config(c: httpx.AsyncClient, args) -> dict:
     """Ghép cấu hình và kiểm tên trường theo schema của app (gõ nhầm tên thì báo, không lặng lẽ bỏ qua)."""
     fields = (await c.get("/openapi.json")).json()["components"]["schemas"]["Config"]["properties"]
-    cfg = json.loads(pathlib.Path(args.config).expanduser().read_text()) if args.config else {}
+    p = pick_provider((await c.get("/api/providers")).json()["providers"], args.provider)
+    args.effective["provider"] = p["name"]
+    cfg = {"base_url": p["base_url"], **({"model": p["model"]} if p.get("model") else {})}
+    if args.config:
+        cfg.update(json.loads(pathlib.Path(args.config).expanduser().read_text()))
     for kv in args.set:
         k, sep, v = kv.partition("=")
         if not sep:
@@ -76,6 +108,8 @@ async def build_config(c: httpx.AsyncClient, args) -> dict:
             cfg[k] = getattr(args, k)
     if bad := sorted(set(cfg) - set(fields)):
         sys.exit(f"Trường cấu hình không có: {', '.join(bad)}\nCó: {', '.join(sorted(fields))}")
+    if "model" not in cfg and cfg.get("translator", "llm") != "google":
+        sys.exit(f"Nhà cung cấp {p['name']} chưa đặt model dịch → thêm --model")
     for k in ("base_url", "model", "translator"):   # để in ra: model thật sự sẽ dùng
         args.effective[k] = cfg.get(k, fields[k].get("default"))
     return cfg
@@ -146,8 +180,11 @@ async def translate_doc(c: httpx.AsyncClient, pdf: pathlib.Path, cfg: dict, args
 
 async def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("paths", nargs="+", help="file PDF hoặc thư mục (lấy mọi *.pdf ngay trong thư mục)")
+    ap.add_argument("paths", nargs="*", help="file PDF hoặc thư mục (lấy mọi *.pdf ngay trong thư mục)")
     ap.add_argument("--server", default="http://127.0.0.1:8000")
+    ap.add_argument("-p", "--provider", nargs="?", const="?", default="openrouter",
+                    help="nhà cung cấp đã lưu trong app (id, tên hoặc số thứ tự); không ghi tên = chọn từ danh sách")
+    ap.add_argument("--list-providers", action="store_true", help="liệt kê nhà cung cấp rồi thoát")
     ap.add_argument("--pages", default="", help='dải trang, đánh số từ 1: "1-5,8", "3-" (rỗng = cả bài)')
     ap.add_argument("--force", action="store_true", help="dịch lại cả trang đã dịch")
     ap.add_argument("--out", default="", help="thư mục lưu PDF (mặc định: cạnh file gốc)")
@@ -165,14 +202,17 @@ async def main():
     args.format = [f.strip() for f in args.format.split(",") if f.strip()]
     if bad := [f for f in args.format if f not in FORMATS]:
         sys.exit(f"--format không có: {', '.join(bad)} (có: {', '.join(FORMATS)})")
-    files = pdf_files(args.paths)
-    if not files:
+    files = [] if args.list_providers else pdf_files(args.paths)
+    if not files and not args.list_providers:
         sys.exit("Không có file PDF nào")
     async with httpx.AsyncClient(base_url=args.server, timeout=httpx.Timeout(30, read=None)) as c:
         try:
             await c.get("/api/docs")
         except httpx.HTTPError:
             sys.exit(f"App chưa chạy ở {args.server} → ./restart.sh start")
+        if args.list_providers:
+            show_providers((await c.get("/api/providers")).json()["providers"])
+            return
         cfg = await build_config(c, args)
         shown = {**args.effective, **{k: v for k, v in cfg.items() if "key" not in k}}   # không in key API
         print("Cấu hình: " + ", ".join(f"{k}={v}" for k, v in shown.items()))

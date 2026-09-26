@@ -85,6 +85,11 @@ function loadSettings() {
     sel.value = "openrouter";
     sel.dispatchEvent(new Event("change"));
   });
+  // v7: mặc định OpenRouter đổi từ gemini-2.5-flash (trả phí) sang model free (xem FREE_MODEL trong app.py) →
+  // ô nào còn để đúng mặc định cũ thì lấy mặc định mới của nhà cung cấp
+  if (ver < 7) for (const [sel, model, key] of [["preset", "model", "model"], ["ocr_preset", "ocr_vlm_model", "vision"]]) {
+    if (s[sel] === "openrouter" && $(model).value === "google/gemini-2.5-flash" && P("openrouter")[key]) $(model).value = P("openrouter")[key];
+  }
   // nhà cung cấp đã lưu không còn (đã xoá) → "Tùy chỉnh", giữ nguyên Base URL và model đang có
   document.querySelectorAll("select.provider-sel").forEach(sel => { if (!sel.value) sel.value = "custom"; });
   fillKeys();
@@ -92,7 +97,7 @@ function loadSettings() {
   saveSettings();
 }
 function saveSettings() {
-  const s = { settings_v: 6 };
+  const s = { settings_v: 7 };
   FIELDS.forEach(f => s[f] = $(f).value);
   CHECKS.forEach(f => s[f] = $(f).checked);
   try { localStorage.setItem("llm", JSON.stringify(s)); } catch {}

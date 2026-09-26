@@ -50,11 +50,18 @@ DOCS: dict[str, dict] = {}
 OCRSPACE_DEMO = "helloworld"
 
 
+# Mặc định = model free của OpenRouter (26/09/2026). Dịch: ling-flash — bench_english 0,87 từ tiếng Anh sót/100 từ,
+# nhanh gấp 3 dots, lập bảng thuật ngữ BERT 4 s; dots lẫn chữ Hán (投影) và nửa câu tiếng Anh (1,7–2,6/100).
+# Ảnh (OCR, trò chuyện về hình): dots-3-note-preview — ling không đọc ảnh.
+FREE_MODEL = "inclusionai/ling-3.0-flash-fin:free"
+FREE_VISION_MODEL = "dots-studio/dots-3-note-preview:free"
+
+
 class Config(BaseModel):
     # LLM
     base_url: str = "https://openrouter.ai/api/v1"
     api_key: str = ""
-    model: str = "google/gemini-2.5-flash"
+    model: str = FREE_MODEL
     temperature: float = 0.2
     glossary: str = ""
     glossary_auto: bool = True     # tự lập bảng thuật ngữ một lần cho mỗi tài liệu (một lượt gọi LLM)
@@ -405,7 +412,7 @@ PADDLE_OCR = "hf.co/PaddlePaddle/PaddleOCR-VL-1.6-GGUF:latest"   # OCR tốt nh�
 BUILTIN_PROVIDERS = [
     # gloss: bench_glossary 21/09/2026 — Nemotron Ultra free lọc/dịch tốt hơn hẳn 4b
     {"id": "openrouter", "name": "OpenRouter", "base_url": "https://openrouter.ai/api/v1",
-     "model": "google/gemini-2.5-flash", "vision": "google/gemini-2.5-flash", "parallel": 4,
+     "model": FREE_MODEL, "vision": FREE_VISION_MODEL, "parallel": 4,
      "gloss": "nvidia/nemotron-3-ultra-550b-a55b:free"},
     {"id": "openai", "name": "OpenAI", "base_url": "https://api.openai.com/v1", "model": "gpt-4.1-mini",
      "vision": "gpt-4.1-mini", "parallel": 4},
