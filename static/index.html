@@ -9,14 +9,22 @@
 <link rel="stylesheet" href="/vendor/highlight-github.min.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📄</text></svg>">
 <style>
-  :root { --bg:#f3f4f6; --panel:#fff; --line:#d1d5db; --text:#111827; --muted:#6b7280; --accent:#2563eb; }
+  :root { --bg:#f5f4ed; --panel:#faf9f5; --line:#e3e0d3; --text:#141413; --muted:#73726c; --accent:#c96442; --tint:#f3e6dc; --hover:#efece2;
+          --field:#fff; --me:#ebe6d9; --code:#f5f4ed; --ok-bg:#ecfdf5; --ok:#166534; --bad-bg:#fee2e2; --warn-bg:#fffbeb; color-scheme:light; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#262624; --panel:#1f1e1d; --line:#3e3d39; --text:#ecebe6; --muted:#a3a29c; --accent:#d97757; --tint:#3a2b24; --hover:#30302e;
+    --field:#30302e; --me:#393937; --code:#1a1918; --ok-bg:#1d3326; --ok:#86efac; --bad-bg:#442222; --warn-bg:#3b3320; color-scheme:dark; } }
+  :root[data-theme="dark"] {
+    --bg:#262624; --panel:#1f1e1d; --line:#3e3d39; --text:#ecebe6; --muted:#a3a29c; --accent:#d97757; --tint:#3a2b24; --hover:#30302e;
+    --field:#30302e; --me:#393937; --code:#1a1918; --ok-bg:#1d3326; --ok:#86efac; --bad-bg:#442222; --warn-bg:#3b3320; color-scheme:dark; }
   * { box-sizing:border-box; }
   body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); }
   header { position:sticky; top:0; left:0; z-index:5; background:var(--panel); border-bottom:1px solid var(--line);
            padding:8px 12px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-  header h1 { font-size:16px; margin:0 12px 0 0; }
-  input, select, button { font:inherit; font-size:13px; padding:5px 8px; border:1px solid var(--line); border-radius:6px; background:#fff; }
-  button { cursor:pointer; } button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  header h1 { font-family:ui-serif,Georgia,"Times New Roman",serif; font-weight:500; color:var(--accent); font-size:18px; margin:0 12px 0 0; }
+  input, select, button { font:inherit; font-size:13px; padding:5px 8px; border:1px solid var(--line); border-radius:8px; background:var(--field); color:inherit; }
+  input:focus, select:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 2px rgba(201,100,66,.2); }
+  button { cursor:pointer; } button:hover { background:var(--hover); } button.primary:hover { background:#b5573a; } button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
   button:disabled { opacity:.5; cursor:default; }
   #settings { display:none; background:var(--panel); border-bottom:1px solid var(--line); padding:10px 12px;
               grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px; }
@@ -24,7 +32,7 @@
   #settings h3.sec { grid-column:1/-1; margin:8px 0 0; font-size:13px; border-bottom:1px solid var(--line); padding-bottom:3px; }
   #settings label { font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:3px; }
   #status { font-size:13px; color:var(--muted); margin-left:auto; }
-  input.bad { border-color:#dc2626; background:#fef2f2; }
+  input.bad { border-color:#dc2626; background:var(--bad-bg); }
   .bar { height:3px; background:transparent; }
   .bar > div { height:100%; background:var(--accent); width:0; transition:width .3s; }
   /* Hai khung xem độc lập (bản gốc | bản dịch): mỗi khung cuộn và thu phóng riêng, ở giữa là thanh kéo chia bề rộng.
@@ -45,8 +53,8 @@
              background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:3px;
              box-shadow:0 2px 8px rgba(0,0,0,.15); }
   #viewbar button { font-size:12px; padding:3px 7px; border:1px solid transparent; background:transparent; }
-  #viewbar button.on { border-color:var(--line); background:#eef2ff; font-weight:600; }
-  #viewbar button:hover { background:#f3f4f6; }
+  #viewbar button.on { border-color:var(--line); background:var(--tint); font-weight:600; }
+  #viewbar button:hover { background:var(--hover); }
   #viewbar .sep { width:1px; height:18px; background:var(--line); margin:0 3px; }
   #zoomPct { min-width:48px; }
   /* Kính lúp chữ nhật ngang: đọc trọn một dòng chữ; ⌥ + lăn chuột đổi độ phóng (số ở góc) */
@@ -57,7 +65,7 @@
   #lens::after { content:attr(data-k); position:absolute; right:6px; bottom:4px; font-size:10px; color:#fff;
                  background:rgba(0,0,0,.45); border-radius:3px; padding:0 4px; }
   #zoomWho { font-size:11px; color:var(--muted); padding-left:2px; }
-  #linkScroll.on { border-color:var(--line); background:#eef2ff; }
+  #linkScroll.on { border-color:var(--line); background:var(--tint); }
   .page { position:relative; overflow:hidden; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.15); }
   /* tỉ lệ A4/Letter tạm cho tới khi ảnh nạp xong: không thì trang chưa nạp cao 0, cả chục ảnh "lazy" lọt vào khung cùng lúc */
   .page img { width:100%; display:block; aspect-ratio:auto 612 / 792; }
@@ -95,12 +103,12 @@
   .mlist[hidden] { display:none; }
   .mopt { display:flex; gap:6px; align-items:center; padding:4px 8px; font-size:12px; color:var(--text); cursor:pointer; }
   .mopt span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .mopt.act { background:#eef2ff; } .mopt.cur span { font-weight:600; }
-  .mopt i { font-style:normal; font-size:10px; padding:0 4px; border-radius:3px; background:#f3f4f6; color:var(--muted); }
-  .mopt i.free { background:#dcfce7; color:#166534; } .mopt i.vis { background:#e0e7ff; color:#3730a3; }
+  .mopt.act { background:var(--tint); } .mopt.cur span { font-weight:600; }
+  .mopt i { font-style:normal; font-size:10px; padding:0 4px; border-radius:3px; background:var(--hover); color:var(--muted); }
+  .mopt i.free { background:var(--ok-bg); color:var(--ok); } .mopt i.vis { background:var(--tint); color:var(--accent); }
   .mhint { padding:6px 8px; font-size:12px; color:var(--muted); }
   #pvtab { width:100%; border-collapse:collapse; font-size:12px; }
-  #pvtab td, #pvtab th { padding:3px 6px; border-bottom:1px solid #f1f2f4; text-align:left; }
+  #pvtab td, #pvtab th { padding:3px 6px; border-bottom:1px solid #ebe8dd; text-align:left; }
   #pvtab th { color:var(--muted); font-weight:600; }
 
   /* ---- Đoạn không dịch, dịch lại kèm yêu cầu ---- */
@@ -110,7 +118,7 @@
   body.skipmode .page .ln { pointer-events:none; }
   body.skipmode .page .blk { pointer-events:auto; cursor:pointer; }
   body.skipmode .page .blk:hover { outline:2px solid rgba(220,38,38,.7); }
-  #skipMode.on { background:#fee2e2; border-color:#fca5a5; font-weight:600; }
+  #skipMode.on { background:var(--bad-bg); border-color:#fca5a5; font-weight:600; }
   #rtPop { position:fixed; z-index:25; width:360px; background:var(--panel); border:1px solid var(--line); border-radius:10px;
            box-shadow:0 8px 28px rgba(0,0,0,.22); padding:10px; display:flex; flex-direction:column; gap:6px; font-size:13px; }
   #rtPop[hidden] { display:none; }
@@ -120,7 +128,7 @@
   #rtChips { display:flex; flex-wrap:wrap; gap:4px; }
   .rtscope { display:flex; flex-wrap:wrap; gap:4px 10px; font-size:12px; }
   .rtbar { display:flex; gap:6px; justify-content:flex-end; }
-  .tools .kept { background:#ecfdf5; }
+  .tools .kept { background:var(--ok-bg); }
 
   /* ---- Bảng thuật ngữ ---- */
   #gloss { display:none; background:var(--panel); border-bottom:1px solid var(--line); padding:8px 12px; }
@@ -129,9 +137,9 @@
   .ghead .hint { font-size:12px; color:var(--muted); }
   #gwrap { max-height:46vh; overflow:auto; border:1px solid var(--line); border-radius:6px; }
   #gtab { width:100%; border-collapse:collapse; font-size:13px; }
-  #gtab th { position:sticky; top:0; background:#f9fafb; text-align:left; font-size:12px; color:var(--muted);
+  #gtab th { position:sticky; top:0; background:var(--hover); text-align:left; font-size:12px; color:var(--muted);
              padding:5px 8px; border-bottom:1px solid var(--line); }
-  #gtab td { padding:3px 8px; border-bottom:1px solid #f1f2f4; }
+  #gtab td { padding:3px 8px; border-bottom:1px solid #ebe8dd; }
   #gtab tr.off { opacity:.42; }
   #gtab input[type=text] { width:100%; padding:3px 6px; }
   #gtab label { font-size:12px; margin-right:8px; white-space:nowrap; }
@@ -140,8 +148,8 @@
   #gtab .gdel:hover { color:#dc2626; }
   #gextra > div { margin-top:6px; line-height:2; }
   .gchip { font-size:12px; padding:1px 8px; margin:0 4px 2px 0; border:1px solid var(--line); border-radius:12px;
-           background:#fff; cursor:pointer; }
-  .gchip:hover { border-color:#2563eb; color:#2563eb; }
+           background:var(--field); cursor:pointer; }
+  .gchip:hover { border-color:var(--accent); color:var(--accent); }
   .gchip small { color:var(--muted); margin-left:4px; }
   .gchip.hid { color:var(--muted); border-style:dashed; }
   .ghelp { font-size:11px; line-height:1.4; color:var(--muted); margin-bottom:6px; }
@@ -152,10 +160,10 @@
   #docs.open { display:block; }
   #dwrap { max-height:46vh; overflow:auto; border:1px solid var(--line); border-radius:6px; }
   #dtab { width:100%; border-collapse:collapse; font-size:13px; }
-  #dtab th { position:sticky; top:0; background:#f9fafb; text-align:left; font-size:12px; color:var(--muted);
+  #dtab th { position:sticky; top:0; background:var(--hover); text-align:left; font-size:12px; color:var(--muted);
              padding:5px 8px; border-bottom:1px solid var(--line); }
-  #dtab td { padding:5px 8px; border-bottom:1px solid #f1f2f4; vertical-align:top; }
-  #dtab tr.cur { background:#eef2ff; }
+  #dtab td { padding:5px 8px; border-bottom:1px solid #ebe8dd; vertical-align:top; }
+  #dtab tr.cur { background:var(--tint); }
   #dtab .hint { font-size:11px; color:var(--muted); }
   #dtab a { color:inherit; text-decoration:none; } #dtab a:hover b { text-decoration:underline; }
 
@@ -173,10 +181,10 @@
   .chead { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid var(--line); font-size:14px; }
   #msgs { flex:1; overflow:auto; padding:10px; display:flex; flex-direction:column; gap:10px; }
   .msg { font-size:14px; line-height:1.65; white-space:pre-wrap; padding:8px 12px; border-radius:12px; overflow-wrap:anywhere; }
-  .msg.me { background:#e0e7ff; align-self:flex-end; max-width:88%; }
+  .msg.me { background:var(--me); align-self:flex-end; max-width:88%; }
   .msg.ai { background:transparent; padding:2px 4px; }
   .msg.ai .body { max-width:760px; }
-  .msg.err { background:#fee2e2; }
+  .msg.err { background:var(--bad-bg); }
   .msg .quote { display:block; border-left:3px solid var(--accent); padding-left:6px; margin-bottom:5px;
                 font-size:12px; color:var(--muted); max-height:5.6em; overflow:hidden; }
   /* Câu trả lời LLM được dựng thành HTML (Markdown + công thức) nên bỏ pre-wrap, nếu không mỗi xuống dòng
@@ -192,10 +200,10 @@
   .msg.ai .body hr { border:none; border-top:1px solid var(--line); margin:1em 0; }
   .msg.ai .body strong { font-weight:650; }
   .msg.ai .body code { background:rgba(0,0,0,.06); padding:.1em .3em; border-radius:4px; font-size:.92em; }
-  .msg.ai .body pre { position:relative; background:#f6f8fa; border:1px solid #e5e7eb; padding:30px 10px 10px; border-radius:8px; overflow-x:auto; font-size:12.5px; line-height:1.5; }
+  .msg.ai .body pre { position:relative; background:var(--code); border:1px solid var(--line); padding:30px 10px 10px; border-radius:8px; overflow-x:auto; font-size:12.5px; line-height:1.5; }
   .msg.ai .body pre code.hljs { background:none; padding:0; }
   .codebar { position:absolute; top:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center;
-             padding:3px 8px; font:11px system-ui,sans-serif; color:var(--muted); border-bottom:1px solid #e5e7eb; }
+             padding:3px 8px; font:11px system-ui,sans-serif; color:var(--muted); border-bottom:1px solid var(--line); }
   .codebar button { font-size:11px; padding:0 6px; border:none; background:transparent; color:var(--muted); cursor:pointer; }
   .codebar button:hover { color:var(--text); }
   .msg.ai .body tr:nth-child(even) td { background:rgba(0,0,0,.02); }
@@ -224,17 +232,17 @@
             border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.18); padding:4px; }
   #dlMenu[hidden] { display:none; }
   #dlMenu button { display:block; width:100%; text-align:left; border:none; background:transparent; padding:6px 8px; cursor:pointer; }
-  #dlMenu button:hover { background:#f3f4f6; }
+  #dlMenu button:hover { background:var(--hover); }
   #dlMenu small { display:block; opacity:.65; font-size:11.5px; margin-top:1px; }
-  .ses { display:flex; gap:4px; align-items:center; padding:6px 8px; border-bottom:1px solid #f1f2f4; cursor:pointer; font-size:13px; }
-  .ses:hover { background:#f9fafb; } .ses.cur { background:#eef2ff; }
+  .ses { display:flex; gap:4px; align-items:center; padding:6px 8px; border-bottom:1px solid #ebe8dd; cursor:pointer; font-size:13px; }
+  .ses:hover { background:var(--hover); } .ses.cur { background:var(--tint); }
   .ses .st { flex:1; min-width:0; } .ses .st b { display:block; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .ses button { border:none; background:transparent; cursor:pointer; padding:2px 4px; font-size:12px; }
   #toBottom { position:absolute; left:50%; transform:translateX(-50%); bottom:110px; z-index:3; font-size:12px;
               border-radius:14px; box-shadow:0 2px 8px rgba(0,0,0,.2); }
   #toBottom[hidden] { display:none; }
   #chatPane { position:relative; }
-  #editbox { font-size:12px; color:var(--muted); padding:5px 10px; border-top:1px solid var(--line); background:#f0fdf4; display:flex; justify-content:space-between; }
+  #editbox { font-size:12px; color:var(--muted); padding:5px 10px; border-top:1px solid var(--line); background:var(--ok-bg); display:flex; justify-content:space-between; }
   #editbox[hidden] { display:none; }
   .askbar { display:flex; flex-direction:column; gap:4px; }
   #ctxMode { font-size:11px; padding:3px; max-width:110px; }
@@ -242,7 +250,7 @@
                    border-radius:5px; background:transparent; color:var(--muted); cursor:pointer; }
   .msgbar button:hover { background:rgba(0,0,0,.05); }
   #selbox { font-size:12px; color:var(--muted); padding:6px 10px; border-top:1px solid var(--line);
-            background:#fffbeb; display:flex; gap:6px; align-items:flex-start; }
+            background:var(--warn-bg); display:flex; gap:6px; align-items:flex-start; }
   #selbox[hidden] { display:none; }   /* #selbox{display:flex} là style của trang nên đè lên [hidden] của trình duyệt */
   #selbox span { flex:1; max-height:4.5em; overflow:hidden; }
   #ask { display:flex; gap:6px; padding:8px; border-top:1px solid var(--line); }
@@ -251,7 +259,7 @@
   .tabs { flex:1; display:flex; gap:4px; }
   .tabs button { font:inherit; font-size:13px; padding:4px 8px; border:1px solid transparent; border-radius:6px;
                  background:transparent; cursor:pointer; color:var(--muted); }
-  .tabs button.on { border-color:var(--line); background:#f3f4f6; color:inherit; font-weight:600; }
+  .tabs button.on { border-color:var(--line); background:var(--hover); color:inherit; font-weight:600; }
   #noteCount { font-weight:normal; font-size:11px; color:var(--muted); }
   .pane { flex:1; min-height:0; display:flex; flex-direction:column; }
   .pane[hidden] { display:none; }
@@ -262,8 +270,8 @@
   .ngen { display:flex; flex-direction:column; gap:4px; font-size:13px; font-weight:600; }
   .ngen textarea, .note textarea { font:inherit; font-size:13px; font-weight:normal; padding:6px; border:1px solid var(--line);
                                    border-radius:6px; resize:vertical; width:100%; box-sizing:border-box; }
-  .note { border:1px solid var(--line); border-radius:8px; padding:7px 9px; font-size:13px; line-height:1.5; background:#fff; }
-  .note.draft { border-color:#facc15; background:#fffbeb; }
+  .note { border:1px solid var(--line); border-radius:8px; padding:7px 9px; font-size:13px; line-height:1.5; background:var(--field); }
+  .note.draft { border-color:#facc15; background:var(--warn-bg); }
   .note.flash { box-shadow:0 0 0 3px rgba(250,204,21,.7); transition:box-shadow .3s; }
   .nmeta { font-size:11px; color:var(--muted); display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
   .nmeta a { color:var(--accent); cursor:pointer; text-decoration:none; }
@@ -276,13 +284,13 @@
   .nbody .katex-display { overflow-x:auto; overflow-y:hidden; }
   .nbody code { background:rgba(0,0,0,.06); padding:.1em .3em; border-radius:4px; }
   #notebox { font-size:12px; color:var(--muted); padding:6px 10px; border-top:1px solid var(--line);
-             background:#eef2ff; display:flex; gap:6px; align-items:flex-start; }
+             background:var(--tint); display:flex; gap:6px; align-items:flex-start; }
   #notebox[hidden] { display:none; }
   #notebox span { flex:1; max-height:4.5em; overflow:hidden; }
   /* Dấu 📝 cuối vệt tô có ghi chú (toạ độ PDF trong .layer đã thu phóng) và số ghi chú của trang */
   .ndot { position:absolute; z-index:4; font-size:9px; line-height:1; cursor:pointer; pointer-events:auto;
-          background:#fef3c7; border:1px solid #f59e0b; border-radius:3px; padding:0 1px; }
-  .pnote { position:absolute; top:4px; right:6px; z-index:4;   /* dưới thanh trên cùng (header z-index 5) */ font-size:11px; cursor:pointer; background:#fef3c7;
+          background:var(--warn-bg); border:1px solid #f59e0b; border-radius:3px; padding:0 1px; }
+  .pnote { position:absolute; top:4px; right:6px; z-index:4;   /* dưới thanh trên cùng (header z-index 5) */ font-size:11px; cursor:pointer; background:var(--warn-bg);
            border:1px solid #f59e0b; border-radius:4px; padding:0 4px; }
   @media (max-width:900px){ body.chat .cols { margin-right:0; } #chat { width:100%; } }
 </style>
@@ -290,6 +298,7 @@
 <body>
 <header>
   <h1>📄 VietPaper <small style="font-weight:normal;opacity:.7">– dịch bài báo sang tiếng Việt</small></h1>
+  <button id="themeBtn" title="Giao diện: tự động / sáng / tối">🌓</button>
   <button id="btnDocs" title="Tài liệu đã tải lên trước đây (lưu trên máy, khởi động lại app vẫn còn)">📚 Tài liệu</button>
   <input type="file" id="file" accept="application/pdf">
   <input id="range" placeholder="Trang: vd. 1, 3, 9-13 (trống = tất cả)" title="Trang cần dịch: số lẻ, dải a-b, 10- (tới hết), -5 (từ đầu). Để trống = cả bài" style="width:210px" disabled>
@@ -552,5 +561,12 @@
 <script src="/app.js"></script>
 <script src="/notes.js"></script>
 <script src="/view.js"></script>  <!-- chế độ xem, thu phóng, kính lúp, bề rộng khung chat -->  <!-- ghi chú: dùng chung biến của app.js (doc, MARKS, $…), phải nạp sau -->
+<script>
+(() => { const b=document.getElementById('themeBtn'), m=['auto','light','dark'], ic={auto:'🌓',light:'☀️',dark:'🌙'};
+  const set=t=>{ if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t;
+    b.textContent=ic[t]; b.title='Giao diện: '+{auto:'tự động',light:'sáng',dark:'tối'}[t]; try{localStorage.theme=t}catch(e){} };
+  let t='auto'; try{t=localStorage.theme||'auto'}catch(e){} set(t);
+  b.onclick=()=>set(t=m[(m.indexOf(t)+1)%3]); })();
+</script>
 </body>
 </html>
