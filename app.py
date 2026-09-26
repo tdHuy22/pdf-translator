@@ -539,7 +539,8 @@ def should_translate(text: str) -> bool:
         return False
     if sum(c.isalpha() for c in t) / len(t) < 0.5:  # công thức, bảng số liệu
         return False
-    if re.fullmatch(r"(arXiv:\S+.*|https?://\S+|\S+@\S+)", t):
+    # kể cả chú thích cuối trang chỉ có link, số chú thích dính liền (OCR): "1https://github.com/…"
+    if re.fullmatch(r"(\d{1,2}|[*†‡§¶])?\s*(arXiv:\S+.*|https?://\S+|\S+@\S+)", t):
         return False
     return True
 
@@ -767,6 +768,8 @@ def row_text(row: list[dict], formulas: list[dict]) -> tuple[str, list[tuple], l
     size, base, _ = max(weight, key=lambda k: (not k[2], k[0] >= 0.8 * top, weight[k]))
 
     def is_math(c, s) -> bool:
+        if s["font"] == OCR_FONT:  # chữ OCR: không có công thức vector để chép lại → giữ nguyên là chữ
+            return False
         return bool(MATH_FONT.search(s["font"])) or c["c"] == "�" or unicodedata.category(c["c"]) in ("Co", "Cn") \
             or (s["size"] < 0.8 * size and abs(c["origin"][1] - base) > 0.12 * size)  # chỉ số trên/dưới
 
@@ -1006,13 +1009,20 @@ def prose_words(lines: list[dict], kind: str) -> tuple[int, int]:
             if bold:
                 continue
             core = word.lstrip("(\"“‘'`").rstrip(".,;)\"”’'`?!")
-            if italic or font_kind(s["font"], s["flags"]) != kind or "_" in core:
+            if s["font"] == OCR_FONT and core.lower() in PSEUDO_KEYWORDS:  # chữ OCR không có font/nghiêng để phân biệt
+                code += 1
+            elif italic or font_kind(s["font"], s["flags"]) != kind or "_" in core:
                 code += 1
             elif re.fullmatch(r"[^\W\d_]+(['’-][^\W\d_]+)*", core):
                 prose += 1
             elif kind == "mono":  # khối code: send_message(to=user, #read_emails_0) — "_" vẽ bằng nét, không phải ký tự
                 code += 1
     return prose, code
+
+
+# Từ khoá mã giả: dòng chữ OCR chỉ có các từ này và tên biến ("13: end for", "while i < n do") là code, không dịch
+PSEUDO_KEYWORDS = {"end", "for", "foreach", "endfor", "if", "then", "else", "elif", "endif", "while", "endwhile", "do",
+                   "return", "repeat", "until", "function", "procedure", "break", "continue", "each", "to", "in", "not"}
 
 
 def algorithm_lines(lines: list[dict]) -> list[list[dict]]:
@@ -1067,6 +1077,13 @@ def extract_blocks(page: pymupdf.Page, textpage=None) -> list[dict]:
     Dòng không thuộc vùng nào, hoặc không nạp được model layout → gom theo khối của PyMuPDF như cũ."""
     lines = text_lines(page, textpage)
     regions = detect_layout(page) if lines else None
+    keep_hyphen = hyphen_rule(page.parent)
+    return [b for b in (text_block(ls, g and g["label"], keep_hyphen) for ls, g in layout_groups(lines, regions)) if b]
+
+
+def layout_groups(lines: list[dict], regions: list[dict] | None) -> list[tuple[list[dict], dict | None]]:
+    """Dòng → nhóm dòng của từng đoạn, kèm vùng layout chứa nó (None: dòng không thuộc vùng nào, gom theo khối).
+    Bỏ dòng trong hình/công thức/số trang…; bảng tách từng ô, thuật toán/code từng dòng, vùng khác thành đoạn."""
     groups, rest = [], lines
     if regions:
         per_region: list[list] = [[] for _ in regions]
@@ -1077,12 +1094,10 @@ def extract_blocks(page: pymupdf.Page, textpage=None) -> list[dict]:
                 rest.append(ln)
             elif regions[i]["label"] == "table" or regions[i]["label"] not in LAYOUT_SKIP:
                 per_region[i].append(ln)
-        groups = [(p, g["label"]) for g, ls in zip(regions, per_region) if ls
+        groups = [(p, g) for g, ls in zip(regions, per_region) if ls
                   for p in (table_cells(ls) if g["label"] == "table" else
                             algorithm_lines(ls) if g["label"] == "algorithm" else region_paragraphs(ls))]
-    groups += [(ls, None) for ls in by_block(rest)]
-    keep_hyphen = hyphen_rule(page.parent)
-    return [b for b in (text_block(ls, label, keep_hyphen) for ls, label in groups) if b]
+    return groups + [(ls, None) for ls in by_block(rest)]
 
 
 def page_has_text(page: pymupdf.Page) -> bool:
@@ -1194,91 +1209,188 @@ def detect_layout(page: pymupdf.Page, threshold: float = 0.5) -> list[dict] | No
 
 # ================================================================ OCR
 _rapid: dict = {}
+# Cỡ chữ ≈ 0,83 × chiều cao khung dòng (khung xoay theo dòng) của RapidOCR — đo 26/09/2026 trên 1.843 dòng của
+# 7 bài bench scan 200 dpi: sai số trung bình 6,5%; khung thẳng trục thì cao thêm theo độ nghiêng trang, 9,7%
+RAPID_EM = 0.83
+OCR_FONT = "(OCR)"  # tên font của span giả dựng từ dòng OCR (ocr_lines)
+BOX_EM = 0.8  # engine khác (Tesseract, OCR.space, endpoint riêng) chỉ trả khung thẳng trục
 
 
-def ocr_block(bbox, text: str, heights: list[float], **extra) -> dict | None:
+def ocr_block(bbox, text: str, sizes: list[float], **extra) -> dict | None:
     text = re.sub(r"\s+", " ", text).strip()
     if not should_translate(text):
         return None
-    hs = sorted(heights) or [12.5]
-    return {"bbox": tuple(bbox), "text": text, "size": hs[len(hs) // 2] * 0.8, "color": 0,
+    ss = sorted(sizes) or [10.0]
+    return {"bbox": tuple(bbox), "text": text, "size": ss[len(ss) // 2], "color": 0,
             "bold": False, "italic": False, "kind": "serif", "ocr": True, **extra}
 
 
-def lines_to_blocks(page: pymupdf.Page, lines: list[tuple], regions: list[dict] | None = None) -> list[dict]:
-    """Gom dòng OCR (x0, y0, x1, y1, text) theo vùng PP-DocLayout: đúng đoạn, đúng thứ tự đọc,
-    bỏ qua hình/bảng/công thức. Dòng không thuộc vùng nào (hoặc không có model layout) → merge_lines."""
-    if regions is None:
-        regions = detect_layout(page)
-    if not regions:
-        return merge_lines(lines)
-    groups: list[list] = [[] for _ in regions]
-    rest = []
+def line_size(ln: tuple) -> float:
+    """Cỡ chữ của dòng OCR (x0, y0, x1, y1, chữ[, cỡ chữ]) theo chiều cao khung."""
+    return ln[5] if len(ln) > 5 else BOX_EM * (ln[3] - ln[1])
+
+
+_TIMES = pymupdf.Font("tiro")
+
+
+def width_size(text: str, width: float, size: float) -> float:
+    """Cỡ chữ ước từ cả bề rộng dòng (vị trí ký tự đầu → cuối) so với bề rộng của đúng chuỗi đó in bằng Times,
+    lẫn chiều cao khung (`size`). Khung dò chữ gần như có chiều cao tối thiểu (chữ 6pt → khung 11pt, 10pt → 12,5pt)
+    nên chữ nhỏ bị ước to; bề rộng thì tỉ lệ đúng với cỡ chữ. Đo 26/09/2026 trên 2.265 dòng của 10 bài scan:
+    chỉ chiều cao sai trung bình 7,6% (chữ ≤ 7pt: 36%), chỉ bề rộng 4,5%, trộn 0,3/0,7 theo trung bình nhân 4,2% (19%)."""
+    em = _TIMES.text_length(text, 1)
+    if em <= 0 or width <= 0:
+        return size
+    return size ** 0.3 * (0.984 * width / em) ** 0.7
+
+
+def ocr_lines(lines: list[tuple]) -> list[dict]:
+    """Dòng OCR (x0, y0, x1, y1, chữ[, cỡ chữ[, vị trí ký tự]]) → dòng giống text_lines (một span, ký tự giả) để dùng
+    chung bộ gom đoạn với PDF có lớp chữ: ô bảng, dòng thuật toán, cột cạnh nhau, khoảng cách dòng, độ rộng chữ.
+    Có vị trí từng ký tự (RapidOCR) thì đặt đúng chỗ và bó khung dòng sát chữ; không có thì chia đều bề rộng khung,
+    dấu cách hẹp bằng ~0,55 chữ cái như Times. Chân chữ ≈ tâm khung + 0,28 cỡ chữ (đo trên bench scan).
+    Số khối: dòng gom theo khoảng cách (như khối PyMuPDF), cho dòng nằm ngoài mọi vùng layout."""
+    out = []
     for ln in lines:
-        best, i = max((_inter(ln, g["bbox"]), i) for i, g in enumerate(regions))
-        (groups[i] if best >= 0.5 * _area(ln) else rest).append(ln)
-    blocks = []
-    for g, ls in zip(regions, groups):
-        if g["label"] == "table":  # bảng: dịch từng ô chữ như trước (số liệu bị should_translate bỏ qua)
-            rest += ls
-        if not ls or g["label"] in LAYOUT_SKIP:
+        x0, y0, x1, y1, text = ln[0], ln[1], ln[2], ln[3], ln[4].strip()
+        if not text:
             continue
-        ls.sort(key=lambda l: (round(l[1] / 4), l[0]))
-        bbox = (min(l[0] for l in ls), min(l[1] for l in ls), max(l[2] for l in ls), max(l[3] for l in ls))
-        b = ocr_block(bbox, join_lines([l[4] for l in ls]), [l[3] - l[1] for l in ls],
-                      label=g["label"], region=g["bbox"])
-        if b:
-            blocks.append(b)
-    return blocks + merge_lines(rest)
-
-
-def merge_lines(lines: list[tuple]) -> list[dict]:
-    """Gộp các dòng OCR (x0, y0, x1, y1, text) thành đoạn văn theo vị trí."""
-    lines = sorted(lines, key=lambda l: (round(l[1]), l[0]))
-    paras: list[dict] = []
-    for x0, y0, x1, y1, text in lines:
+        # OCR hay bỏ dấu cách sau số mục: "2Background", "2.3.2Backward pass"
+        text = re.sub(r"^((?:\d+\.)*\d+\.?)(?=[A-Z][a-z])", r"\1 ", text)
+        size = line_size(ln)
+        base = (y0 + y1) / 2 + 0.28 * size
+        pos = ln[6] if len(ln) > 6 and ln[6] and len(ln[6]) == len(re.sub(r"\s", "", text)) else None
+        if pos:
+            x0, x1 = pos[0][0], pos[-1][1]
+            size = width_size(text, x1 - x0, size)
+            base = (y0 + y1) / 2 + 0.28 * size
+            it = iter(pos)
+            boxes = [None if c.isspace() else list(next(it)) for c in text]
+            # Vị trí CTC có khe giữa các chữ cái của cùng một từ; để nguyên thì row_text tưởng là dấu cách
+            # ("Pr ovided") → chữ nối liền chữ, chỉ dấu cách mới là khoảng trống (từ cuối chữ trước tới đầu chữ sau)
+            for k in range(len(text) - 1):
+                if boxes[k] and boxes[k + 1]:
+                    m = min(max((boxes[k][1] + boxes[k + 1][0]) / 2, boxes[k][0]), boxes[k + 1][1])
+                    boxes[k][1] = boxes[k + 1][0] = m
+            for k, c in enumerate(text):
+                if boxes[k] is None:
+                    a = next((b[1] for b in reversed(boxes[:k]) if b), x0)
+                    boxes[k] = (a, max(a, next((b[0] for b in boxes[k + 1:] if b), a)))
+        else:
+            unit = (x1 - x0) / sum(0.55 if c == " " else 1 for c in text)
+            boxes, x = [], x0
+            for c in text:
+                w = unit * (0.55 if c == " " else 1)
+                boxes.append((x, x + w))
+                x += w
+        chars = [{"c": c, "bbox": (a, y0, b, y1), "origin": (a, base)} for c, (a, b) in zip(text, boxes)]
+        out.append({"bbox": (x0, y0, x1, y1), "block": 0, "cover": tuple(ln[:4]),
+                    "spans": [{"font": OCR_FONT, "flags": 4, "size": size, "color": 0, "origin": (x0, base), "chars": chars}]})
+    paras: list[dict] = []  # dòng liền dưới, giao nhau theo x, cao gần bằng nhau → cùng khối
+    for ln in sorted(out, key=lambda l: (l["bbox"][1], l["bbox"][0])):
+        x0, y0, x1, y1 = ln["bbox"]
         h = y1 - y0
-        target = None
         for p in reversed(paras[-6:]):
             lx0, ly0, lx1, ly1 = p["last"]
             lh = ly1 - ly0
-            overlap = min(x1, p["x1"]) - max(x0, p["x0"])
-            if (0 <= y0 - ly1 < 0.8 * lh or -0.3 * lh < y0 - ly1 < 0) and overlap > 0.3 * min(x1 - x0, p["x1"] - p["x0"]) \
+            if -0.3 * lh < y0 - ly1 < 0.8 * lh and min(x1, p["x1"]) - max(x0, p["x0"]) > 0.3 * min(x1 - x0, p["x1"] - p["x0"]) \
                     and 0.7 < h / lh < 1.4:
-                target = p
+                p.update(x0=min(p["x0"], x0), x1=max(p["x1"], x1), last=ln["bbox"])
+                ln["block"] = p["id"]
                 break
-        if target:
-            target["text"] = join_lines([target["text"], text])
-            target["x0"], target["x1"] = min(target["x0"], x0), max(target["x1"], x1)
-            target["y1"] = max(target["y1"], y1)
-            target["last"] = (x0, y0, x1, y1)
-            target["heights"].append(h)
         else:
-            paras.append({"x0": x0, "y0": y0, "x1": x1, "y1": y1, "text": text,
-                          "last": (x0, y0, x1, y1), "heights": [h]})
+            ln["block"] = len(paras)
+            paras.append({"id": len(paras), "x0": x0, "x1": x1, "last": ln["bbox"]})
+    return out
+
+
+BOLD_STROKE = 1.3  # nét dày hơn 1,3 lần nét chữ thường của trang → chữ đậm (xem stroke_weights)
+
+
+def stroke_weights(page: pymupdf.Page, lines: list[dict], zoom: float = 2.0) -> list[float | None]:
+    """Độ dày nét chữ của từng dòng OCR so với dòng chữ thường của trang (trung vị dòng ≥ 10 ký tự), để đoán chữ đậm.
+    Độ dày nét ≈ số điểm mực / số lần chuyển trắng→mực theo chiều ngang, chia cỡ chữ. Đo 26/09/2026 trên 10 bài
+    bench scan: dòng đậm 1,57 lần (phân vị 10%: 1,27), dòng thường 0,99 (phân vị 90%: 1,15)."""
+    import numpy as np
+    pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), colorspace=pymupdf.csGRAY, alpha=False)
+    a = np.frombuffer(pix.samples, np.uint8).reshape(pix.height, pix.stride)[:, :pix.width]
+    ink = (float(np.percentile(a, 1)) + float(np.median(a))) / 2  # giữa màu mực và màu giấy
+    out = []
+    for ln in lines:
+        x0, y0, x1, y1 = (round(v * zoom) for v in ln["bbox"])
+        b = a[max(y0, 0):y1, max(x0, 0):x1] < ink
+        edges = int(np.count_nonzero(b[:, 1:] & ~b[:, :-1]))
+        out.append(float(np.count_nonzero(b)) / edges / zoom / ln["spans"][0]["size"] if edges >= 4 else None)
+    base = sorted(w for w, ln in zip(out, lines) if w and len(ln["spans"][0]["chars"]) >= 10)
+    if len(base) < 3:
+        return [None] * len(lines)
+    med = base[len(base) // 2]
+    return [w / med if w else None for w in out]
+
+
+def lines_to_blocks(page: pymupdf.Page, lines: list[tuple], regions: list[dict] | None = None) -> list[dict]:
+    """Gom dòng OCR theo vùng PP-DocLayout bằng đúng bộ gom đoạn của PDF có lớp chữ (layout_groups, text_block):
+    đúng đoạn, đúng thứ tự đọc, bỏ hình/công thức, bảng dịch từng ô, thuật toán từng dòng. Không có model layout
+    thì gom theo khoảng cách dòng. Chữ đậm đoán theo độ dày nét của cả khối (một dòng lẻ dễ nhầm)."""
+    if regions is None:
+        regions = detect_layout(page)
+    lines = ocr_lines(lines)
+    for ln, w in zip(lines, stroke_weights(page, lines)):
+        ln["weight"] = w
+    groups = layout_groups(lines, regions)
+    per_region = collections.Counter(id(g) for _, g in groups if g)
     blocks = []
-    for p in paras:
-        b = ocr_block((p["x0"], p["y0"], p["x1"], p["y1"]), p["text"], p["heights"])
-        if b:
-            blocks.append(b)
+    for ls, g in groups:
+        b = text_block(ls, g and g["label"])
+        if not b:
+            continue
+        b["ocr"] = True
+        # ô bảng không đoán: chữ nhỏ 5–6pt nét tương đối dày hơn, đo trên bench nhầm 1/3 số ô thành chữ đậm
+        ws = sorted(l["weight"] for l in ls if l.get("weight"))
+        b["bold"] = bool(ws and ws[len(ws) // 2] > BOLD_STROKE and g is not None and g["label"] != "table")
+        # khung phủ nền khi xoá chữ gốc: khung dò chữ (rộng hơn chữ một chút), khung khối thì sát chữ để gom/đặt chữ
+        c = [l.get("cover", l["bbox"]) for l in ls]
+        b["cover"] = (min(r[0] for r in c), min(r[1] for r in c), max(r[2] for r in c), max(r[3] for r in c))
+        if g and per_region[id(g)] == 1 and g["label"] not in ("table", "algorithm"):
+            b["region"] = g["bbox"]  # vùng chỉ có một đoạn: VLM đọc lại cả vùng (khung vùng không cắt sát chữ)
+        blocks.append(b)
     return blocks
 
 
 def rapid_lines(page: pymupdf.Page, lang: str, zoom: float = 2.0) -> list[tuple]:
-    """RapidOCR (PP-OCR chạy ONNX) → các dòng (x0, y0, x1, y1, text). Lần đầu tự tải model (~15MB)."""
+    """RapidOCR (PP-OCR chạy ONNX) → các dòng (x0, y0, x1, y1, chữ, cỡ chữ, [(x0, x1) từng ký tự khác dấu cách] hoặc
+    None). Lần đầu tự tải model (~15MB). Không chạy bộ phân loại chữ ngược (use_cls): trang tài liệu không có dòng
+    lộn ngược, đoán nhầm thì hỏng dòng."""
+    import numpy as np
     from rapidocr import LangRec, RapidOCR
     code = {"eng": "EN", "en": "EN", "chi": "CH", "ch": "CH", "vie": "LATIN", "vi": "LATIN"}.get(lang.lower(), lang.upper())
     if _rapid.get(code) is None:
-        _rapid[code] = RapidOCR(params={"Rec.lang_type": getattr(LangRec, code, LangRec.EN)})
+        _rapid[code] = RapidOCR(params={"Rec.lang_type": getattr(LangRec, code, LangRec.EN), "Global.use_cls": False})
     # 144dpi: đo trên 3 trang, 150dpi lại đọc sai nhiều dòng (93% so với 99%); zoom lớn hơn dễ bỏ sót dòng
-    pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom))
-    res = _rapid[code](pix.tobytes("png"))
+    pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
+    # Đưa thẳng mảng ảnh (BGR như OpenCV), không mã hoá PNG rồi để RapidOCR giải mã lại: bớt ~0,3 giây/trang.
+    # Vị trí từng ký tự (suy từ bước CTC, gần như không tốn thêm thời gian): khung dòng của bước dò chữ rộng hơn chữ
+    # thật 0,1–0,6 em nên hai ô bảng cạnh nhau tưởng là một. text_score=0 rồi tự lọc: bộ lọc của RapidOCR và dòng
+    # không có vị trí ký tự làm lệch chỉ số của word_results → ghép theo nội dung
+    img = np.frombuffer(pix.samples, np.uint8).reshape(pix.height, pix.stride)[:, :pix.width * pix.n]
+    img = np.ascontiguousarray(img.reshape(pix.height, pix.width, pix.n)[:, :, ::-1]) if pix.n == 3 else \
+        img.reshape(pix.height, pix.width)
+    res = _rapid[code](img, return_word_box=True, return_single_char_box=True, text_score=0)
+    words, j = list(res.word_results or ()), 0
     lines = []
     for box, text, score in zip(res.boxes if res.boxes is not None else [], res.txts or [], res.scores or []):
+        chars = None
+        if j < len(words) and "".join(w[0] for w in words[j]) == re.sub(r"\s", "", text):
+            chars = [(min(p[0] for p in w[2]) / zoom, max(p[0] for p in w[2]) / zoom) for w in words[j]]
+            j += 1
+            if any(b[0] < a[0] for a, b in zip(chars, chars[1:])):
+                chars = None
         if float(score) < 0.5:
             continue
-        xs, ys = [pt[0] for pt in box], [pt[1] for pt in box]
-        lines.append((min(xs) / zoom, min(ys) / zoom, max(xs) / zoom, max(ys) / zoom, text))
+        (ax, ay), (bx, by), (cx, cy), (dx, dy) = [(float(x) / zoom, float(y) / zoom) for x, y in box]
+        h = (math.hypot(dx - ax, dy - ay) + math.hypot(cx - bx, cy - by)) / 2  # chiều cao khung xoay theo dòng
+        lines.append((min(ax, bx, cx, dx), min(ay, by, cy, dy), max(ax, bx, cx, dx), max(ay, by, cy, dy), text,
+                      RAPID_EM * h, chars))
     return lines
 
 
@@ -1430,7 +1542,7 @@ def fullpage_blocks(page: pymupdf.Page, content: str, lang: str, truncated: bool
             continue
         text = dedupe_sentences(strip_repeats(latex_to_text(re.sub(r"-\n", "", clean_vlm_lines(text)))))
         inside = sorted((l for l in lines if _inter(l, rect) >= 0.5 * _area(l)), key=lambda l: (round(l[1] / 4), l[0]))
-        b = ocr_block(rect, text, [l[3] - l[1] for l in inside], label=label)
+        b = ocr_block(rect, text, [line_size(l) for l in inside], label=label)
         if not b:
             continue
         ref, got = words(" ".join(l[4] for l in inside)), words(b["text"])
@@ -1490,7 +1602,7 @@ async def ocr_vlm(page: pymupdf.Page, cfg: Config) -> list[dict]:
     sem = asyncio.Semaphore(max(1, cfg.ocr_vlm_concurrency))
 
     async def read(client: httpx.AsyncClient, b: dict):
-        rect = pymupdf.Rect(b["bbox"])
+        rect = pymupdf.Rect(b.get("cover", b["bbox"]))  # khung dò chữ: khung khối sát chữ có khi cắt mất nét đầu/cuối dòng
         if "region" in b:
             rect |= pymupdf.Rect(b["region"])
         rect += (-3, -3, 3, 3)
@@ -1897,7 +2009,7 @@ def render_translation(page: pymupdf.Page, blocks: list[dict], translations: dic
             continue
         rect = pymupdf.Rect(b["bbox"])
         if b.get("ocr"):  # chữ nằm trong ảnh → phủ màu nền lên
-            fills[i] = background_color(page, rect + (-1, -1, 1, 1))
+            fills[i] = background_color(page, pymupdf.Rect(b.get("cover", rect)) + (-1, -1, 1, 1))
         else:  # không tô trắng: khối nằm trên nền màu (hộp code, hàng bảng tô xám) sẽ thành ô trắng, chữ trắng biến mất
             page.add_redact_annot(redact_rect(rect, lines), fill=False)
     # Xoá cả nét vẽ nằm gọn trong khung chữ (vạch phân số, gạch trên căn thức): công thức sẽ được vẽ lại chỗ mới
@@ -1906,7 +2018,8 @@ def render_translation(page: pymupdf.Page, blocks: list[dict], translations: dic
     # Phủ nền cho mọi khối OCR trước rồi mới viết chữ: khung các dòng OCR sát/chồng nhau,
     # phủ xen kẽ thì nền của dòng sau sẽ che mất chữ vừa viết của dòng trước
     for i, fill in fills.items():
-        page.draw_rect(pymupdf.Rect(blocks[i]["bbox"]) + (-1, -1, 1, 1), color=None, fill=fill, overlay=True)
+        page.draw_rect(pymupdf.Rect(blocks[i].get("cover", blocks[i]["bbox"])) + (-1, -1, 1, 1), color=None, fill=fill,
+                       overlay=True)
     # Độ rộng chữ gốc theo loại font (trung bình theo số ký tự) → chọn font tiếng Việt rộng tương đương
     width = collections.defaultdict(lambda: [0.0, 0])
     for i, b in enumerate(blocks):
@@ -3167,7 +3280,7 @@ async def block_context(d: dict, pages: list[int], cfg: Config, flat: list[dict]
     async def neighbour(m: int) -> list[dict]:
         if not 0 <= m < d["out"].page_count:
             return []
-        got = await page_blocks(d, m, cfg, allow_ocr=False)
+        got = await page_blocks(d, m, cfg, allow_ocr=cheap_ocr(cfg))
         return [b for b in got[0] if b.get("label") in BODY] if got else []
 
     ctx: dict[int, dict] = {}
@@ -3187,12 +3300,19 @@ async def block_context(d: dict, pages: list[int], cfg: Config, flat: list[dict]
 MAX_SPAN = 3   # tự động thì gộp tối đa 3 trang một lượt gọi
 
 
+def cheap_ocr(cfg: Config) -> bool:
+    """OCR đủ rẻ để làm trước cho trang bên cạnh (gộp trang, lấy câu nối sang trang sau): RapidOCR chạy local ~3
+    giây/trang, so với 20–40 giây một lượt gọi LLM; Vision LLM/OCR.space/endpoint riêng thì không."""
+    return cfg.ocr_engine == "rapidocr"
+
+
 async def grow_group(d: dict, n: int, cfg: Config, span: int, system: str, got: dict, force: bool = False) -> list[int]:
     """Các trang gộp thêm vào cùng lượt gọi với trang n. Một nhóm = vừa đúng MỘT lượt gọi LLM: trang sau chỉ được
     thêm khi cả nhóm vẫn nằm trong ngữ cảnh và trong MAX_ITEMS đoạn. Ngữ cảnh lớn mà trang ngắn thì gộp được 2–3
     trang: câu ngắt qua trang được dịch liền mạch, đoạn trùng chữ (đầu bảng lặp ở trang sau) chỉ dịch một lần,
     và prompt hệ thống chỉ phải đọc một lần cho cả nhóm.
-    Trang phải OCR thì dừng nhóm ở đó: OCR mất 30–70 giây/trang, gộp vào là người dùng chờ cả nhóm mới thấy gì.
+    Trang phải OCR bằng Vision LLM/dịch vụ ngoài thì dừng nhóm ở đó: 30–70 giây/trang, gộp vào là người dùng chờ cả
+    nhóm mới thấy gì; RapidOCR chỉ ~3 giây/trang (M2) nên vẫn gộp (xem cheap_ocr).
     `force` (dịch lại một dải trang): trang đã dịch cũng được gộp vào. Trang có yêu cầu dịch riêng khác trang n thì
     dừng nhóm ở đó (xem instruction_text)."""
     limit = min(span, cfg.page_span or MAX_SPAN)
@@ -3202,7 +3322,8 @@ async def grow_group(d: dict, n: int, cfg: Config, span: int, system: str, got: 
     texts = {b["text"] for b in got[n][0]}                      # đoạn trùng chữ chỉ tính một lần (như khi dịch)
     size = sum(item_tokens(b) for b in got[n][0])
     for m in range(n + 1, min(n + limit, d["out"].page_count)):
-        if (m in d["done"] and not force) or (nxt := await page_blocks(d, m, cfg, allow_ocr=False, fresh=True)) is None:
+        if (m in d["done"] and not force) or \
+                (nxt := await page_blocks(d, m, cfg, allow_ocr=cheap_ocr(cfg), fresh=True)) is None:
             break
         # một lượt gọi chỉ có MỘT system prompt: trang có yêu cầu dịch riêng (đã nhớ) khác trang đầu nhóm thì để
         # lượt sau, không thì yêu cầu của nó bị bỏ qua

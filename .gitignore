@@ -8,6 +8,7 @@ models/
 .DS_Store
 *.log
 *.pyc
-# Large sample PDFs (keep the tiny text sample)
-samples/*
-!samples/sample_text.pdf
+# Bản scan của 10 bài bench (tạo lại bằng scripts/make_scans.py, ~75 MB)
+samples/
+# cache dòng OCR thô của scripts/bench_ocr_pipeline.py (~26 MB, tự tạo lại)
+bench/ocr/cache/

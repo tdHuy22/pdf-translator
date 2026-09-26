@@ -4,14 +4,14 @@ chạy được ngay trên máy có server (không cần cài cả app).
 Ý tưởng: lấy PDF có lớp chữ làm ĐÁP ÁN, tạo bản "scan xấu" từ chính nó, cho model đọc lại rồi so từ.
 
   # 1) tạo dữ liệu thử: bản scan 72 dpi, JPEG nén mạnh
-  python3 scripts/bench_ocr.py --make-scan samples/attention.pdf --out /tmp/scan72.pdf --dpi 72 --jpeg 40
+  python3 scripts/bench_ocr.py --make-scan data/attention-is-all-you-need.pdf --out /tmp/scan72.pdf --dpi 72 --jpeg 40
 
   # 2) đo một model (mặc định: đọc cả trang một lần)
-  python3 scripts/bench_ocr.py --scan /tmp/scan72.pdf --truth samples/attention.pdf --pages 3-6 \
+  python3 scripts/bench_ocr.py --scan /tmp/scan72.pdf --truth data/attention-is-all-you-need.pdf --pages 3-6 \
       --base-url http://127.0.0.1:8080/v1 --model 9b-vision
 
   # 3) đo kiểu app dùng thật: cắt từng vùng chữ rồi đọc từng vùng
-  python3 scripts/bench_ocr.py --scan /tmp/scan72.pdf --truth samples/attention.pdf --pages 3-6 \
+  python3 scripts/bench_ocr.py --scan /tmp/scan72.pdf --truth data/attention-is-all-you-need.pdf --pages 3-6 \
       --base-url http://127.0.0.1:8080/v1 --model PaddlePaddle/PaddleOCR-VL-1.6-GGUF:GGUF --mode region
 
 Kết quả in ra: độ khớp từ (%), số giây mỗi trang/vùng, số lần model bị cắt vì chạm max_tokens.

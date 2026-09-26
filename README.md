@@ -10,7 +10,7 @@ Chạy nền và bật/tắt bằng `restart.sh` (log ghi vào `app.log`):
 ./restart.sh            # khởi động lại (sau khi sửa code thì chạy lệnh này)
 ./restart.sh start|stop|status|logs
 ```
-Thử nhanh với file mẫu trong `samples/` (`sample_text.pdf`, `sample_scan.pdf` là bản scan).
+Thử nhanh: 10 bài bench trong `data/` (PDF có lớp chữ) và bản scan của chúng trong `samples/<tên>-scan.pdf` (không nằm trong git, tạo bằng `.venv/bin/python scripts/make_scans.py`: 200 dpi, ảnh xám, lệch trang ±0,6°, nhiễu hạt, JPEG q=60, seed cố định).
 
 Mã nguồn: `app.py` (toàn bộ phía server), `store.py` (lưu tài liệu xuống đĩa), `notes.py` (ghi chú), `chats.py` (phiên trò chuyện), `static/index.html` (bố cục + CSS), `static/app.js` (giao diện), `static/render.js` (Markdown + công thức + code cho câu trả lời LLM và ghi chú), `static/notes.js` (ghi chú), `static/view.js` (hai khung xem, thu phóng, chế độ xem, kính lúp, bề rộng khung chat). File tĩnh được trả kèm `Cache-Control: no-cache` nên sửa xong tải lại trang là thấy ngay.
 
@@ -32,7 +32,7 @@ Server khác (vLLM, llama.cpp, LM Studio, proxy riêng…) thì lưu thành **nh
 ## OCR (PDF scan)
 | Engine | Loại | Ghi chú |
 |---|---|---|
-| **RapidOCR** (mặc định) | local, miễn phí | Model PP-OCR của PaddleOCR chạy bằng ONNX, tự tải ~15MB lần đầu. Ngôn ngữ: `eng`, `ch`, `latin`, `japan`, `korean`… Dòng chữ được gom thành đoạn theo vùng của **PP-DocLayoutV3** (ONNX, tự tải ~130MB vào `models/layout/` lần đầu): đúng đoạn, đúng thứ tự đọc, bỏ qua hình/công thức/chữ dọc bên lề, bảng thì dịch từng ô |
+| **RapidOCR** (mặc định) | local, miễn phí | Model PP-OCR của PaddleOCR chạy bằng ONNX, tự tải ~15MB lần đầu. Ngôn ngữ: `eng`, `ch`, `latin`, `japan`, `korean`… Dòng chữ được gom thành đoạn theo vùng của **PP-DocLayoutV3** (ONNX, tự tải ~130MB vào `models/layout/` lần đầu) bằng **đúng bộ gom đoạn của PDF có lớp chữ**: đúng đoạn, đúng thứ tự đọc, bỏ qua hình/công thức/chữ dọc bên lề, bảng dịch từng ô, thuật toán từng dòng (xem *Bench pipeline OCR*) |
 | Tesseract | local, miễn phí | `brew install tesseract tesseract-lang`, ngôn ngữ `eng`, `eng+vie`… Dòng chữ cũng được gom theo PP-DocLayout |
 | OCR.space | API miễn phí | Đăng ký key miễn phí tại ocr.space (key demo `helloworld` bị giới hạn) |
 | Vision LLM | local hoặc API | Mọi API OpenAI-compatible có vision: Ollama, llama.cpp, LM Studio, OpenRouter… PP-DocLayout + RapidOCR định vị đoạn, VLM đọc lại chữ từng vùng → tốt với scan xấu. Prompt tự chọn theo tên model: `PaddleOCR-VL` → `OCR:`, `glm-ocr` → `Text Recognition:`. Riêng **Unlimited-OCR** gửi cả trang (150 dpi) một lần; PP-DocLayout làm "trọng tài": bỏ dòng không khớp vùng nào, vùng bị sót thì đọc bù bằng RapidOCR |
@@ -63,7 +63,7 @@ Chế độ OCR: **Tự động** (OCR trang không có lớp chữ, **hoặc l�
 **Chọn cách gửi:**
 - `num_ctx` (chỉ Ollama): bậc nhỏ nhất đủ cho trang nặng nhất của tài liệu, không vượt ngữ cảnh tối đa của model; cố định cho cả tài liệu vì đổi giữa chừng là Ollama nạp lại model (~8 giây). Đặt tay bằng ô `num_ctx` nếu muốn. Thêm ngữ cảnh gần như không tốn RAM với qwen3.5 (4096 → 16384: 5,06 → 5,38 GB).
 - Lô = **cả trang nếu vừa 85% ngữ cảnh**, tối đa 40 đoạn; nếu không thì cắt theo token ước lượng (chữ gốc + bản dịch dự kiến + khung JSON mỗi đoạn). Đoạn trùng chữ (nhãn hàng lặp lại trong bảng) chỉ dịch một lần — trang 155 ô của DataSentinel còn 16 câu.
-- **Gộp 2–3 trang vào một lượt gọi khi ngữ cảnh còn trống** (`Gộp trang mỗi lượt gọi`, mặc định *Tự động*, tối đa 3): một nhóm = đúng **một** lượt gọi, trang sau chỉ được thêm khi cả nhóm vẫn nằm trong 85% ngữ cảnh **và** trong 40 đoạn. Đo trên `bert.pdf`: ngữ cảnh 4096 → 1 trang/lượt, 8192 → 2 trang, 16384 → 3 trang. Được gì: câu bị ngắt sang trang sau được dịch liền mạch trong cùng một lượt (không phải gửi kèm câu "prev"/"next" nữa), đầu bảng lặp lại ở trang sau chỉ dịch một lần, và prompt hệ thống chỉ đọc một lần cho cả nhóm. Trang phải OCR thì dừng nhóm ở đó (OCR 30–70 giây/trang, gộp vào là phải chờ cả nhóm mới thấy kết quả).
+- **Gộp 2–3 trang vào một lượt gọi khi ngữ cảnh còn trống** (`Gộp trang mỗi lượt gọi`, mặc định *Tự động*, tối đa 3): một nhóm = đúng **một** lượt gọi, trang sau chỉ được thêm khi cả nhóm vẫn nằm trong 85% ngữ cảnh **và** trong 40 đoạn. Đo trên `bert.pdf`: ngữ cảnh 4096 → 1 trang/lượt, 8192 → 2 trang, 16384 → 3 trang. Được gì: câu bị ngắt sang trang sau được dịch liền mạch trong cùng một lượt (không phải gửi kèm câu "prev"/"next" nữa), đầu bảng lặp lại ở trang sau chỉ dịch một lần, và prompt hệ thống chỉ đọc một lần cho cả nhóm. Trang phải OCR bằng Vision LLM/OCR.space/endpoint riêng thì dừng nhóm ở đó (30–70 giây/trang, gộp vào là phải chờ cả nhóm mới thấy kết quả); RapidOCR chỉ ~3 giây/trang nên trang scan vẫn được gộp như trang có lớp chữ.
 - **Trần token đầu ra** cho mỗi lượt (`num_predict` / `max_tokens`) ≈ 1,6 × độ dài dự kiến: model nhỏ không lặp vô hạn, API tính tiền không sinh tràn.
 - **Không gửi quá số slot** của server: llama.cpp/Ollama một slot thì request thứ hai chỉ nằm xếp hàng.
 - **Phần đầu prompt giữ nguyên cho cả tài liệu** (prompt hệ thống + tên bài + bảng thuật ngữ) để server tái dùng KV cache.
@@ -312,11 +312,42 @@ Thay hàm gọi LLM bằng hàm giả rồi chạy thật cả luồng trên `da
 ## Bench OCR (tìm lệnh chạy tốt nhất cho model OCR)
 `scripts/bench_ocr.py` chỉ cần `pymupdf`, chạy được ngay trên máy có server: tạo bản scan xấu từ PDF có lớp chữ, cho model đọc lại, chấm bằng độ khớp từ.
 ```
-python3 scripts/bench_ocr.py --make-scan samples/attention.pdf --out scan72.pdf --dpi 72 --jpeg 40
-python3 scripts/bench_ocr.py --scan scan72.pdf --truth samples/attention.pdf --pages 3-6 \
+python3 scripts/bench_ocr.py --make-scan data/attention-is-all-you-need.pdf --out scan72.pdf --dpi 72 --jpeg 40
+python3 scripts/bench_ocr.py --scan scan72.pdf --truth data/attention-is-all-you-need.pdf --pages 3-6 \
     --base-url http://127.0.0.1:8080/v1 --model 9b-vision --mode page --csv ocr.csv
 ```
 `--mode region` cắt từng vùng chữ như app vẫn làm. Hướng dẫn đầy đủ cho người (hoặc AI) chỉnh server: [docs/ocr-tuf.md](docs/ocr-tuf.md) — hợp đồng gọi OCR, prompt từng model, tham số llama-server nên quét, mốc đã đo.
+
+## Bench pipeline OCR (PDF scan, RapidOCR + PP-DocLayout)
+`scripts/bench_ocr_pipeline.py` chạy đúng hàm OCR của app trên bản scan của 10 bài bench (`samples/*-scan.pdf`, tạo bằng `scripts/make_scans.py`) và so với **đáp án** là các đoạn app trích từ lớp chữ của bản gốc (`data/*.pdf`): từ đọc đúng, đoạn khớp 1–1 hay bị gộp/chia/sót/thừa, cỡ chữ, nhãn layout, chữ đậm. Không gọi LLM; dòng OCR thô được cache theo mã nguồn hàm (`bench/ocr/cache/`) nên sửa phần gom đoạn chạy lại mất vài giây.
+```
+.venv/bin/python scripts/make_scans.py                 # một lần: 10 bản scan vào samples/
+.venv/bin/python scripts/bench_ocr_pipeline.py -v      # lần đầu ~10 phút (OCR 139 trang), sau đó vài giây
+git show HEAD:app.py > app_before.py && .venv/bin/python scripts/bench_ocr_pipeline.py --app app_before.py --tag before
+```
+Kết quả 26/09/2026 (139 trang, 2.725 đoạn đáp án; M2, `--jobs 1` cho cột tốc độ):
+
+| | Trước | Sau |
+|---|---:|---:|
+| Từ OCR đúng: phủ / chính xác | 98,45 / 96,13% | 99,30 / 96,88% |
+| Đoạn khớp 1–1 với bản gốc | 76,7% | **97,3%** |
+| Đoạn bị gộp / chia / sót / thừa | 535 / 16 / 85 / 39 | 33 / 31 / 9 / 69 |
+| Cỡ chữ lệch trung bình | 16,9% | **5,9%** |
+| Nhãn layout đúng | 78,5% | 99,8% |
+| Khối sai đậm/thường | 329 | 210 |
+| Giây OCR/trang | 4,86 | 4,70 |
+
+Đã sửa:
+- **Gom đoạn dùng chung code với PDF có lớp chữ** (`layout_groups`, `text_block`): dòng OCR được dựng thành "dòng giả" (span, vị trí từng ký tự) rồi đi qua `table_cells`, `algorithm_lines`, `region_paragraphs` như chữ thật. Trước đây OCR có bộ gom riêng: dòng ngoài vùng layout và cả bảng được gộp theo khoảng cách → 496/535 lỗi gộp là ô bảng dính nhiều hàng/cột (`MRPC 3.5k`); thuật toán thành một đoạn văn xuôi.
+- **Vị trí từng ký tự** (`return_single_char_box` của RapidOCR, suy từ bước CTC, gần như không tốn thêm): khung dòng của bước dò chữ rộng hơn chữ thật 0,1–0,6 em nên hai ô tiêu đề bảng cách nhau một khoảng nhỏ bị coi là một (`Average CNN`). Khung khối sát chữ để gom/đặt chữ; khung dò chữ (rộng hơn) vẫn dùng để phủ nền khi xoá chữ gốc (`cover`) và để VLM cắt vùng đọc lại.
+- **Cỡ chữ**: chiều cao lấy theo khung **xoay** của dòng thay vì khung thẳng trục (trang scan nghiêng thì khung thẳng trục cao thêm: sai số từng dòng 9,7 → 6,5%); khung dò chữ gần như có chiều cao tối thiểu (chữ 6pt → khung 11pt) nên trộn thêm cỡ ước từ **bề rộng** dòng so với bề rộng của chính chuỗi chữ đó in bằng Times (trung bình nhân, trọng số 0,7): 4,2% mỗi dòng, chữ ≤ 7pt 36 → 19%.
+- **Chữ đậm** theo độ dày nét (số điểm mực / số lần chuyển trắng→mực, so với dòng thường của trang), quyết định theo cả khối; bỏ qua ô bảng (chữ 5–6pt nét tương đối dày, nhầm 1/3). Tiêu đề mục in đậm lại (88% tiêu đề mục trong đáp án là chữ đậm). 27 "nhầm" còn lại là của đáp án: font `NimbusRomNo9L-Medi` của Attention là chữ đậm mà bộ trích lớp chữ không nhận ra.
+- Chữ OCR không bao giờ thành `{vN}` (không có công thức vector để chép lại); thêm dấu cách sau số mục OCR hay bỏ (`2Background`); dòng mã giả chỉ có từ khoá (`13: end for`) không dịch; chú thích cuối trang chỉ có link (`1https://…`) không dịch; không chạy bộ phân loại chữ ngược (`use_cls`); đưa thẳng mảng ảnh cho RapidOCR thay vì PNG (−0,3 s/trang).
+- **Gộp trang scan vào một lượt gọi LLM** khi OCR bằng RapidOCR (~3–5 s/trang, so với 20–40 s một lượt gọi): trước đây trang phải OCR luôn dừng nhóm vì mốc 30–70 s/trang của Vision LLM.
+
+Đã thử, không giữ: model nhận dạng `PP-OCRv6 tiny` nhanh gấp 3,5 lần (0,85 s/trang) nhưng đọc sai thêm ~1% từ; chạy tiny rồi đọc lại dòng kém tin cậy bằng model small chỉ gỡ được một nửa; CoreML (6,4 s/trang), đổi số luồng/lô nhận dạng đều không nhanh hơn. ~90% thời gian OCR là bước nhận dạng, chỉ 2,7% khối lượng đó rơi vào vùng hình/công thức bị bỏ nên không đáng tách riêng. Phần "thừa" còn lại phần lớn là chữ trong ảnh của bản gốc (bảng ảnh Mixtral tr.6, ảnh chụp màn hình Mistral tr.7) — OCR đọc được là đúng; nhiều lỗi "chia" là do đáp án gộp cả hàng tiêu đề bảng thành một dòng PDF.
+
+Giới hạn còn lại: bảng thuật ngữ tự lập và tên bài lấy từ lớp chữ, nên với PDF scan hiện vẫn rỗng.
 
 ## Cách hoạt động
 1. PyMuPDF trích từng ký tự kèm toạ độ, cỡ chữ, màu, đậm/nghiêng; PP-DocLayoutV3 gom dòng thành đoạn theo vùng bố cục và bỏ qua công thức đứng riêng, chữ trong hình, số trang. Số dòng ở lề của bản nộp hội nghị (ICLR/ACL: `000`, `001`… cả hai lề; NeurIPS: số lề trái khớp từng dòng) được layout nhận là chữ bên lề: không lẫn vào đoạn, không bị dịch, giữ nguyên chỗ trên bản dịch (kiểm 26/09/2026 trên bản thử chèn số dòng vào Attention/BERT/RoFormer — bản trên arXiv thường đã bỏ số dòng; smoke test mục 16). Chữ đậm/nghiêng giữa đoạn (tiêu đề đầu đoạn, tên tác giả, tên hội nghị trong tài liệu tham khảo) được bọc `<b>`/`<i>` và giữ trong bản dịch. Bảng dịch từng ô (ô nhiều dòng được nối lại thành câu, ô toàn số giữ nguyên); vùng thuật toán/khối code dịch **từng dòng** (giữ số dòng, thụt lề, chú thích `// …` căn phải; dòng ↪ và phần xuống dòng của một bước được nối vào dòng trên) và chỉ dịch dòng có văn xuôi (tiêu đề, `Parameters: …`, chú thích, câu trong prompt) — dòng toàn từ khoá/tên biến/JSON giữ nguyên vì dịch ra là hỏng code (`action` → "hành động"); khối có nhiều công thức hơn từ (nhãn toán trong sơ đồ) không dịch. Gạch nối cuối dòng: bỏ gạch ngắt từ (trans-lation), giữ gạch của từ ghép (LLaMA3-8B, pre-trained) dựa vào cách chính bài báo viết từ đó ở chỗ khác. Bấm "Dịch lại" mà không đổi cấu hình OCR thì dùng lại kết quả trích/OCR cũ, chỉ dịch lại.

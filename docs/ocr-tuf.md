@@ -32,7 +32,7 @@ Cấu hình phía Mac khi dùng TUF: `ocr_engine="vlm"`, `ocr_vlm_base_url="http
 
 ```bash
 pip install --user pymupdf          # script chỉ cần pymupdf (dùng urllib, không cần httpx)
-# chép scripts/bench_ocr.py, samples/attention.pdf từ repo VietPaper sang, rồi:
+# chép scripts/bench_ocr.py, data/attention-is-all-you-need.pdf từ repo VietPaper sang, rồi:
 python3 bench_ocr.py --make-scan attention.pdf --out scan72.pdf --dpi 72 --jpeg 40
 python3 bench_ocr.py --make-scan attention.pdf --out scan60.pdf --dpi 60 --jpeg 35
 ```
@@ -89,7 +89,7 @@ Model nên thử: `9b-vision`, `4b-vision`, `2b-vision` (đã có sẵn trong mo
 | TUF `9b-vision` (ngl=8) | 100% | 93,0% | ~28 giây |
 | TUF `2b-vision` (ngl=99) | 99,3% | 85,7% | 50–70 giây (vẫn "suy nghĩ" dù đã tắt) |
 
-Đo thêm trên chính TUF ngày 20/09/2026 bằng `bench_ocr.py` (scan 72 dpi tạo từ `samples/attention.pdf`, preset `9b-vision` đang có, ngl=8):
+Đo thêm trên chính TUF ngày 20/09/2026 bằng `bench_ocr.py` (scan 72 dpi tạo từ `data/attention-is-all-you-need.pdf`, preset `9b-vision` đang có, ngl=8):
 
 | Cách đọc | Độ khớp | Thời gian |
 |---|---:|---|
