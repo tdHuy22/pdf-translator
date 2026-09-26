@@ -40,7 +40,7 @@
      Cao = màn hình trừ thanh trên cùng (--paneh, view.js đặt); trang rộng hơn khung thì cuộn ngang trong khung. */
   .cols { position:relative; display:flex; height:var(--paneh, calc(100vh - 48px)); }
   .vpane { position:relative; overflow:auto; overscroll-behavior:contain; min-width:0; flex:1 1 0; }
-  #paneO { flex:0 0 calc((100% - 6px) * var(--split, .5)); }
+  #paneO { flex:0 0 calc((100% - var(--splitw, 6px)) * var(--split, .5)); }
   .cols.only-original #paneO, .cols.only-translated #paneT { flex:1 1 0; }
   .cols.only-original #paneT, .cols.only-translated #paneO, .cols.only-original #split, .cols.only-translated #split { display:none; }
   #split { flex:0 0 6px; cursor:col-resize; background:var(--line); }
@@ -76,7 +76,14 @@
   .num { position:absolute; top:6px; left:6px; z-index:3; font-size:11px; background:rgba(0,0,0,.55); color:#fff; padding:1px 6px; border-radius:4px; }
   .empty { position:absolute; inset:0; padding:80px 20px; text-align:center; color:var(--muted); pointer-events:none; }
   .cols:has(.page) .empty { display:none; }
-  @media (max-width:700px){ .cols { flex-direction:column; } #paneO { flex:1 1 0; } #split { display:none; } }
+  /* Màn dọc hẹp (điện thoại cầm dọc): "Cả hai" xếp bản gốc trên, bản dịch dưới; thanh chia kéo lên xuống */
+  @media (orientation:portrait) and (max-width:900px) {
+    .cols { flex-direction:column; }
+    #split { cursor:row-resize; }
+    body.splitting { cursor:row-resize; }
+  }
+  /* Ẩn thanh trên cùng (nút ⌃ ở thanh xem): trang chiếm trọn chiều cao, nhất là điện thoại cầm ngang */
+  body.nohdr header { display:none; }
 
   /* ---- Lớp chữ trong suốt đè lên ảnh trang: bôi đen chọn chữ, tô vàng theo đoạn ---- */
   .layer { position:absolute; top:0; left:0; z-index:1; transform-origin:0 0; }
@@ -312,7 +319,13 @@
     .tools button { font-size:12px; padding:4px 8px; }
     #selbar button { padding:8px 10px; font-size:13px; white-space:nowrap; }
     .msgbar button { padding:4px 8px; font-size:12px; }
-    #chatGrip, #chatWide, #split { display:none; }
+    #chatGrip, #chatWide { display:none; }
+    /* thanh chia: to hơn cho ngón tay, có vạch nắm ở giữa */
+    #split { flex-basis:14px; touch-action:none; position:relative; background:var(--panel); border:solid var(--line); border-width:0 1px; }
+    #split::after { content:""; position:absolute; left:50%; top:50%; width:4px; height:36px; margin:-18px 0 0 -2px; border-radius:2px; background:var(--muted); opacity:.5; }
+    .cols { --splitw:14px; }
+    @media (orientation:portrait) and (max-width:900px) {
+      #split { border-width:1px 0; } #split::after { width:36px; height:4px; margin:-2px 0 0 -18px; } }
   }
   @media (max-width:700px) {
     /* Thanh trên cùng: tên + trạng thái một dòng, các nút một hàng cuộn ngang (không xuống 3–4 dòng chiếm nửa màn hình) */
@@ -591,6 +604,8 @@
 </aside>
 
 <div id="viewbar">
+  <button id="hdrToggle" title="Ẩn / hiện thanh trên cùng (nhường chỗ cho trang)">⌃</button>
+  <span class="sep"></span>
   <button data-mode="original" title="Chỉ xem bản gốc (trang to gấp đôi)">Gốc</button>
   <button data-mode="both" title="Xem song song hai bản">Cả hai</button>
   <button data-mode="translated" title="Chỉ xem bản dịch (trang to gấp đôi)">Dịch</button>

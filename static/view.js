@@ -15,8 +15,7 @@ const save = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const pane = { original: $("paneO"), translated: $("paneT") };
 const ZKEY = { original: "view_zoom_o", translated: "view_zoom_t" };
-// "both" | "original" | "translated"; điện thoại dọc chia đôi thì mỗi bản chỉ còn nửa màn hình → mặc định chỉ bản dịch
-let mode = load("view_mode", matchMedia("(max-width:700px)").matches ? "translated" : "both");
+let mode = load("view_mode", "both");        // "both" | "original" | "translated" (điện thoại cầm dọc: xếp trên–dưới)
 const zoom = {};
 for (const k of KINDS) zoom[k] = clamp(parseFloat(load(ZKEY[k], load("view_zoom", "1"))) || 1, Z_MIN, Z_MAX);
 let split = clamp(parseFloat(load("view_split", "0.5")) || 0.5, 0.2, 0.8);
@@ -97,6 +96,7 @@ $("viewbar").addEventListener("click", e => {
   else if (b.id === "zoomIn") setZoom(active, zoom[active] * 1.2);
   else if (b.id === "zoomOut") setZoom(active, zoom[active] / 1.2);
   else if (b.id === "zoomFit" || b.id === "zoomPct") setZoom(active, 1);
+  else if (b.id === "hdrToggle") setHdr(!document.body.classList.contains("nohdr"), true);
   else if (b.id === "linkScroll") { link = !link; save("view_link", link ? "1" : "0"); layout(); follow(active); }
 });
 for (const k of KINDS) {
@@ -122,6 +122,20 @@ window.addEventListener("resize", () => {
   const top = document.querySelector("header").offsetHeight + (document.querySelector(".bar")?.offsetHeight || 0);
   $("cols").style.setProperty("--paneh", Math.max(200, innerHeight - top) + "px");
 });
+
+// ---------------- Ẩn thanh trên cùng (nút ⌃): nhớ riêng cho màn ngang / dọc. Điện thoại cầm ngang (thấp < 500px)
+// mặc định ẩn — thanh trên cùng ăn gần nửa chiều cao.
+const landscape = () => matchMedia("(orientation:landscape)").matches;
+const hdrKey = () => landscape() ? "hdr_hide_l" : "hdr_hide_p";
+function setHdr(hide, keep) {
+  if (keep) save(hdrKey(), hide ? "1" : "0");
+  document.body.classList.toggle("nohdr", hide);   // MutationObserver trên body.class ở dưới sẽ relayout
+  $("hdrToggle").textContent = hide ? "⌄" : "⌃";
+  $("hdrToggle").title = hide ? "Hiện thanh trên cùng" : "Ẩn thanh trên cùng (nhường chỗ cho trang)";
+}
+const hdrAuto = () => setHdr(load(hdrKey(), landscape() && innerHeight < 500 ? "1" : "0") === "1");
+hdrAuto();
+matchMedia("(orientation:landscape)").addEventListener("change", hdrAuto);
 
 // ---------------- Chụm hai ngón (màn cảm ứng): thu phóng khung dưới tay, quanh điểm giữa hai ngón
 // Trong lúc chụm chỉ phóng tạm cả cột trang bằng transform (GPU, không dựng lại gì); thả tay mới đặt zoom thật —
@@ -174,10 +188,13 @@ function follow(k) {
 // ---------------- Thanh chia bề rộng hai khung
 $("split").addEventListener("pointerdown", e => {
   e.preventDefault();
-  const grip = e.currentTarget, cr = $("cols").getBoundingClientRect();
+  const grip = e.currentTarget, cr = $("cols").getBoundingClientRect(), gw = grip.offsetWidth, gh = grip.offsetHeight;
+  const vert = getComputedStyle($("cols")).flexDirection === "column";   // cầm dọc: bản gốc trên, bản dịch dưới
   grip.setPointerCapture(e.pointerId);
   document.body.classList.add("splitting");
-  const move = ev => relayout(() => { split = clamp((ev.clientX - cr.left) / (cr.width - 6), 0.2, 0.8); });
+  const move = ev => relayout(() => {
+    split = clamp(vert ? (ev.clientY - cr.top) / (cr.height - gh) : (ev.clientX - cr.left) / (cr.width - gw), 0.2, 0.8);
+  });
   const up = () => {
     grip.removeEventListener("pointermove", move);
     document.body.classList.remove("splitting");
