@@ -20,6 +20,9 @@ Chạy:
                                                           # chấm các hàng LLM giữ lại, in cách dịch, thời gian
   .venv/bin/python scripts/bench_glossary.py --base-url https://openrouter.ai/api/v1 \
       --llm nvidia/nemotron-3-ultra-550b-a55b:free        # model cloud; key lấy từ data/keys.json
+  .venv/bin/python scripts/bench_glossary.py --scan       # bản scan samples/<bài>-scan.pdf: chữ lấy từ khối OCR
+                                                          # (app.scan_text) — so với chạy thường = bản PDF gốc
+--scan dùng cache OCR của scripts/bench_ocr_pipeline.py (bench/ocr/cache/): chạy bench đó trước thì chỉ mất vài giây.
 Chế độ --llm gọi LLM thật (~30–60 giây/bài với 4b), temperature 0; cách dịch từng hàng lưu trong file kết quả.
 """
 import asyncio
@@ -103,6 +106,21 @@ def check(name: str, spec: dict, doc) -> None:
             print(f"  {name}: '{it}' chỉ xuất hiện {n} lần")
 
 
+def scan_text(app, name: str, doc) -> tuple:
+    """(PaperText, tên bài) của bản scan qua đúng đường của app (scan_text/title_of: OCR tới hết References), dòng OCR
+    và vùng layout lấy từ cache của bench_ocr_pipeline."""
+    import bench_ocr_pipeline as P
+    orig = scan_text.orig = getattr(scan_text, "orig", None) or (app.rapid_lines, app.detect_layout)
+    cache = P.Cache(name, True)
+    app.rapid_lines, app.detect_layout = cache.wrap(orig[0]), cache.wrap(orig[1])
+    app.store.save_state = lambda d: None   # tài liệu giả, không lưu
+    d = {"src": doc.name, "blocks": {}, "marks": {}}
+    text = asyncio.run(app.scan_text(d, app.Config(), doc))
+    title = asyncio.run(app.title_of(d, doc))
+    cache.save()
+    return text, title
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("-v", "--verbose", action="store_true")
@@ -115,6 +133,7 @@ def main():
     ap.add_argument("--base-url", default="http://100.64.0.1:8080/v1", help="server LLM (mặc định router TUF)")
     ap.add_argument("--cands", type=int, default=0, help="--llm: số ứng viên gửi LLM (mặc định theo app)")
     ap.add_argument("--rows", type=int, default=0, help="--llm: số hàng tối đa của bảng (mặc định theo app)")
+    ap.add_argument("--scan", action="store_true", help="đo trên bản scan (samples/<bài>-scan.pdf), chữ từ khối OCR")
     ap.add_argument("papers", nargs="*")
     args = ap.parse_args()
     gold = {k: v for k, v in json.loads(GOLD.read_text()).items()
@@ -155,23 +174,27 @@ def main():
     results = {}
     for name, spec in gold.items():
         doc = pymupdf.open(ROOT / "data" / f"{name}.pdf")
+        text = title = None
+        if args.scan:
+            doc = pymupdf.open(ROOT / "samples" / f"{name}-scan.pdf")
+            text, title = scan_text(app, name, doc)
         t0 = time.perf_counter()
         rows = None
         if cfg:
-            made = asyncio.run(app.build_glossary(cfg, doc))
+            made = asyncio.run(app.build_glossary(cfg, doc, text, title))
             if made is None:
                 print(f"{name}: gọi LLM lỗi")
                 continue
             rows = made["rows"]
             terms = [r["term"] for r in rows]
         else:
-            terms = app.glossary_terms(doc)
+            terms = app.glossary_terms(doc, text=text) if text else app.glossary_terms(doc)
         r = score(terms, spec["gold"], spec["ok"])
         r.update(split=spec["split"], ms=round(1000 * (time.perf_counter() - t0)), terms=terms)
         if rows is not None:
             r["rows"] = rows
         elif hasattr(app, "term_candidates"):
-            cands = [c["term"] for c in app.term_candidates(doc, 80)]
+            cands = [c["term"] for c in app.term_candidates(doc, 80, text)]
             r80 = score(cands, spec["gold"], spec["ok"])
             r.update(r80=r80["recall"], missed80=r80["missed"])
         results[name] = r
@@ -201,8 +224,9 @@ def main():
         if r["dup"]:
             print("  trùng  :", ", ".join(r["dup"]))
 
-    kind = "glossary-llm-" + re.sub(r"[^\w.-]+", "_", args.llm) if args.llm else "glossary"
-    prev = sorted(p for p in OUT.glob(f"{kind}-*.json") if args.llm or "-llm-" not in p.name)
+    kind = ("glossary-llm-" + re.sub(r"[^\w.-]+", "_", args.llm) if args.llm else "glossary") + ("-scan" if args.scan else "")
+    prev = sorted(p for p in OUT.glob(f"{kind}-*.json") if (args.llm or "-llm-" not in p.name)
+                  and (args.scan or "-scan-" not in p.name))
     if prev:
         old = json.loads(prev[-1].read_text()).get("summary", {})
         for split, s in summary.items():

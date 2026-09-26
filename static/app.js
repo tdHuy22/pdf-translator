@@ -1143,9 +1143,17 @@ async function loadGlossary(force, quiet = false) {
   if (!doc) return;
   $("gcount").textContent = "đang hỏi LLM để lập bảng…";
   if (!quiet) $("gloss").classList.add("open");
+  // tài liệu có trang scan: server OCR trước các trang đó (vài giây/trang) rồi mới hỏi LLM → hiện tiến độ
+  const id = doc.id, poll = setInterval(async () => {
+    const p = await fetch(`/api/${id}/glossary/progress`).then(r => r.json()).catch(() => ({}));
+    if (p.total && doc?.id === id)
+      $("gcount").textContent = `đang OCR trang scan ${p.done + 1}/${p.total} để lập bảng thuật ngữ…`;
+    else if (doc?.id === id && $("gcount").textContent.startsWith("đang OCR"))
+      $("gcount").textContent = "đang hỏi LLM để lập bảng…";
+  }, 1500);
   try {
     const r = await fetch(`/api/${doc.id}/glossary?force=${!!force}`, {
-      method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(cfg()) });
+      method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(cfg()) }).finally(() => clearInterval(poll));
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
     const j = await r.json();
     GLOSS = j.terms || []; EXTRA = j.extra || [];

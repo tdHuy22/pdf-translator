@@ -12,6 +12,7 @@ import contextvars
 import hashlib
 import heapq
 import io
+import itertools
 import json
 import math
 import os
@@ -166,6 +167,17 @@ GLOSSARY_SCHEMA = {"type": "object", "required": ["items"], "properties": {"item
     "type": "object", "required": ["id", "kind", "vi"], "properties": {
         "id": {"type": "integer"}, "kind": {"type": "string", "enum": ["name", "term", "other"]},
         "vi": {"type": "string"}}}}}}
+
+# Lượt bù khi model lập bảng xếp một ứng viên là "term" mà bỏ trống "vi" (gloss_rows sẽ loại hàng đó), hoặc xếp một
+# cụm chữ thường là tên riêng "name" (giữ nguyên tiếng Anh): 4b trên FlashAttention-2 bản scan (26/09/2026) xếp
+# "high bandwidth memory", "causal mask", "backward pass"… là tên riêng → bảng toàn giữ nguyên. Hỏi lại riêng cách dịch
+GLOSSARY_FILL_PROMPT = """You translate technical terms of ONE research paper into Vietnamese, as used in "ctx" (a sentence of
+the paper). Translate descriptive terms ("relative position" → "vị trí tương đối"); write the English term unchanged ONLY
+where Vietnamese papers keep it in English (attention, fine-tuning, token, softmax). No explanations, no brackets.
+Input {"paper": "<title>", "items": [{"id": n, "term": "<term>", "ctx": "..."}]}
+Output ONLY {"items": [{"id": n, "vi": "<Vietnamese wording>"}]} with every id."""
+GLOSSARY_FILL_SCHEMA = {"type": "object", "required": ["items"], "properties": {"items": {"type": "array", "items": {
+    "type": "object", "required": ["id", "vi"], "properties": {"id": {"type": "integer"}, "vi": {"type": "string"}}}}}}
 
 SHORTEN_PROMPT = """You shorten Vietnamese translations of academic text so they fit a fixed layout box.
 Rewrite each "text" more concisely in Vietnamese, keeping the full meaning, math, citations and numbers, within "max_len" characters.
@@ -2579,13 +2591,29 @@ _BOLD = re.compile(r"Bold|CMBX|\.B$|-Bd\b|Semibold|Heavy|Black", re.I)
 _HEAD = re.compile(r"(?:\d+(?:\.\d+)*|[A-H](?:\.\d+)*)\.?\s+[A-Z]")
 
 
-def paper_text(doc: pymupdf.Document) -> PaperText:
+# Nhãn layout không phải chữ văn xuôi: tiêu đề bài, đầu/chân trang, số trang, công thức, hình, bảng, chữ dọc bên lề
+_NOT_PROSE = {"doc_title", "header", "footer", "number", "display_formula", "formula_number", "inline_formula", "image",
+              "chart", "table", "algorithm", "seal", "vertical_text", "aside_text", "header_image", "footer_image"}
+
+
+def paper_text(doc: pymupdf.Document, ocr: dict[int, list[dict]] | None = None) -> PaperText:
     """Chữ để rút thuật ngữ. Bỏ tên tác giả/đơn vị trước Abstract ở trang đầu, chữ xoay dọc bên lề, chữ trong
     hình/bảng (khối < 6 từ hoặc toàn số) và chữ in bằng font công thức (thay bằng "|" để ký hiệu không dính vào cụm
-    từ). Phụ lục nằm sau tài liệu tham khảo vẫn tính là thân bài."""
+    từ). Phụ lục nằm sau tài liệu tham khảo vẫn tính là thân bài.
+    `ocr` {trang: khối}: trang scan đọc từ khối OCR thay vì lớp chữ (rỗng hoặc rác; [] = trang scan chưa OCR, bỏ qua) —
+    tiêu đề mục = nhãn paragraph_title, tài liệu tham khảo = nhãn reference_content, bỏ khối nhãn _NOT_PROSE; OCR
+    không cho biết chữ nghiêng. Đo 26/09/2026: đọc khối (extract_blocks) thay lớp chữ trên 6 bài có đáp án cho cùng
+    chất lượng ứng viên (top 40 đúng/phủ 82,1/77,0% so với 82,5/75,9%), nên trộn hai nguồn trong một bài là ổn."""
+    ocr = ocr or {}
     keep = hyphen_rule(doc)
-    blocks = []
+    blocks = []    # (trang, chữ, dòng đầu, in đậm cả khối, cụm in nghiêng, kiểu chữ, nhãn layout nếu là khối OCR)
     for pno, page in enumerate(doc):
+        if pno in ocr:
+            for b in ocr[pno]:
+                if b.get("label") not in _NOT_PROSE and (text := " ".join(PLACEHOLDER.sub(" | ", untag(b["text"])).split())):
+                    style = (b.get("size", 0.0), bool(b.get("bold")))
+                    blocks.append((pno, text, text, style[1], set(), style, b.get("label") or "text"))
+            continue
         for b in page.get_text("dict", flags=pymupdf.TEXT_MEDIABOX_CLIP)["blocks"]:
             lines, spans, italic = [], [], set()
             for ln in b.get("lines", []):
@@ -2604,24 +2632,39 @@ def paper_text(doc: pymupdf.Document) -> PaperText:
                         run = []
             if text := join_lines(lines, keep).strip():
                 bold = bool(spans) and all(sp["flags"] & 16 or _BOLD.search(sp["font"]) for sp in spans)
-                blocks.append((pno, text, lines[0].strip(), bold, italic, block_style(b)))
-    start = next((i for i, (p, t, *_) in enumerate(blocks) if p == 0 and re.match(r"abstract\b", t, re.I)), 0)
+                blocks.append((pno, text, lines[0].strip(), bold, italic, block_style(b), ""))
+    start = next((i for i, (p, t, _, _, _, _, lab) in enumerate(blocks)
+                  if p == 0 and (lab == "abstract" or re.match(r"abstract\b", t, re.I))), 0)
     body, refs, heads, italic, pages, scan = [], [], [], set(), collections.defaultdict(list), RefsScan()
-    for pno, text, first, bold, it, style in blocks[start:]:
-        if k := scan.step(first, style):
+    for pno, text, first, bold, it, style, lab in blocks[start:]:
+        if (k := scan.step(first, style)) or lab == "reference_content":
             if k == "head":
                 text = text[len(first):].strip()
             refs.append(text)
             continue
         toks = _TOK.findall(text)
-        if len(toks) >= 6 and sum(t[0].isdigit() for t in toks) < 0.3 * len(toks) \
+        short = 1 <= len(toks) <= 12 and len(text) < 100 and "|" not in text
+        if lab == "paragraph_title":
+            if short:
+                heads.append(text)
+        elif len(toks) >= 6 and sum(t[0].isdigit() for t in toks) < 0.3 * len(toks) \
                 and sum(t.lower() in _STOP for t in toks) >= 0.1 * len(toks):
             body.append(text)
             pages[pno].append(text)
             italic |= it
-        elif 1 <= len(toks) <= 12 and len(text) < 100 and "|" not in text and (bold or _HEAD.match(text)):
+        elif short and not lab and (bold or _HEAD.match(text)):
             heads.append(text)
     return PaperText("\n".join(body), "\n".join(refs), heads, italic, ["\n".join(v) for v in pages.values()])
+
+
+def blocks_title(blocks: list[dict]) -> str:
+    """Tên bài từ khối OCR của trang đầu: khối nhãn doc_title, không có thì khối chữ to nhất trước Abstract."""
+    cand = [b for b in blocks if b.get("label") == "doc_title"]
+    if not cand:
+        head = list(itertools.takewhile(lambda b: not re.match(r"abstract\b", untag(b["text"]), re.I), blocks))
+        cand = [max(head or blocks, key=lambda b: b.get("size", 0.0), default=None)] if blocks else []
+    title = " ".join(" ".join(untag(b["text"]).split()) for b in cand if b)
+    return "" if _STAMP.fullmatch(title) else title[:200]
 
 
 def _long_form(sf: str, before: str) -> str | None:
@@ -2822,12 +2865,13 @@ def _term_features(c: dict, text: "PaperText", title: str, surface: collections.
 
 
 
-def glossary_terms(doc: pymupdf.Document, limit: int = 40) -> list[str]:
+def glossary_terms(doc: pymupdf.Document, limit: int = 40, text: PaperText | None = None) -> list[str]:
     """Thuật ngữ đáng thống nhất cả bài (các ứng viên đứng đầu của term_candidates)."""
-    return [c["term"] for c in term_candidates(doc, limit)]
+    return [c["term"] for c in term_candidates(doc, limit, text)]
 
 
-async def build_glossary(cfg: Config, doc: pymupdf.Document) -> dict | None:
+async def build_glossary(cfg: Config, doc: pymupdf.Document, text: PaperText | None = None,
+                         title: str | None = None) -> dict | None:
     """Một lượt gọi LLM cho cả tài liệu → bảng thuật ngữ để người dùng xem lại trên giao diện:
     {"rows": [{"term": gốc, "vi": cách dịch, "keep": giữ nguyên tiếng Anh, "use": có đưa vào prompt không}],
      "extra": [{"term", "n", "hidden"}]} — extra là ứng viên LLM không chọn (hiện thành "gợi ý khác" để người dùng tự
@@ -2836,8 +2880,9 @@ async def build_glossary(cfg: Config, doc: pymupdf.Document) -> dict | None:
     ngữ / không phải thuật ngữ) và dịch thuật ngữ đúng nghĩa trong bài; gloss_rows kiểm lại bằng luật.
     Loại là một trường riêng chứ không phải "trả chữ gốc = giữ": model nhỏ (4b) lẫn "giữ ứng viên" với "giữ nguyên
     tiếng Anh" và chép lại nguyên văn mọi ứng viên (đo 21/09/2026).
-    Trả None khi gọi LLM lỗi (vẫn dịch bình thường, và trang sau sẽ thử lập lại)."""
-    text = await asyncio.to_thread(paper_text, doc)
+    Trả None khi gọi LLM lỗi (vẫn dịch bình thường, và trang sau sẽ thử lập lại).
+    `text`/`title`: chữ và tên bài đã có (bản scan: từ khối OCR, xem scan_text); không có thì đọc lớp chữ của `doc`."""
+    text = text or await asyncio.to_thread(paper_text, doc)
     rows = GLOSSARY_ROWS
     pool = await asyncio.to_thread(term_candidates, doc, GLOSSARY_FIXED + GLOSSARY_SUGGEST, text)
     ut = user_terms()
@@ -2851,7 +2896,7 @@ async def build_glossary(cfg: Config, doc: pymupdf.Document) -> dict | None:
     items = [{"id": i, "term": c["term"], "n": c["n"], **({"ctx": c["ctx"]} if c.get("ctx") else {})}
              for i, c in enumerate(cands)]
     abstract = re.sub(r"^abstract\W*", "", text[0][:700], flags=re.I).rsplit(" ", 1)[0]
-    payload = {"paper": doc_title(doc), "abstract": abstract, "items": items}
+    payload = {"paper": doc_title(doc) if title is None else title, "abstract": abstract, "items": items}
     max_out = int(2.5 * sum(est_tokens(c["term"]) for c in cands)) + 20 * len(cands) + 256
     tries = [gloss_cfg(cfg)] + ([cfg] if cfg.gloss_model or cfg.gloss_base_url else [])
     if not is_self_hosted(tries[0].base_url):
@@ -2868,6 +2913,21 @@ async def build_glossary(cfg: Config, doc: pymupdf.Document) -> dict | None:
                    for it in data["items"] if "kind" in it}
             if not out:   # JSON hỏng, parse_json chỉ vớt được dạng {id, text} của lượt dịch
                 raise ValueError("bảng thuật ngữ không có trường kind")
+            # "term" mà bỏ trống cách dịch, hoặc "name" mà toàn chữ thường (tên riêng/viết tắt luôn có chữ hoa hay số):
+            # model nhỏ lúc lỗi xếp cả "high bandwidth memory", "causal mask" là tên riêng → bảng toàn giữ nguyên
+            if miss := [i for i, (k, v) in out.items() if 0 <= i < len(cands) and (
+                    k == "term" and not v.strip() or k == "name" and cands[i]["term"] == cands[i]["term"].lower())]:
+                try:
+                    fill = await chat_json(c, GLOSSARY_FILL_PROMPT, {"paper": payload["paper"], "items": [
+                        {k: v for k, v in items[i].items() if k != "n"} for i in miss]}, GLOSSARY_FILL_SCHEMA,
+                        int(3 * sum(est_tokens(cands[i]["term"]) for i in miss)) + 20 * len(miss) + 128)
+                    got = {int(it["id"]): str(it.get("vi") or "") for it in fill["items"] if "id" in it}
+                    out.update({i: ("term", got[i]) for i in miss if got.get(i, "").strip()})
+                    print(f"[glossary] {c.model}: {len(miss)} thuật ngữ thiếu cách dịch/xếp nhầm là tên riêng → hỏi "
+                          f"lại, được "
+                          f"{sum(bool(got.get(i, '').strip()) for i in miss)}")
+                except (LLMError, ValueError, TypeError, json.JSONDecodeError, KeyError) as e:
+                    print(f"[glossary] {c.model}: không hỏi lại được cách dịch còn thiếu ({e!r})")
             break
         except (LLMError, ValueError, TypeError, json.JSONDecodeError, KeyError) as e:
             print(f"[glossary] {c.model}: không lập được bảng thuật ngữ ({e!r})"
@@ -3215,17 +3275,26 @@ async def page_blocks(d: dict, n: int, cfg: Config, allow_ocr: bool = True,
     fresh (sắp dịch cả trang): khối trích từ lớp chữ bằng code cũ hơn BLOCKS_VERSION thì trích lại — rẻ, không như OCR;
     trừ trang có vệt tô vàng (ghi theo số hiệu đoạn + vị trí ký tự; dấu ⛔ thì user_skips tự tìm lại theo chữ)."""
     key = (cfg.ocr_mode, cfg.ocr_engine, cfg.ocr_lang, cfg.ocr_vlm_base_url, cfg.ocr_vlm_model, cfg.ocr_custom_url)
-    cached = d["blocks"].get(n)
-    if cached and cached[0][0][:len(key)] == key and cached[0][1] == ("sess" in _layout):
-        stale = cached[0][0][len(key):] != (BLOCKS_VERSION,) and not cached[2]
-        if not (stale and fresh and not d["marks"].get(n)):
-            return cached[1], cached[2]
-    key += (BLOCKS_VERSION,)
-    src_page = pymupdf.open(d["src"])[n]  # luôn trích từ bản gốc
-    if not allow_ocr and needs_ocr(src_page, cfg):
-        return None
-    blocks, ocr = await get_blocks(src_page, cfg)
-    d["blocks"][n] = ((key, "sess" in _layout), blocks, ocr)
+
+    def reuse():
+        cached = d["blocks"].get(n)
+        if cached and cached[0][0][:len(key)] == key and cached[0][1] == ("sess" in _layout):
+            stale = cached[0][0][len(key):] != (BLOCKS_VERSION,) and not cached[2]
+            if not (stale and fresh and not d["marks"].get(n)):
+                return cached[1], cached[2]
+
+    if got := reuse():
+        return got
+    # một trang chỉ trích một lần: lập bảng thuật ngữ của bản scan OCR trước mọi trang (scan_text) trong lúc trang
+    # đang dịch cũng cần đúng trang đó
+    async with d.setdefault("plocks", collections.defaultdict(asyncio.Lock))[n]:
+        if got := reuse():
+            return got
+        src_page = pymupdf.open(d["src"])[n]  # luôn trích từ bản gốc
+        if not allow_ocr and needs_ocr(src_page, cfg):
+            return None
+        blocks, ocr = await get_blocks(src_page, cfg)
+        d["blocks"][n] = ((key + (BLOCKS_VERSION,), "sess" in _layout), blocks, ocr)
     if ocr:                   # OCR đắt: lưu ngay, lượt dịch sau đó có lỗi thì khởi động lại vẫn không phải OCR lại
         store.save_state(d)
     return blocks, ocr
@@ -3340,6 +3409,83 @@ async def grow_group(d: dict, n: int, cfg: Config, span: int, system: str, got: 
     return pages
 
 
+GLOSSARY_OCR_PAGES = 30   # OCR trước tối đa chừng này trang scan để rút thuật ngữ (sách dài không chờ cả cuốn)
+GLOSSARY_OCR_HEAD = 10    # ... trong đó chừng này trang đầu liền nhau, phần còn lại rải đều tới cuối tài liệu
+
+
+def scanned_pages(src: pymupdf.Document) -> list[int]:
+    """Trang không có lớp chữ hoặc lớp chữ rác — phải OCR mới có chữ."""
+    return [n for n, p in enumerate(src) if not page_has_text(p) or text_is_garbled(p)]
+
+
+def glossary_pages(scans: list[int]) -> list[int]:
+    """Trang scan sẽ OCR để rút thuật ngữ, theo thứ tự: đủ ít thì tất cả; nhiều hơn GLOSSARY_OCR_PAGES (sách, bài
+    rất dài) thì GLOSSARY_OCR_HEAD trang đầu rồi rải đều phần còn lại, để thuật ngữ đại diện cả cuốn chứ không chỉ
+    vài chương đầu."""
+    if len(scans) <= GLOSSARY_OCR_PAGES:
+        return scans
+    head, rest, k = scans[:GLOSSARY_OCR_HEAD], scans[GLOSSARY_OCR_HEAD:], GLOSSARY_OCR_PAGES - GLOSSARY_OCR_HEAD
+    return head + [rest[i * len(rest) // k] for i in range(k)]
+
+
+async def glossary_blocks(d: dict, n: int, cfg: Config, src: pymupdf.Document) -> list[dict]:
+    """Khối OCR của trang scan n để rút thuật ngữ: khối đã trích (hay OCR luôn nếu cheap_ocr — lúc dịch dùng lại).
+    Vision LLM/OCR.space/endpoint riêng (30–70 s/trang) thì đọc tạm bằng RapidOCR (~3–5 s/trang): bảng thuật ngữ chỉ
+    cần chữ, không cần chữ đẹp; khối tạm này giữ trong bộ nhớ (d["gloss_ocr"]), không thay khối dùng để dịch."""
+    if (got := await page_blocks(d, n, cfg, allow_ocr=cheap_ocr(cfg))) is not None:
+        return got[0]
+    tmp = d.setdefault("gloss_ocr", {})
+    if n not in tmp:
+        try:
+            tmp[n] = await asyncio.to_thread(ocr_rapid, src[n], cfg.ocr_lang)
+        except Exception as e:   # thiếu rapidocr/model layout: bỏ trang này, bảng lập từ các trang còn lại
+            print(f"[glossary] trang {n + 1}: không đọc tạm được bằng RapidOCR ({e!r})")
+            tmp[n] = []
+    return tmp[n]
+
+
+async def scan_text(d: dict, cfg: Config, src: pymupdf.Document) -> PaperText | None:
+    """Chữ để rút thuật ngữ khi tài liệu có trang scan (không có lớp chữ hoặc lớp chữ rác): trang scan đọc từ khối
+    OCR, trang có chữ vẫn đọc lớp chữ (paper_text(src, ocr)); None = không có trang scan, đọc lớp chữ như thường.
+    OCR trước các trang scan theo glossary_pages; gặp tiêu đề References thì OCR thêm một trang rồi dừng — đo
+    26/09/2026 trên 6 bài có đáp án (scripts/bench_glossary.py --scan): ứng viên từ bản scan tốt ngang bản PDF gốc
+    (top 40 dev: đúng/phủ 84,2/76,0% so với 83,8/73,4%; test như nhau), dừng ở References không kém OCR cả bài mà
+    bớt ~1/3 số trang. Tiến độ ghi ở d["ocr_progress"] (giao diện hiện "đang OCR 3/7 trang")."""
+    if cfg.ocr_mode == "off":
+        return None
+    scans = await asyncio.to_thread(scanned_pages, src)
+    if not scans:
+        return None
+    todo, ocr, t0 = glossary_pages(scans), {n: [] for n in scans}, time.monotonic()
+    try:
+        for i, n in enumerate(todo):
+            d["ocr_progress"] = {"done": i, "total": len(todo)}
+            ocr[n] = await glossary_blocks(d, n, cfg, src)
+            if n - 1 in ocr and any(len(b["text"]) < 40 and _REFS_HEAD.fullmatch(untag(b["text"]).strip())
+                                    for b in ocr[n - 1]):
+                break
+    finally:
+        d.pop("ocr_progress", None)
+    print(f"[glossary] {len(scans)}/{src.page_count} trang scan: rút thuật ngữ từ khối OCR của "
+          f"{sum(bool(v) for v in ocr.values())} trang ({time.monotonic() - t0:.0f}s)")
+    return await asyncio.to_thread(paper_text, src, ocr)
+
+
+def ocr_blocks(d: dict) -> dict[int, list[dict]]:
+    """Khối OCR đã có của các trang scan: khối dùng để dịch, không thì khối đọc tạm cho bảng thuật ngữ (gloss_ocr)."""
+    out = dict(d.get("gloss_ocr", {}))
+    out.update({n: got[1] for n, got in list(d["blocks"].items()) if got[2]})
+    return out
+
+
+async def title_of(d: dict, src: pymupdf.Document) -> str:
+    """Tên bài: trang đầu là trang scan đã OCR thì lấy từ khối OCR (metadata của bản scan hay là tên file/phần mềm
+    scan), không thì metadata/lớp chữ (doc_title)."""
+    got = d["blocks"].get(0)
+    blocks = got[1] if got and got[2] else d.get("gloss_ocr", {}).get(0)
+    return (blocks and blocks_title(blocks)) or await asyncio.to_thread(doc_title, src)
+
+
 async def ensure_glossary(d: dict, cfg: Config, src: pymupdf.Document) -> None:
     """Bảng thuật ngữ: một lượt gọi cho cả tài liệu, mọi trang dùng lại. Giao diện gọi trước để người dùng xem lại;
     dịch thẳng mà chưa có bảng thì lập luôn ở đây (trang nào xong trước thì lập)."""
@@ -3347,8 +3493,9 @@ async def ensure_glossary(d: dict, cfg: Config, src: pymupdf.Document) -> None:
         return
     async with d.setdefault("glock", asyncio.Lock()):
         if "gloss" not in d:
-            d["title"] = await asyncio.to_thread(doc_title, src)
-            if (made := await build_glossary(cfg, src)) is None:
+            text = await scan_text(d, cfg, src)
+            d["title"] = await title_of(d, src)
+            if (made := await build_glossary(cfg, src, text, d["title"])) is None:
                 return               # LLM lỗi: không ghi nhớ bảng rỗng, trang sau (hoặc nút "Lập lại") thử lại
             d["gloss"], d["gloss_extra"] = made["rows"], made["extra"]
             apply_gloss(d)
@@ -3404,10 +3551,40 @@ def user_skips(d: dict, n: int, blocks: list[dict], heal: bool = True) -> set[in
     return set(marks)
 
 
+_REF_ENTRY = re.compile(r"^\s*\[\d+\]|\b(?:19|20)\d\d[a-z]?\b")   # "[12] …" hay có năm: mục tài liệu tham khảo
+_REFS_END = {"paragraph_title", "figure_title", "table", "doc_title", "abstract"}
+
+
+def ocr_refs(d: dict, n: int, blocks: list[dict]) -> set[int]:
+    """Khối OCR của trang n thuộc Tài liệu tham khảo (refs_boxes đọc lớp chữ nên trang scan không có gì): nhãn layout
+    reference_content, cộng khối chữ thường trông như một mục tài liệu (có năm hoặc "[12]") nằm trong phần References
+    kéo dài từ các trang trước — layout hay gán nhãn "text" cho các mục ở trang tiếp theo. Phần References hết ở tiêu
+    đề mục/chú thích hình/bảng/Phụ lục kế tiếp. Trang trước chưa trích thì coi như không ở trong References.
+    Đo 26/09/2026 trên 10 bản scan, so với refs_boxes của bản PDF gốc: chỉ nhãn thì sót 9 mục trang 12 bài BERT; dùng
+    RefsScan như lớp chữ thì nuốt luôn Phụ lục của BERT và chú thích hình phụ lục của Attention."""
+    on, out = False, set()
+    for m in range(n + 1):
+        got = blocks if m == n else (d["blocks"].get(m) or (None, [], False))[1]
+        if m < n and not any(b.get("ocr") for b in got):
+            on = False
+            continue
+        for i, b in enumerate(got):
+            text, lab = " ".join(untag(b["text"]).split()), b.get("label")
+            if len(text) < 40 and _REFS_HEAD.fullmatch(text):
+                on = True           # tiêu đề "References" đứng riêng vẫn dịch, như với lớp chữ
+            elif lab in _REFS_END or len(text) < 80 and _APPX_HEAD.match(text):
+                on = False
+            elif m == n and (lab == "reference_content" or on and lab in ("text", None) and _REF_ENTRY.search(text)):
+                out.add(i)
+    return out
+
+
 def skipped(d: dict, n: int, blocks: list[dict], cfg: Config) -> set[int]:
     """Đoạn của trang n KHÔNG dịch (giữ nguyên chữ gốc): người dùng đánh dấu (⛔), và phần Tài liệu tham khảo."""
     out = user_skips(d, n, blocks)
-    if cfg.skip_refs and (boxes := refs_boxes(d).get(n)):
+    if cfg.skip_refs and any(b.get("ocr") for b in blocks):
+        out |= ocr_refs(d, n, blocks)
+    elif cfg.skip_refs and (boxes := refs_boxes(d).get(n)):
         for i, b in enumerate(blocks):
             c = pymupdf.Rect(b["bbox"])
             if any(r.contains((c.tl + c.br) / 2) for r in boxes):
@@ -3575,6 +3752,12 @@ async def make_glossary(doc_id: str, cfg: Config, force: bool = False):
     if "gloss" not in d:
         raise HTTPException(502, "Không gọi được LLM để lập bảng thuật ngữ")
     return {"title": d.get("title", ""), "terms": d["gloss"], "extra": d.get("gloss_extra", [])}
+
+
+@app.get("/api/{doc_id}/glossary/progress")
+def glossary_progress(doc_id: str):
+    """Tiến độ OCR trước các trang scan để lập bảng thuật ngữ ({"done", "total"}; rỗng = không OCR)."""
+    return get_doc(doc_id).get("ocr_progress") or {}
 
 
 class GlossTerm(BaseModel):
@@ -3951,13 +4134,16 @@ _NAMED = ("abstract", "introduction", "related work", "background", "method", "m
           "evaluation", "results", "discussion", "conclusion", "conclusions", "limitations", "references")
 
 
-def doc_outline(doc: pymupdf.Document, limit: int = 60) -> list[str]:
+def doc_outline(doc: pymupdf.Document, limit: int = 60, ocr: dict[int, list[dict]] | None = None) -> list[str]:
     """Mục lục thô của bài ("tr.4 · 3.2 Scaled Dot-Product Attention") để trả lời được câu hỏi về cả tài liệu
-    mà không phải nhét toàn văn vào prompt."""
+    mà không phải nhét toàn văn vào prompt. `ocr` {trang: khối}: trang scan lấy tiêu đề mục từ khối OCR (nhãn
+    paragraph_title) thay vì lớp chữ."""
     out = []
     for n, page in enumerate(doc):
-        for ln in page.get_text().splitlines():
-            t = " ".join(ln.split())
+        heads = [b["text"] for b in ocr[n] if b.get("label") == "paragraph_title"] if ocr and n in ocr \
+            else page.get_text().splitlines()
+        for ln in heads:
+            t = " ".join(untag(ln).split())
             if (_HEADING.fullmatch(t) or t.lower().rstrip(":") in _NAMED) and t not in {x.split("· ")[-1] for x in out}:
                 out.append(f"tr.{n + 1} · {t}")
                 if len(out) >= limit:
@@ -4263,7 +4449,8 @@ def page_pair(d: dict, n: int, mode: str = "pair") -> str:
     Công thức ({vN} trong chữ đã trích) được thay bằng chữ của công thức đặt trong ⟦…⟧.
     Trang chưa trích khối (chưa dịch, chưa mở lớp chữ) thì lấy thẳng chữ của trang — hỏi về trang nào cũng có nội
     dung để LLM đọc."""
-    blocks = (d["blocks"].get(n) or (None, d.get(("layer", n)) or []))[1]
+    # trang scan chưa dịch nhưng đã đọc tạm cho bảng thuật ngữ (glossary_blocks) → dùng chữ đó
+    blocks = (d["blocks"].get(n) or (None, d.get(("layer", n)) or d.get("gloss_ocr", {}).get(n) or []))[1]
     if not blocks and d.get("flatex", {}).get(n):   # trang đã có LaTeX công thức: trích khối để thay đúng chỗ
         blocks = page_layer_blocks(d, n)
     if not blocks:
@@ -4685,11 +4872,14 @@ async def doc_chat(doc_id: str, ask: ChatAsk):
     user_msg = msgs[-1]
 
     see = see_cfg(cfg0)
-    if "outline" not in d:
-        src = pymupdf.open(d["src"])
-        d["outline"] = await asyncio.to_thread(doc_outline, src)
-        # Tên bài vốn chỉ được đặt khi lập bảng thuật ngữ; tắt bảng tự lập thì phần trò chuyện mất luôn tên bài
-        d.setdefault("title", await asyncio.to_thread(doc_title, src))
+    ocr = ocr_blocks(d)
+    if "outline" not in d or d.get("outline_ocr") != len(ocr):   # trang scan OCR thêm → mục lục đủ hơn
+        d["outline"] = await asyncio.to_thread(doc_outline, pymupdf.open(d["src"]), 60, ocr)
+        d["outline_ocr"] = len(ocr)
+    if not d.get("title"):
+        # Tên bài vốn chỉ được đặt khi lập bảng thuật ngữ; tắt bảng tự lập thì phần trò chuyện mất luôn tên bài.
+        # Bản scan chưa OCR trang đầu thì chưa có tên — hỏi lại ở câu sau
+        d["title"] = await title_of(d, pymupdf.open(d["src"]))
     gloss, outline = glossary_text(cfg0, d), d["outline"]
     base_system = "\n\n".join(x for x in (
         CHAT_PROMPT,
