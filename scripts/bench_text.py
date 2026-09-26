@@ -165,8 +165,10 @@ def bench_paper(path: Path, render: bool, png: bool) -> dict:
     def spy_rows(lines):  # hàng có chữ cỡ thường nằm cách chân chữ chính > 0,8 cỡ → hai dòng bị trộn làm một
         rows = rows_of(lines)
         for r in rows:
+            # chữ chính: span chữ thường cỡ lớn (chỉ số "model" 5pt của d_model in bằng font chữ thường thì không tính)
+            top = max((s["size"] for ln in r for s in ln["spans"] if not app.MATH_FONT.search(s["font"])), default=0)
             main = collections.Counter((round(s["origin"][1], 1), round(s["size"], 1)) for ln in r for s in ln["spans"]
-                                       if not app.MATH_FONT.search(s["font"])
+                                       if not app.MATH_FONT.search(s["font"]) and s["size"] >= 0.8 * top
                                        and sum(not c["c"].isspace() for c in s["chars"]) >= 3)
             if not main:
                 continue

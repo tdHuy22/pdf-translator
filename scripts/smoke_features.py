@@ -8,6 +8,7 @@ In ✓/✗ cho từng mục; dùng sau khi sửa app.py để biết có làm h�
 import asyncio
 import json
 import pathlib
+import re
 import sys
 import tempfile
 
@@ -35,7 +36,8 @@ async def fc(cfg, system, payload, max_out=0, est_in=0):
     CALLS.append(len(payload["items"]))
     if "paper" in payload:
         return {it["id"]: (it["text"] if i % 3 == 0 else f"nghĩa{i}") for i, it in enumerate(payload["items"])}
-    return {it["id"]: "DỊCH " + it["text"] for it in payload["items"]}
+    # "bản dịch" giả không được là chữ gốc nguyên văn: app loại bản dịch còn nguyên cụm tiếng Anh (copied_run)
+    return {it["id"]: "DỊCH " + re.sub(r"\b[A-Za-z]{2,}\b", r"\g<0>ă", it["text"]) for it in payload["items"]}
 A.chat = fc
 async def fj(cfg, system, payload, schema, max_out=0, est_in=0, extra=None):   # bảng thuật ngữ: xếp loại + dịch
     CALLS.append(len(payload["items"]))
@@ -105,6 +107,15 @@ with TestClient(A.app) as c:
     pdf = pymupdf.open("pdf", c.get(f"/api/{did}/download?which=original&sync=false").content)
     ok([a.type[1] for a in pdf[0].annots()] == ["Highlight"] and "BERT" in pdf[0].get_text(),
        "tải bản gốc có tô: đúng bản gốc, vệt tô ở bản gốc có trong đó")
+    org = pymupdf.open("pdf", c.get(f"/api/{did}/download?which=original").content)
+    pdf = pymupdf.open("pdf", c.get(f"/api/{did}/download?which=dual&layout=side").content)
+    ok(pdf.page_count == org.page_count and abs(pdf[0].rect.width - 2 * org[0].rect.width) < 1
+       and len(list(pdf[0].annots())) == 3 and "BERT" in pdf[0].get_text() and "DỊCH" in pdf[0].get_text(),
+       "PDF song ngữ cạnh nhau: gấp đôi bề rộng, đủ hai bản, vệt tô của cả hai bên")
+    pdf = pymupdf.open("pdf", c.get(f"/api/{did}/download?which=dual&layout=alt").content)
+    ok(pdf.page_count == 2 * org.page_count and "DỊCH" not in pdf[0].get_text() and "DỊCH" in pdf[1].get_text()
+       and (not org.get_toc() or pdf.get_toc()[0][2] == 2 * org.get_toc()[0][2] - 1),
+       "PDF song ngữ xen kẽ: trang gốc rồi trang dịch, mục lục trỏ đúng trang gốc")
     r = c.post(f"/api/{did}/translate/1?span=3&force=true", json=cfg).json()
     ok([p["page"] for p in r["pages"]] == [1, 2, 3], "dịch lại một dải trang (force): trang đã dịch cũng được gộp")
     c.post(f"/api/{did}/marks", json={"page": 0, "add": [], "remove": ["m1"]})
@@ -545,6 +556,14 @@ with TestClient(A.app) as c:
     c.delete("/api/providers/may-lab")
     ok("may-lab" not in {p["id"] for p in c.get("/api/providers").json()["providers"]}, "xoá")
     ok(c.delete("/api/providers/openai").status_code == 404, "không xoá được nhà cung cấp có sẵn")
+items = [{"id": 0, "text": "the auto-regressive property of {v1}"}, {"id": 1, "text": "Results (a), b."},
+         {"id": 2, "text": "As shown in Figure 1, we denote input embedding as {v1}."}, {"id": 3, "text": "北京 is big"},
+         {"id": 4, "text": "2 Background and Related Work"}, {"id": 5, "text": "3.2.2 Multi-Head Attention"}]
+got = A.keep_formulas(items, {0: "tính tự回归 của {v1}", 1: "Kết quả（a），b。", 3: "北京 rất lớn",
+                              2: "Như Hình 1, we denote input embedding as {v1}.", 4: "2 Background and Related Work",
+                              5: "3.2.2 Multi-Head Attention"})
+ok(set(got) == {1, 3, 5} and got[1] == "Kết quả (a), b.",
+   "kiểm bản dịch: loại chữ Hán lạc, nửa câu/tiêu đề còn nguyên tiếng Anh; đổi dấu toàn khổ; giữ tên riêng, thuật ngữ")
 m = A.model_meta({"id": "a/b:free", "context_length": 262144, "architecture": {"input_modalities": ["text", "image"]},
                   "pricing": {"prompt": "0", "completion": "0"}})
 m2 = A.model_meta({"id": "local"})

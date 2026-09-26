@@ -219,6 +219,13 @@
   #sesList { position:absolute; top:100%; left:8px; right:8px; z-index:12; max-height:60vh; overflow:auto; background:var(--panel);
              border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.18); }
   #sesList[hidden] { display:none; }
+  .dlwrap { position:relative; }
+  #dlMenu { position:absolute; top:calc(100% + 4px); left:0; z-index:12; width:320px; background:var(--panel);
+            border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.18); padding:4px; }
+  #dlMenu[hidden] { display:none; }
+  #dlMenu button { display:block; width:100%; text-align:left; border:none; background:transparent; padding:6px 8px; cursor:pointer; }
+  #dlMenu button:hover { background:#f3f4f6; }
+  #dlMenu small { display:block; opacity:.65; font-size:11.5px; margin-top:1px; }
   .ses { display:flex; gap:4px; align-items:center; padding:6px 8px; border-bottom:1px solid #f1f2f4; cursor:pointer; font-size:13px; }
   .ses:hover { background:#f9fafb; } .ses.cur { background:#eef2ff; }
   .ses .st { flex:1; min-width:0; } .ses .st b { display:block; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -289,8 +296,13 @@
   <label class="hint" style="display:flex;align-items:center;gap:3px" title="Dịch lại cả những trang đã dịch trong dải trên"><input type="checkbox" id="rangeForce"> gồm trang đã dịch</label>
   <button id="btnAll" class="primary" disabled>Dịch</button>
   <button id="btnStop" disabled>Dừng</button>
-  <button id="btnDl" disabled>Tải PDF đã dịch</button>
-  <button id="btnDlOrg" disabled title="Bản gốc kèm các vệt tô vàng và ghi chú (tắt đồng bộ tô vàng thì vệt tô ở bản gốc chỉ có trong file này)">Tải bản gốc có tô</button>
+  <span class="dlwrap"><button id="btnDl" disabled title="Tải PDF: bản dịch, song ngữ hoặc bản gốc có tô">⬇ Tải PDF ▾</button>
+    <div id="dlMenu" hidden>
+      <button type="button" data-q="">📄 Bản dịch<small>thay chữ gốc bằng bản dịch, giữ bố cục</small></button>
+      <button type="button" data-q="which=dual&layout=side">📖 Song ngữ — hai bản cạnh nhau<small>mỗi trang: bản gốc bên trái, bản dịch bên phải</small></button>
+      <button type="button" data-q="which=dual&layout=alt">📑 Song ngữ — xen kẽ trang<small>trang gốc rồi trang dịch, khổ giấy như bản gốc</small></button>
+      <button type="button" data-q="which=original">🖍 Bản gốc có tô<small>kèm vệt tô vàng và ghi chú (tắt đồng bộ tô vàng thì vệt tô ở bản gốc chỉ có ở đây)</small></button>
+    </div></span>
   <button id="btnGloss" disabled>📒 Thuật ngữ</button>
   <button id="btnChat" disabled>💬 Hỏi về tài liệu</button>
   <button id="btnNotes" disabled>📝 Ghi chú</button>
@@ -423,6 +435,9 @@
     <input id="gFind" type="search" placeholder="🔍 Tìm thuật ngữ… (Esc: xoá)" title="Tìm trong cả thuật ngữ lẫn cách dịch, không phân biệt dấu">
     <span class="hint" id="gFound"></span>
     <button id="gAdd">+ Thêm thuật ngữ</button>
+    <button id="gImport" title="Nhập bảng từ file CSV (cột source,target — cùng định dạng glossary của PDFMathTranslate / BabelDOC). Cột target trống hoặc bằng source = giữ nguyên tiếng Anh">⬆ Nhập CSV</button>
+    <input id="gFile" type="file" accept=".csv,text/csv" hidden>
+    <button id="gExport" title="Tải bảng đang dùng thành file CSV (source,target,tgt_lng) — dùng lại cho bài khác hoặc cho PDFMathTranslate">⬇ Xuất CSV</button>
     <button id="gMake">Lập lại bằng LLM</button>
     <button id="gSave" class="primary">Lưu bảng</button>
     <button id="gClose">✕</button>

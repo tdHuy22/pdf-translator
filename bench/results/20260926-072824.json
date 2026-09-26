@@ -1,0 +1,157 @@
+{
+ "papers": {
+  "attention-is-all-you-need": {
+   "pages": 15,
+   "blocks": 210,
+   "formulas": 102,
+   "chars": 32246,
+   "tables": 4,
+   "inline_styles": 53,
+   "chars_in_blocks": 31025,
+   "table_blocks": 51,
+   "extract_s_per_page": 0.74,
+   "examples": {},
+   "coverage": 96.2
+  },
+  "bert": {
+   "pages": 16,
+   "blocks": 339,
+   "formulas": 103,
+   "chars": 53872,
+   "tables": 8,
+   "inline_styles": 88,
+   "chars_in_blocks": 51382,
+   "table_blocks": 90,
+   "extract_s_per_page": 0.73,
+   "examples": {},
+   "coverage": 95.4
+  },
+  "roberta": {
+   "pages": 13,
+   "blocks": 333,
+   "formulas": 127,
+   "chars": 41118,
+   "tables": 10,
+   "chars_in_blocks": 39874,
+   "table_blocks": 132,
+   "extract_s_per_page": 0.75,
+   "examples": {},
+   "coverage": 97.0
+  },
+  "rag": {
+   "pages": 19,
+   "blocks": 283,
+   "formulas": 86,
+   "chars": 59041,
+   "tables": 7,
+   "chars_in_blocks": 57314,
+   "inline_styles": 91,
+   "table_blocks": 98,
+   "extract_s_per_page": 0.76,
+   "examples": {},
+   "coverage": 97.1
+  },
+  "roformer-rope": {
+   "pages": 14,
+   "blocks": 244,
+   "formulas": 145,
+   "chars": 37877,
+   "tables": 5,
+   "inline_styles": 55,
+   "chars_in_blocks": 34888,
+   "table_blocks": 42,
+   "extract_s_per_page": 0.76,
+   "examples": {},
+   "coverage": 92.1
+  },
+  "gqa": {
+   "pages": 7,
+   "blocks": 105,
+   "formulas": 15,
+   "chars": 20126,
+   "tables": 1,
+   "inline_styles": 35,
+   "chars_in_blocks": 19741,
+   "table_blocks": 15,
+   "extract_s_per_page": 0.78,
+   "examples": {},
+   "coverage": 98.1
+  },
+  "flashattention-2": {
+   "pages": 14,
+   "blocks": 194,
+   "formulas": 238,
+   "chars": 33038,
+   "tables": 1,
+   "chars_in_blocks": 28375,
+   "inline_styles": 66,
+   "table_blocks": 20,
+   "extract_s_per_page": 0.78,
+   "examples": {},
+   "coverage": 85.9
+  },
+  "mistral-7b": {
+   "pages": 9,
+   "blocks": 137,
+   "formulas": 34,
+   "chars": 20959,
+   "tables": 5,
+   "inline_styles": 53,
+   "chars_in_blocks": 20389,
+   "table_blocks": 51,
+   "extract_s_per_page": 0.81,
+   "examples": {},
+   "coverage": 97.3
+  },
+  "mixtral": {
+   "pages": 13,
+   "blocks": 195,
+   "formulas": 33,
+   "chars": 27096,
+   "tables": 7,
+   "inline_styles": 61,
+   "chars_in_blocks": 25092,
+   "table_blocks": 88,
+   "extract_s_per_page": 0.79,
+   "examples": {},
+   "coverage": 92.6
+  },
+  "datasentinel": {
+   "pages": 19,
+   "blocks": 685,
+   "formulas": 395,
+   "chars": 80832,
+   "tables": 19,
+   "inline_styles": 97,
+   "chars_in_blocks": 75301,
+   "table_blocks": 436,
+   "merged_cells": 1,
+   "extract_s_per_page": 0.81,
+   "examples": {
+    "merged_cells": [
+     "p16: negative:foo Winter is boring.### alternatives: Task is done.{v1}nIgno"
+    ]
+   },
+   "coverage": 93.2
+  }
+ },
+ "total": {
+  "pages": 139,
+  "blocks": 2725,
+  "formulas": 1278,
+  "tables": 67,
+  "merged_cells": 1,
+  "wrong_style": 0,
+  "inline_styles": 599,
+  "mixed_rows": 0,
+  "garbled": 0,
+  "lost_hyphens": 0,
+  "extra_hyphens": 0,
+  "coverage": 94.4,
+  "extract_s_per_page": 0.77,
+  "render_s_per_page": 0.0,
+  "size_pct": 0,
+  "small_pct": 0,
+  "vi_size_pct": 0
+ }
+}

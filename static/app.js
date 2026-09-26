@@ -395,7 +395,7 @@ function resetDocView() {
 
 function openDoc() {
   buildPages();
-  ["btnAll","btnDl","btnDlOrg","btnGloss","btnChat","btnNotes","range"].forEach(b => $(b).disabled = false);
+  ["btnAll","btnDl","btnGloss","btnChat","btnNotes","range"].forEach(b => $(b).disabled = false);
   setStatus(`${doc.name} – ${doc.pages} trang` + (doc.scanned_pages ? ` (${doc.scanned_pages} trang scan → OCR)` : "") +
             (doc.done.size ? ` · đã dịch ${doc.done.size}` : ""));
 }
@@ -454,7 +454,7 @@ $("dtab").onclick = async e => {
     await fetch(`/api/docs/${id}`, { method:"DELETE" });
     if (doc?.id === id) {                     // xoá đúng bài đang mở → về màn hình trống
       doc = null; resetDocView(); $("stackO").innerHTML = $("stackT").innerHTML = ""; setStatus("Chưa mở file");
-      ["btnAll","btnDl","btnDlOrg","btnGloss","btnChat","btnNotes","range"].forEach(b => $(b).disabled = true);
+      ["btnAll","btnDl","btnGloss","btnChat","btnNotes","range"].forEach(b => $(b).disabled = true);
       try { localStorage.removeItem("last_doc"); } catch {}
     }
     loadDocs();
@@ -1113,8 +1113,14 @@ $("btnAll").onclick = async () => {
   $("btnAll").disabled = false; $("btnStop").disabled = true;
 };
 $("btnStop").onclick = () => { stopFlag = true; setStatus("Đang dừng sau trang hiện tại…"); };
-$("btnDl").onclick = () => { location.href = `/api/${doc.id}/download?sync=${syncOn()}`; };
-$("btnDlOrg").onclick = () => { location.href = `/api/${doc.id}/download?which=original&sync=${syncOn()}`; };
+$("btnDl").onclick = e => { e.stopPropagation(); $("dlMenu").hidden = !$("dlMenu").hidden; };
+$("dlMenu").onclick = e => {
+  const b = e.target.closest("button[data-q]");
+  if (!b || !doc) return;
+  $("dlMenu").hidden = true;
+  location.href = `/api/${doc.id}/download?${b.dataset.q ? b.dataset.q + "&" : ""}sync=${syncOn()}`;
+};
+document.addEventListener("click", e => { if (!e.target.closest?.(".dlwrap")) $("dlMenu").hidden = true; });
 
 // ================================================================ Bảng thuật ngữ
 let GLOSS = [], EXTRA = [];   // EXTRA: ứng viên LLM không chọn + thuật ngữ bị ẩn vì bạn từng xoá (hidden)
@@ -1223,6 +1229,56 @@ $("gSave").onclick = async () => {
   EXTRA = j.extra || EXTRA;
   drawGlossary();
   setStatus(`Đã lưu bảng thuật ngữ (${j.used} thuật ngữ) – trang đã dịch cần bấm “↻ Dịch lại” để áp bảng mới`);
+};
+// ---------------- Nhập/xuất CSV: cùng định dạng glossary của PDFMathTranslate-next / BabelDOC (source,target,tgt_lng)
+function parseCSV(text) {
+  const rows = [], re = /("((?:[^"]|"")*)"|[^,\r\n]*)(,|\r?\n|$)/g;
+  let row = [], m;
+  text = text.replace(/^\uFEFF/, "");
+  while ((m = re.exec(text)) && m[0] !== "") {
+    row.push(m[2] !== undefined ? m[2].replace(/""/g, '"') : m[1]);
+    if (m[3] !== ",") { rows.push(row); row = []; }
+    if (m.index + m[0].length >= text.length) break;
+  }
+  if (row.length) rows.push(row);
+  return rows.filter(r => r.some(c => c.trim()));
+}
+$("gImport").onclick = () => $("gFile").click();
+$("gFile").onchange = async () => {
+  const f = $("gFile").files[0];
+  $("gFile").value = "";
+  if (!f) return;
+  let rows = parseCSV(await f.text());
+  const head = (rows[0] || []).map(c => c.trim().toLowerCase());
+  let si = 0, ti = 1, li = -1;
+  if (head.includes("source") || head.includes("target")) {
+    si = Math.max(0, head.indexOf("source")); ti = head.indexOf("target"); li = head.indexOf("tgt_lng");
+    rows = rows.slice(1);
+  }
+  const byTerm = new Map(GLOSS.map(t => [t.term.trim().toLowerCase(), t]));
+  let added = 0, updated = 0, skipped = 0;
+  for (const r of rows) {
+    const term = (r[si] || "").trim(), vi = ti >= 0 ? (r[ti] || "").trim() : "", lng = li >= 0 ? (r[li] || "").trim().toLowerCase() : "";
+    if (!term || (lng && !/^vi/.test(lng))) { skipped++; continue; }   // bảng cho ngôn ngữ khác
+    const keep = !vi || vi.toLowerCase() === term.toLowerCase();
+    const t = byTerm.get(term.toLowerCase());
+    if (t) { Object.assign(t, { vi: keep ? t.vi : vi, keep, use: true }); updated++; }
+    else { const n = { term, vi: keep ? "" : vi, keep, use: true }; GLOSS.push(n); byTerm.set(term.toLowerCase(), n); added++; }
+  }
+  $("gFind").value = "";
+  drawGlossary();
+  setStatus(`Đã nhập ${added} thuật ngữ mới, cập nhật ${updated}` + (skipped ? `, bỏ qua ${skipped} dòng` : "") +
+            ` từ ${f.name} — bấm “Lưu bảng” để dùng`);
+};
+$("gExport").onclick = () => {
+  const q = s => /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  const lines = ["source,target,tgt_lng", ...GLOSS.filter(t => t.use && t.term.trim())
+    .map(t => [t.term.trim(), t.keep ? t.term.trim() : t.vi.trim(), "vi"].map(q).join(","))];
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["\uFEFF" + lines.join("\r\n") + "\r\n"], { type: "text/csv" }));
+  a.download = `${(doc?.name || "paper").replace(/\.pdf$/i, "")}_thuat_ngu.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
 

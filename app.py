@@ -115,6 +115,7 @@ Rules:
 - Items with "tight": true are narrow table cells: use the shortest correct wording, or keep the English term/abbreviation.
 - Keep technical terms commonly used in English (e.g. Transformer, dropout, embedding) when that is the Vietnamese academic norm. When a Glossary is given, follow it exactly for every term it lists.
 - The authors' "we" is "chúng tôi" (not "chúng ta").
+- Write only Vietnamese in Latin script: never output Chinese, Japanese or Korean characters (e.g. "自回归" must be "tự hồi quy").
 - Keep math, variables, citations like [12] or (Smith et al., 2020), URLs, numbers and code unchanged.
 - Placeholders like {v1}, {v2} stand for formulas and symbols: keep every placeholder exactly once and unchanged, at the position where that formula belongs in the Vietnamese sentence.
 - Tags <b>…</b> and <i>…</i> mark bold/italic words: keep every tag, wrapped around the Vietnamese words that translate the tagged words.
@@ -622,13 +623,24 @@ def text_lines(page: pymupdf.Page, textpage=None) -> list[dict]:
     return out
 
 
+def span_base(s: dict) -> float:
+    """Đường chân chữ của span theo số đông ký tự. `origin` của span là của ký tự đầu: span "ⁱ⁼¹, where …" bắt đầu
+    bằng chỉ số trên thì origin cao hơn chân chữ 3,6pt → cả hàng tưởng chân chữ ở đó, công thức vẽ lệch dòng."""
+    ys = collections.Counter(round(c["origin"][1], 1) for c in s["chars"] if not c["c"].isspace())
+    return ys.most_common(1)[0][0] if ys else s["origin"][1]
+
+
 def rows_of(lines: list[dict]) -> list[list[dict]]:
     """Xếp dòng theo hàng: dòng chữ thường theo đường chân chữ (khung dòng có công thức cao bất thường, tâm khung
     không tin được); mảnh bị PyMuPDF tách riêng (chỉ số của Σ, tử/mẫu phân số, dấu chấm sau công thức)
     gắn vào hàng có tâm gần nhất."""
-    def main_span(ln):  # span chữ thường nhiều ký tự nhất của dòng
+    def main_span(ln):  # span chữ thường cỡ lớn nhiều ký tự nhất của dòng
         spans = [s for s in ln["spans"] if not MATH_FONT.search(s["font"])]
-        return max(spans, key=lambda s: sum(not c["c"].isspace() for c in s["chars"]), default=None)
+        # Chỉ số in bằng font chữ thường ("model" 5pt của d_model) dài hơn dấu phẩy 10pt cạnh nó nhưng không phải chữ
+        # chính: lấy nó thì cỡ chữ trung vị của khối tụt còn 5pt và chỉ số "i" 7pt của W_i^Q thành một hàng riêng
+        top = max((s["size"] for s in spans), default=0)
+        return max((s for s in spans if s["size"] >= 0.8 * top),
+                   key=lambda s: sum(not c["c"].isspace() for c in s["chars"]), default=None)
 
     info = [(ln, main_span(ln)) for ln in lines]
     counts = [sum(not c["c"].isspace() for c in s["chars"]) if s else 0 for _, s in info]
@@ -636,18 +648,18 @@ def rows_of(lines: list[dict]) -> list[list[dict]]:
     size = sizes[len(sizes) // 2] if sizes else 0
     rows: list[list] = []  # [đường chân chữ, cỡ chữ, dòng]
     frags = []
-    for (ln, s), n in sorted(zip(info, counts), key=lambda x: x[0][1]["origin"][1] if x[0][1] else 0):
+    for (ln, s), n in sorted(zip(info, counts), key=lambda x: span_base(x[0][1]) if x[0][1] else 0):
         if not s or n < 3 or s["size"] < 0.8 * size:
             frags.append(ln)
-        elif rows and abs(s["origin"][1] - rows[-1][0]) < 0.5 * s["size"]:
+        elif rows and abs(span_base(s) - rows[-1][0]) < 0.5 * s["size"]:
             rows[-1][2].append(ln)
         else:
-            rows.append([s["origin"][1], s["size"], [ln]])
+            rows.append([span_base(s), s["size"], [ln]])
     for ln in sorted(frags, key=lambda l: l["bbox"][1] + l["bbox"][3]):
         x0, y0, x1, y1 = ln["bbox"]
         # Mảnh có ký tự cỡ thường (không tính glyph căn/Σ lớn) nằm cách mọi hàng > 0,8 cỡ chữ là một dòng riêng,
         # vd. dòng cuối đoạn chỉ có "PE_pos." — gắn vào hàng trên thì chữ hai dòng bị trộn theo x
-        full = collections.Counter(round(s["origin"][1], 1) for s in ln["spans"] if s["size"] >= 0.8 * size
+        full = collections.Counter(round(c["origin"][1], 1) for s in ln["spans"] if s["size"] >= 0.8 * size
                                    and not BIG_OP.search(s["font"]) for c in s["chars"] if not c["c"].isspace())
         if rows and rows[0][1] and full:
             base = full.most_common(1)[0][0]
@@ -667,6 +679,7 @@ def rows_of(lines: list[dict]) -> list[list[dict]]:
 # (CMR/CMBX/CMTI là font chữ thường của bài LaTeX dùng Computer Modern nên không tính)
 MATH_FONT = re.compile(r"CM(MI|SY|EX|BSY|MIB)|MSAM|MSBM|EU[FRS]M|RSFS|STMARY|WASY|(N?TX|PX)(MI|SY|EX)|MATH|SYMBOL"
                        r"|MT ?EXTRA|EUCLID", re.I)
+ACCENTS = set("ˆˇ˘˙˜¯¨´˚")  # dấu rời của TeX (\hat, \check, \breve, \dot, \tilde, \bar, \ddot, \acute, \mathring)
 BIG_OP = re.compile(r"CMEX|(N?TX|PX)EX", re.I)  # căn, Σ, ngoặc lớn: toạ độ chân chữ của glyph không nằm trên dòng
 PLACEHOLDER = re.compile(r"\{\s*[vV]\s*(\d+)\s*\}")  # {v1}; chấp nhận biến thể LLM hay viết như { v1 }, {V1}
 # Chữ đậm/nghiêng giữa đoạn (tiêu đề đầu đoạn "PromptGuard:", tên tác giả, tên hội nghị trong tài liệu tham khảo)
@@ -742,15 +755,22 @@ def row_text(row: list[dict], formulas: list[dict]) -> tuple[str, list[tuple], l
     weight = collections.Counter()
     for c, s in chars:
         if not c["c"].isspace():
-            weight[round(s["size"], 1), round(s["origin"][1], 1), bool(MATH_FONT.search(s["font"]))] += 1
+            weight[round(s["size"], 1), round(c["origin"][1], 1), bool(MATH_FONT.search(s["font"]))] += 1
     top = max(k[0] for k in weight if not k[2]) if any(not k[2] for k in weight) else 0
     size, base, _ = max(weight, key=lambda k: (not k[2], k[0] >= 0.8 * top, weight[k]))
 
     def is_math(c, s) -> bool:
         return bool(MATH_FONT.search(s["font"])) or c["c"] == "�" or unicodedata.category(c["c"]) in ("Co", "Cn") \
-            or (s["size"] < 0.8 * size and abs(s["origin"][1] - base) > 0.12 * size)  # chỉ số trên/dưới
+            or (s["size"] < 0.8 * size and abs(c["origin"][1] - base) > 0.12 * size)  # chỉ số trên/dưới
 
     flags = [None if c["c"].isspace() else is_math(c, s) for c, s in chars]
+    # Dấu mũ của \hat{y}, \tilde{x}… là glyph riêng in bằng font chữ thường (CMR) → thuộc công thức nếu chữ ngay sau
+    # nó là công thức; trước đây "ˆ" đứng ngoài thành chữ: "ˆ{v2}", tách công thức làm đôi. Tên riêng kiểu
+    # "Sch¨olkopf" (dấu rời trước chữ thường) vẫn là chữ.
+    for i in range(len(chars) - 1, -1, -1):
+        if flags[i] is False and chars[i][0]["c"] in ACCENTS:
+            nxt = next((f for f in flags[i + 1:] if f is not None), None)
+            flags[i] = bool(nxt)
     runs: list[list[int]] = []  # [đầu, cuối] các cụm công thức; hai cụm chỉ cách nhau bởi dấu/số (vd. " = ") thì gộp
     for i, m in enumerate(flags):
         if m:
@@ -1768,6 +1788,19 @@ def ink_clip(page: pymupdf.Page, f: dict) -> tuple:
     return x0, max(y0, (pix.y + rows[0]) / 4 - 0.3), x1, min(y1, (pix.y + last + 1) / 4 + 0.3)
 
 
+def above(f: dict, others: list[dict]) -> dict:
+    """Đáy vùng cắt không xuống quá đỉnh công thức dòng dưới (cùng khoảng ngang). Khung ký tự CMSY khai báo phần
+    dưới chân chữ gần 1 em ("|" 10pt xuống tới 9,6pt dưới chân chữ) nên vùng cắt của p_f(v|s_t||x_t||ŷ) ăn cả dấu
+    mũ và "<i" của ŷ dòng dưới; mực hai dòng liền nhau nên ink_clip không tách được → bóng "ŷ<i" dưới công thức."""
+    x0, y0, x1, y1 = f["clip"]
+    low = max((k[1] for k in f.get("chars", ())), default=f["base"])
+    floor = min((g["clip"][1] for g in others if g is not f and g["base"] > f["base"] + 0.5 * f["size"]
+                 and g["clip"][0] < x1 and g["clip"][2] > x0), default=y1)
+    if floor >= y1:
+        return f
+    return {**f, "clip": (x0, y0, x1, max(floor, low + 0.15 * f["size"]))}
+
+
 def formula_reach(f: dict) -> tuple:
     """Vùng có thể có mực của công thức. Khung ký tự lấy theo descender của font; font khai báo descender ≈ 0
     (NewTXMI của newtx: −0,009 em) thì khung chỉ xuống quá chân chữ 0,2pt → đuôi "y", dấu phẩy bị cắt. Đáy khung
@@ -1885,7 +1918,7 @@ def render_translation(page: pymupdf.Page, blocks: list[dict], translations: dic
     used = [f for i, b in enumerate(blocks) if translations.get(i) for f in b.get("formulas", ())]
     if src is not None and used:
         fdoc = formula_source(src, page.number, used)
-        formulas = {i: [{**f, "clip": ink_clip(fdoc[0], f)} for f in b["formulas"]]
+        formulas = {i: [{**f, "clip": ink_clip(fdoc[0], above(f, used))} for f in b["formulas"]]
                     for i, b in enumerate(blocks) if translations.get(i) and b.get("formulas")}
     first, n = {}, 0  # ảnh giữ chỗ công thức đánh số chung cả trang: khối i dùng ảnh first[i], first[i] + 1…
     for i in range(len(blocks)):
@@ -2240,12 +2273,78 @@ def keep_formulas(items: list[dict], out: dict[int, str]) -> dict[int, str]:
     được dịch lại / dùng Google / giữ nguyên bản gốc, thay vì in ra bản dịch thiếu công thức.
     Thẻ <b>/<i> thiếu hoặc lồng sai thì chỉ bỏ thẻ (mất đậm/nghiêng giữa đoạn, không mất bản dịch)."""
     src = {it["id"]: it["text"] for it in items}
+    tight = {it["id"] for it in items if it.get("tight")}   # ô bảng: được giữ viết tắt/cụm tiếng Anh
     ok = {}
     for i, t in out.items():
         t = PLACEHOLDER.sub(lambda m: "{v%s}" % int(m[1]), t)
+        t = fix_width(t, src.get(i, ""))
+        if leak := foreign_script(src.get(i, ""), t):
+            print(f"[dịch] bỏ bản dịch đoạn {i}: lẫn chữ {leak[:10]!r} không có trong bản gốc → dịch lại")
+            continue
+        if i not in tight and (run := copied_run(src.get(i, ""), t)):
+            print(f"[dịch] bỏ bản dịch đoạn {i}: còn nguyên cụm tiếng Anh {run!r} → dịch lại")
+            continue
         if set(PLACEHOLDER.findall(src.get(i, ""))) <= set(PLACEHOLDER.findall(t)):
             ok[i] = keep_tags(src.get(i, ""), t)
     return ok
+
+
+# Chữ hệ khác (Hán/Kana/Hangul, Kirin, Ả Rập, Hebrew, Thái, Devanagari) — model đa ngữ (Qwen, dots…) đôi khi chèn
+# vào giữa câu tiếng Việt ("tính tự回归" = tự hồi quy). Chữ Hy Lạp không tính: α, β… là ký hiệu toán.
+_FOREIGN = re.compile(r"[぀-ヿ㐀-䶿一-鿿가-힯豈-﫿Ѐ-ӿ֐-׿؀-ۿऀ-ॿ฀-๿]")
+_FULLWIDTH = {**{c: chr(c - 0xFEE0) for c in range(0xFF01, 0xFF5F)}, 0x3000: " ", 0x3001: ", ", 0x3002: ". ",
+              **{ord(k): v for k, v in {"，": ", ", "：": ": ", "；": "; ", "！": "! ", "？": "? ", "（": " (",
+                                        "）": ") "}.items()}}
+
+
+def fix_width(t: str, src: str) -> str:
+    """Dấu câu toàn khổ ("，", "（", "。") trong bản dịch tiếng Việt → dấu thường, trừ khi bản gốc cũng dùng."""
+    if not re.search(r"[　-〿！-｠]", t) or re.search(r"[　-〿！-｠]", src):
+        return t
+    t = re.sub(r" {2,}", " ", t.translate(_FULLWIDTH))
+    return re.sub(r"\( ", "(", re.sub(r" +([,.;:!?)])", r"\1", t)).strip()
+
+
+# Từ chức năng tiếng Anh: không bao giờ là thuật ngữ, nên cụm chép nguyên mà chứa chúng là câu chưa dịch
+_FUNC = set("the of in as we to a an and is are be for with that this by on from it or at which our its these those "
+            "was were has have can will not into than then when where while each such us".split())
+_QUOTED = re.compile(r"\"[^\"]*\"|“[^”]*”|‘[^’]*’")
+
+
+def _ascii_words(t: str) -> list[str | None]:
+    """Từ của câu theo dấu cách: từ ASCII (chữ thường hoá) hoặc None (từ tiếng Việt có dấu, {vN}, số) — None cắt cụm."""
+    out = []
+    for w in untag(t).split():
+        w = w.strip(".,;:()[]!?\"'“”‘’")
+        out.append(w.lower() if re.fullmatch(r"[A-Za-z]+(?:[-'][A-Za-z]+)*", w) else None)
+    return out
+
+
+def copied_run(src: str, t: str, n: int = 5) -> str:
+    """Cụm ≥ n từ liền nhau chép nguyên từ bản gốc (hoặc cả đoạn ngắn chép y nguyên), có ≥ 2 từ chức năng tiếng Anh ("As shown in Figure 1, we denote
+    input embedding as…") — model bỏ dở nửa câu không dịch. Cụm nằm trong ngoặc kép ở bản gốc (câu lệnh tấn công,
+    prompt mẫu… thường cố ý giữ nguyên) không tính."""
+    sw = _ascii_words(_QUOTED.sub(" ", src))
+    tw = _ascii_words(t)
+    # Đoạn ngắn (tiêu đề "Background and Related Work") trả về y nguyên: như "same-text fallback" của BabelDOC.
+    # Tiêu đề chỉ gồm thuật ngữ ("Multi-Head Attention", "Scaled Dot-Product Attention") không có từ chức năng → giữ
+    words = [w for w in sw if w]          # số mục ("2", "3.1") là None ở cả hai bên
+    if 3 <= len(words) < n and sw == tw and any(w in _FUNC for w in words):
+        return " ".join(words)
+    grams = {tuple(sw[k:k + n]) for k in range(len(sw) - n + 1) if None not in sw[k:k + n]}
+    if not grams:
+        return ""
+    for k in range(len(tw) - n + 1):
+        g = tuple(tw[k:k + n])
+        if g in grams and sum(w in _FUNC for w in g) >= 2:
+            return " ".join(g)
+    return ""
+
+
+def foreign_script(src: str, t: str) -> str:
+    """Các ký tự chữ hệ khác có trong bản dịch mà bản gốc không có (bài tiếng Trung giữ tên riêng chữ Hán thì được)."""
+    have = set(src)
+    return "".join(dict.fromkeys(c for c in _FOREIGN.findall(t) if c not in have))
 
 
 _STAMP = re.compile(r"\s*(arXiv:\S+|Preprint|Published as a conference paper.*|Under review.*|Proceedings of.*)\s*",
@@ -4693,13 +4792,9 @@ async def summarize_chat(doc_id: str, sid: str, cfg: Config):
     return note
 
 
-@app.get("/api/{doc_id}/download")
-def download(doc_id: str, which: str = "translated", sync: bool = True):
-    """PDF tải về kèm tô vàng và ghi chú. `which="original"`: bản gốc có tô vàng (tắt đồng bộ vệt tô thì vệt tô ở bản
-    gốc chỉ có ở đây). `sync=False`: không vẽ phần tương ứng của vệt tô bên bản kia."""
-    d = get_doc(doc_id)
-    side = "original" if which == "original" else "translated"
-    path = store.folder(doc_id) / f"download-{side}.pdf"
+def export_doc(d: dict, side: str, sync: bool = True) -> pymupdf.Document:
+    """Bản `side` ("translated" | "original") để tải về, kèm tô vàng (annotation highlight thật) và ghi chú.
+    `sync=False`: không vẽ phần tương ứng của vệt tô bên bản kia."""
     # garbage=4: gộp cả stream trùng nội dung — mỗi trang dịch nhúng lại nguyên font tiếng Việt và font công thức,
     # garbage=3 chỉ gộp đối tượng thường nên PDF 2 MB ra 6–20 MB; garbage=4 còn ≈ bản gốc + vài trăm KB.
     # Cắt font (MuPDF, không cần fontTools) trên bản sao để không đụng tài liệu đang dịch dở: chỉ giữ ký tự đã dùng —
@@ -4725,8 +4820,72 @@ def download(doc_id: str, which: str = "translated", sync: bool = True):
             doc.subset_fonts()
     except Exception as e:  # noqa: BLE001 — tính năng mới của MuPDF; lỗi thì nhúng nguyên font như trước
         print(f"[font] không cắt được font ({e!r}) → nhúng nguyên font")
+    return doc
+
+
+def copy_annots(src: pymupdf.Page, dst: pymupdf.Page, dx: float) -> None:
+    """Chép vệt tô và biểu tượng ghi chú sang trang ghép (show_pdf_page chỉ chép nội dung, không chép annotation).
+    Đọc hết thuộc tính trước rồi mới thêm: thao tác khác giữa vòng lặp page.annots() có thể làm MuPDF sập."""
+    found = [(a.type[0], pymupdf.Rect(a.rect), a.colors.get("stroke"), a.opacity, dict(a.info)) for a in src.annots()]
+    for kind, r, stroke, opacity, info in found:
+        if kind == pymupdf.PDF_ANNOT_HIGHLIGHT:
+            a = dst.add_highlight_annot(r + (dx, 0, dx, 0))
+            if stroke:
+                a.set_colors(stroke=stroke)
+            if opacity is not None and opacity >= 0:
+                a.set_opacity(opacity)
+        elif kind == pymupdf.PDF_ANNOT_TEXT:
+            a = dst.add_text_annot(pymupdf.Point(r.x0 + dx, r.y0), info.get("content", ""), icon="Note")
+        else:
+            continue
+        if info.get("content"):
+            a.set_info(content=info["content"], title=info.get("title") or "VietPaper")
+        a.update()
+
+
+def dual_doc(org: pymupdf.Document, tr: pymupdf.Document, layout: str = "side") -> pymupdf.Document:
+    """PDF song ngữ (như bản dual của PDFMathTranslate): "side" = mỗi trang là bản gốc | bản dịch đặt cạnh nhau,
+    "alt" = trang gốc và trang dịch xen kẽ. Giữ vệt tô, ghi chú và mục lục (bookmark) của bài."""
+    out = pymupdf.open()
+    toc = org.get_toc(simple=False)
+    if layout == "alt":
+        for n in range(org.page_count):
+            out.insert_pdf(org, from_page=n, to_page=n, links=False)
+            out.insert_pdf(tr, from_page=n, to_page=n, links=False)
+        toc = [[lv, title, 2 * p - 1 if p > 0 else p] for lv, title, p, *_ in toc]
+    else:
+        for n in range(org.page_count):
+            a, b = org[n].rect, tr[n].rect
+            page = out.new_page(width=a.width + b.width, height=max(a.height, b.height))
+            page.show_pdf_page(pymupdf.Rect(0, 0, a.width, a.height), org, n)
+            page.show_pdf_page(pymupdf.Rect(a.width, 0, a.width + b.width, b.height), tr, n)
+            copy_annots(org[n], page, 0)
+            copy_annots(tr[n], page, a.width)
+        toc = [[lv, title, p] for lv, title, p, *_ in toc]
+    try:
+        out.set_toc(toc)
+    except (ValueError, RuntimeError):     # mục lục hỏng (cấp nhảy cóc…) thì bỏ, không làm hỏng file
+        pass
+    return out
+
+
+@app.get("/api/{doc_id}/download")
+def download(doc_id: str, which: str = "translated", sync: bool = True, layout: str = "side"):
+    """PDF tải về kèm tô vàng và ghi chú. `which="original"`: bản gốc có tô vàng (tắt đồng bộ vệt tô thì vệt tô ở bản
+    gốc chỉ có ở đây). `which="dual"`: song ngữ — `layout="side"` hai bản cạnh nhau trên mỗi trang, `"alt"` xen kẽ
+    trang gốc/trang dịch. `sync=False`: không vẽ phần tương ứng của vệt tô bên bản kia."""
+    d = get_doc(doc_id)
+    stem = Path(d["name"] or "paper.pdf").stem
+    if which == "dual":
+        layout = "alt" if layout == "alt" else "side"
+        doc = dual_doc(export_doc(d, "original", sync), export_doc(d, "translated", sync), layout)
+        path, name = store.folder(doc_id) / f"download-dual-{layout}.pdf", f"{stem}_song_ngu.pdf"
+    else:
+        side = "original" if which == "original" else "translated"
+        doc = export_doc(d, side, sync)
+        path = store.folder(doc_id) / f"download-{side}.pdf"
+        name = stem + ("_vi.pdf" if side == "translated" else "_goc_to_vang.pdf")
     doc.save(path, garbage=4, deflate=True)
-    name = Path(d["name"] or "paper.pdf").stem + ("_vi.pdf" if side == "translated" else "_goc_to_vang.pdf")
     return FileResponse(path, filename=name, media_type="application/pdf")
 
 
