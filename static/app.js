@@ -798,9 +798,18 @@ function selectionInfo() {
   return { text, page: +page.dataset.p, side: page.dataset.kind, blocks: [...blocks],
            range, rect: range.getBoundingClientRect() };
 }
+// Màn cảm ứng: chạm vào nút của thanh là hệ điều hành có thể bỏ vùng chọn TRƯỚC khi "click" tới nút → ẩn thanh
+// ngay thì cú chạm rơi vào khoảng trống. Trễ một chút; các nút dùng `sel` đã lưu chứ không đọc lại vùng chọn.
+const COARSE = matchMedia("(pointer:coarse)").matches;
+let selHide = null;
 document.addEventListener("selectionchange", () => {
   const info = selectionInfo(), bar = $("selbar");
-  if (!info) { bar.classList.remove("on"); return; }
+  clearTimeout(selHide);
+  if (!info) {
+    if (COARSE && bar.classList.contains("on")) selHide = setTimeout(() => bar.classList.remove("on"), 350);
+    else bar.classList.remove("on");
+    return;
+  }
   sel = info;
   $("selMark").textContent = marksHit(info).length ? "🖍 Bỏ tô vàng" : "🖍 Tô vàng";
   $("selMark").disabled = !info.blocks.length;

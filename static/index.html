@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <title>VietPaper – Dịch bài báo PDF</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📄</text></svg>">
 <link rel="stylesheet" href="/vendor/katex.min.css">
@@ -21,6 +21,7 @@
   body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); }
   header { position:sticky; top:0; left:0; z-index:5; background:var(--panel); border-bottom:1px solid var(--line);
            padding:8px 12px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .hbtns { display:contents; }
   header h1 { font-family:ui-serif,Georgia,"Times New Roman",serif; font-weight:500; color:var(--accent); font-size:18px; margin:0 12px 0 0; }
   input, select, button { font:inherit; font-size:13px; padding:5px 8px; border:1px solid var(--line); border-radius:8px; background:var(--field); color:inherit; }
   input:focus, select:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 2px rgba(201,100,66,.2); }
@@ -293,11 +294,72 @@
   .pnote { position:absolute; top:4px; right:6px; z-index:4;   /* dưới thanh trên cùng (header z-index 5) */ font-size:11px; cursor:pointer; background:var(--warn-bg);
            border:1px solid #f59e0b; border-radius:4px; padding:0 4px; }
   @media (max-width:900px){ body.chat .cols { margin-right:0; } #chat { width:100%; } }
+
+  /* ---- Điện thoại / màn cảm ứng ----
+     Lớp chữ trang ngoài màn hình không cần vẽ: lớp có sẵn bề rộng/cao (buildLayer) nên bỏ qua được mà không xê dịch gì. */
+  .layer { content-visibility:auto; }
+  .vpane { touch-action:pan-x pan-y; }   /* chụm hai ngón thu phóng từng khung (view.js), không phóng cả trang web */
+  @media (hover:none) {
+    button:hover { background:var(--field); } button.primary:hover { background:var(--accent); }
+    #viewbar button:not(.on):hover, #dlMenu button:hover { background:transparent; }
+    #viewbar .desk { display:none; }   /* kính lúp cần phím ⌥ */
+  }
+  @media (pointer:coarse) {
+    /* iOS tự phóng cả trang khi chạm vào ô chữ < 16px */
+    input:not([type=checkbox]):not([type=radio]):not([type=file]), select, textarea, #q, #rtText { font-size:16px; }
+    button { padding:7px 10px; }
+    #viewbar button { padding:6px 10px; font-size:13px; }
+    .tools button { font-size:12px; padding:4px 8px; }
+    #selbar button { padding:8px 10px; font-size:13px; white-space:nowrap; }
+    .msgbar button { padding:4px 8px; font-size:12px; }
+    #chatGrip, #chatWide, #split { display:none; }
+  }
+  @media (max-width:700px) {
+    /* Thanh trên cùng: tên + trạng thái một dòng, các nút một hàng cuộn ngang (không xuống 3–4 dòng chiếm nửa màn hình) */
+    header { padding:6px 8px; gap:6px; flex-wrap:wrap; }
+    header h1 { font-size:16px; margin:0; }
+    header h1 small { display:none; }
+    #status { flex:1; min-width:0; text-align:right; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .hbtns { display:flex; order:3; flex:1 0 100%; gap:6px; align-items:center; overflow-x:auto; scrollbar-width:none;
+             margin:0 -8px; padding:0 8px 2px; -webkit-overflow-scrolling:touch; }
+    .hbtns::-webkit-scrollbar { display:none; }
+    .hbtns > * { flex:none; }
+    #file { max-width:190px; }
+    #range { width:150px !important; }
+    /* menu tải PDF: ra khỏi hàng cuộn (overflow cắt mất menu thả xuống) thành tấm ở cuối màn hình */
+    #dlMenu { position:fixed; top:auto; left:8px; right:8px; bottom:calc(64px + env(safe-area-inset-bottom)); width:auto; }
+    #dlMenu button { padding:10px; }
+    #settings { grid-template-columns:minmax(0,1fr); padding:10px 8px; }
+    #pvtab { display:block; overflow-x:auto; }
+    #settings select, #settings input:not([type=checkbox]), #settings textarea { min-width:0; max-width:100%; }
+    #gloss, #docs { padding:8px; }
+    #gFind { width:100%; order:9; }
+    #gwrap, #dwrap { max-height:60vh; }
+    .stack { padding:8px 6px 72px; gap:8px; }   /* chừa chỗ cho thanh xem ở đáy */
+    /* Thanh xem: trải hết đáy màn hình, cuộn ngang nếu chật */
+    #viewbar { left:8px; right:8px; bottom:calc(8px + env(safe-area-inset-bottom)); overflow-x:auto; scrollbar-width:none; justify-content:flex-start; }
+    #viewbar::-webkit-scrollbar { display:none; }
+    #viewbar > * { flex:none; }
+    #zoomWho { display:none; }
+    /* Thanh bôi đen: ghim ở đáy (trên thanh xem) — đặt cạnh chữ thì đè lên tay kéo chọn và menu Sao chép của hệ điều hành */
+    #selbar { left:8px !important; right:8px; top:auto !important; bottom:calc(60px + env(safe-area-inset-bottom));
+              overflow-x:auto; scrollbar-width:none; z-index:21; }
+    #selbar::-webkit-scrollbar { display:none; }
+    #rtPop { width:auto; left:8px !important; right:8px; top:auto !important; bottom:calc(8px + env(safe-area-inset-bottom)); max-height:80dvh; overflow:auto; }
+    #chat { height:100dvh; }
+    .chead { padding:6px 8px; }
+    .tabs button { padding:6px 8px; }
+    #msgs { padding:8px; }
+    .msg.me { max-width:92%; }
+    #ask { padding:6px; padding-bottom:calc(6px + env(safe-area-inset-bottom)); }
+    #toBottom { bottom:120px; }
+  }
 </style>
 </head>
 <body>
 <header>
   <h1>📄 VietPaper <small style="font-weight:normal;opacity:.7">– dịch bài báo sang tiếng Việt</small></h1>
+  <div class="hbtns">
   <button id="themeBtn" title="Giao diện: tự động / sáng / tối">🌓</button>
   <button id="btnDocs" title="Tài liệu đã tải lên trước đây (lưu trên máy, khởi động lại app vẫn còn)">📚 Tài liệu</button>
   <input type="file" id="file" accept="application/pdf">
@@ -316,6 +378,7 @@
   <button id="btnChat" disabled>💬 Hỏi về tài liệu</button>
   <button id="btnNotes" disabled>📝 Ghi chú</button>
   <button id="btnSet">⚙️ Cấu hình</button>
+  </div>
   <span id="status">Chưa mở file</span>
 </header>
 <div class="bar"><div id="bar"></div></div>
@@ -540,8 +603,8 @@
   <button id="linkScroll" title="Cuộn cùng nhau: cuộn một bản thì bản kia theo tới cùng trang (mặc định tắt — hai bản cuộn độc lập)">🔗</button>
   <span class="sep"></span>
   <button id="skipMode" title="Bấm vào đoạn trên trang để đánh dấu / bỏ đánh dấu KHÔNG DỊCH (bản dịch giữ nguyên chữ gốc). Bấm lại nút này để thôi">⛔ Chọn đoạn</button>
-  <span class="sep"></span>
-  <span class="hint" title="Giữ phím ⌥ Option / Alt và rê chuột trên trang để soi chữ nhỏ; ⌥ + lăn chuột: đổi độ phóng">⌥ kính lúp</span>
+  <span class="sep desk"></span>
+  <span class="hint desk" title="Giữ phím ⌥ Option / Alt và rê chuột trên trang để soi chữ nhỏ; ⌥ + lăn chuột: đổi độ phóng">⌥ kính lúp</span>
 </div>
 <div id="lens" hidden></div>
 

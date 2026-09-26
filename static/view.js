@@ -15,7 +15,8 @@ const save = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const pane = { original: $("paneO"), translated: $("paneT") };
 const ZKEY = { original: "view_zoom_o", translated: "view_zoom_t" };
-let mode = load("view_mode", "both");        // "both" | "original" | "translated"
+// "both" | "original" | "translated"; điện thoại dọc chia đôi thì mỗi bản chỉ còn nửa màn hình → mặc định chỉ bản dịch
+let mode = load("view_mode", matchMedia("(max-width:700px)").matches ? "translated" : "both");
 const zoom = {};
 for (const k of KINDS) zoom[k] = clamp(parseFloat(load(ZKEY[k], load("view_zoom", "1"))) || 1, Z_MIN, Z_MAX);
 let split = clamp(parseFloat(load("view_split", "0.5")) || 0.5, 0.2, 0.8);
@@ -113,7 +114,50 @@ window.addEventListener("wheel", e => {
   setActive(p.dataset.kind);
   setZoom(p.dataset.kind, zoom[p.dataset.kind] * Math.exp(-e.deltaY * (e.deltaMode ? 0.05 : 0.004)), { x: e.clientX, y: e.clientY });
 }, { passive: false });
-window.addEventListener("resize", () => relayout());
+// Điện thoại: bàn phím bật/tắt, thanh địa chỉ co giãn chỉ đổi chiều cao → chỉ đặt lại chiều cao khung, không neo lại
+// chỗ đọc (neo theo giữa khung mà giữa khung dời đi thì trang bị kéo giật theo)
+let lastW = innerWidth;
+window.addEventListener("resize", () => {
+  if (innerWidth !== lastW) { lastW = innerWidth; relayout(); return; }
+  const top = document.querySelector("header").offsetHeight + (document.querySelector(".bar")?.offsetHeight || 0);
+  $("cols").style.setProperty("--paneh", Math.max(200, innerHeight - top) + "px");
+});
+
+// ---------------- Chụm hai ngón (màn cảm ứng): thu phóng khung dưới tay, quanh điểm giữa hai ngón
+// Trong lúc chụm chỉ phóng tạm cả cột trang bằng transform (GPU, không dựng lại gì); thả tay mới đặt zoom thật —
+// đổi bề rộng trang ở mỗi nhịp touchmove thì mọi lớp chữ co giãn lại theo, giật thấy rõ.
+let pinch = null;
+const tdist = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+for (const k of KINDS) {
+  const stack = pane[k].querySelector(".stack");
+  pane[k].addEventListener("touchstart", e => {
+    if (e.touches.length !== 2) return;
+    const [a, b] = e.touches, sr = stack.getBoundingClientRect();
+    const c = { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
+    pinch = { k, stack, c, d0: tdist(a, b) || 1, s: 1 };
+    setActive(k);
+    stack.style.transformOrigin = `${c.x - sr.left}px ${c.y - sr.top}px`;
+    stack.style.willChange = "transform";
+  }, { passive: true });
+  pane[k].addEventListener("touchmove", e => {
+    if (!pinch || pinch.k !== k || e.touches.length !== 2) return;
+    e.preventDefault();
+    const z = clamp(zoom[k] * tdist(e.touches[0], e.touches[1]) / pinch.d0, Z_MIN, Z_MAX);
+    pinch.s = z / zoom[k];
+    stack.style.transform = `scale(${pinch.s})`;
+  }, { passive: false });
+  const end = e => {
+    if (!pinch || pinch.k !== k || e.touches.length >= 2) return;
+    const { s, c } = pinch;
+    pinch = null;
+    stack.style.transform = stack.style.transformOrigin = stack.style.willChange = "";
+    if (Math.abs(s - 1) > 0.02) setZoom(k, zoom[k] * s, c);
+  };
+  pane[k].addEventListener("touchend", end);
+  pane[k].addEventListener("touchcancel", end);
+}
+// Safari iOS vẫn phóng cả trang web bằng cử chỉ riêng của nó dù đã có touch-action
+document.addEventListener("gesturestart", e => { if (e.target.closest?.(".vpane")) e.preventDefault(); });
 new ResizeObserver(() => relayout()).observe(document.querySelector("header"));   // thanh trên cùng xuống dòng
 
 // ---------------- Cuộn cùng nhau (🔗, mặc định tắt): chỉ khung đang dùng kéo khung kia theo — không vòng lặp
