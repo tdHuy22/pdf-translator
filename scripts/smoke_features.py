@@ -6,6 +6,8 @@ lưu xuống đĩa rồi mở lại sau khi khởi động lại app (dùng thư
 
 In ✓/✗ cho từng mục; dùng sau khi sửa app.py để biết có làm hỏng đường nào không."""
 import asyncio
+import contextlib
+import io
 import json
 import pathlib
 import re
@@ -569,6 +571,59 @@ m = A.model_meta({"id": "a/b:free", "context_length": 262144, "architecture": {"
 m2 = A.model_meta({"id": "local"})
 ok(m == {"id": "a/b:free", "name": "", "ctx": 262144, "vision": True, "free": True} and m2["vision"] is None and m2["free"] is None,
    "thông tin model: OpenRouter có ctx/ảnh/free, server khác để trống (không đoán)")
+
+print("10. Dịch hàng loạt bằng dòng lệnh (scripts/batch_translate.py)")
+sys.path.insert(0, str(ROOT / "scripts"))
+import batch_translate as BT  # noqa: E402
+
+
+async def batch(*argv):
+    """Chạy như dòng lệnh, nhưng gọi thẳng app trong tiến trình này (kho tạm) thay vì app đang chạy ở cổng 8000."""
+    ap_args = BT.argparse.Namespace(paths=[str(ROOT / "data/gqa.pdf")], pages="", force=False, out=str(outdir),
+                                    format=["translated"], jobs=2, span=2, model="", base_url="", translator="",
+                                    config="", set=["base_url=http://x/v1", "model=m", "ocr_mode=off",
+                                                    "google_fallback=false", "formula_ocr=off"], effective={})
+    for kv in argv:
+        k, v = kv.split("=", 1)
+        setattr(ap_args, k, v.split(",") if k == "format" else [v] if k == "set" else v)
+    async with A.httpx.AsyncClient(transport=A.httpx.ASGITransport(app=A.app), base_url="http://t",
+                                   timeout=None) as c:
+        cfg = await BT.build_config(c, ap_args)
+        with contextlib.redirect_stdout(io.StringIO()) as log:
+            err = await BT.translate_doc(c, pathlib.Path(ap_args.paths[0]), cfg, ap_args)
+        pdf = pathlib.Path(ap_args.paths[0])   # tải lên lần nữa = lấy lại đúng tài liệu (cùng sha256)
+        doc = (await c.post("/api/upload", files={"file": (pdf.name, pdf.read_bytes(), "application/pdf")})).json()["id"]
+        done = (await c.get(f"/api/{doc}/state")).json()["done"]
+    return err, done, log.getvalue()
+
+
+outdir = A.store.ROOT / "batch-out"
+err, done, log = asyncio.run(batch("pages=1-2"))
+ok(err == 0 and done == [0, 1] and (outdir / "gqa_vi.pdf").exists(), "dịch dải trang, lưu bản dịch cạnh --out")
+err, done, log = asyncio.run(batch("pages=1-3", "format=translated,dual-alt"))
+ok(err == 0 and done == [0, 1, 2] and "2 trang đã dịch từ trước, cần dịch 1" in log and (outdir / "gqa_song_ngu_xen_trang.pdf").exists(),
+   "chạy lại: chỉ dịch trang còn thiếu (app nhận ra file đã tải lên), tải thêm bản song ngữ")
+try:
+    asyncio.run(batch("set=modle=x"))
+    ok(False, "gõ nhầm tên trường cấu hình phải báo lỗi")
+except SystemExit as e:
+    ok("modle" in str(e), "gõ nhầm tên trường cấu hình → báo lỗi, không lặng lẽ bỏ qua")
+ok(BT.parse_range("2-3,5", 6) == [1, 2, 4] and BT.parse_range("5-", 6) == [4, 5] and BT.parse_range("", 2) == [0, 1],
+   "dải trang: 2-3,5 / 5- / rỗng")
+
+print("11. Số dòng ở lề (bản nộp ICLR/ACL: 000, 001… cả hai lề)")
+ln = pymupdf.open()
+ln.insert_pdf(pymupdf.open(ROOT / "data/bert.pdf"), from_page=2, to_page=2)
+pg = ln[0]
+xs = [b["bbox"] for b in pg.get_text("dict")["blocks"] if b.get("lines")]
+L, R, y, k = min(b[0] for b in xs), max(b[2] for b in xs), 80.0, 54
+while y < pg.rect.height - 60:
+    for x in (L - 24, R + 10):
+        pg.insert_text((x, y), f"{k:03d}", fontsize=7, fontname="tiro", color=(0.5, 0.5, 0.5))
+    y, k = y + 10.9, k + 1
+got = A.extract_blocks(pg)
+ok(got and not any(re.search(r"(?<![\d.])0\d\d(?![\d.])", b["text"]) for b in got),
+   "số dòng ở lề không lẫn vào đoạn nào, không thành đoạn riêng để dịch")
 
 print("\nTẤT CẢ ĐỀU ĐẠT" if not FAIL else f"\n{len(FAIL)} MỤC SAI: " + "; ".join(FAIL))
 sys.exit(1 if FAIL else 0)
