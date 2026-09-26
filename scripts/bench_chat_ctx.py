@@ -14,9 +14,11 @@ Model mặc định đọc được ảnh nên chế độ Tự động gửi �
 Kết quả ghi vào bench/results/chat-ctx-<model>-<thời gian>.json sau mỗi lượt; huỷ giữa chừng thì chạy tiếp bằng
     .venv/bin/python scripts/bench_chat_ctx.py --resume bench/results/chat-ctx-….json"""
 import argparse
+import atexit
 import json
 import pathlib
 import re
+import shutil
 import sys
 import tempfile
 import time
@@ -45,6 +47,7 @@ ap.add_argument("--resume", default="", help="file kết quả dở (bench/resul
 args = ap.parse_args()
 
 A.store.ROOT = pathlib.Path(tempfile.mkdtemp(prefix="vietpaper-bench-chat-"))
+atexit.register(shutil.rmtree, A.store.ROOT, ignore_errors=True)   # xoá khi thoát, không để sót thư mục tạm
 A.load_keys()
 if args.budget:
     A.CHAT_BUDGET = args.budget

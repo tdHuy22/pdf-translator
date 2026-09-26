@@ -11,10 +11,12 @@ vài cụm chấp nhận được. Đáp án là đoạn LIỀN nhỏ nhất ở
 chữ khác vào giữa thì đáp án gồm luôn chữ đó: "perform future" → "thực hiện các lời gọi công cụ sau này").
 """
 import argparse
+import atexit
 import json
 import pathlib
 import random
 import re
+import shutil
 import sys
 import tempfile
 import time
@@ -87,6 +89,7 @@ def run_gold(args, cfg):
     """Chấm theo đáp án: đúng (trùng một đáp án), một phần (chồng lên đáp án), sai (không chồng), không tìm thấy."""
     A.store.ROOT = pathlib.Path(tempfile.mkdtemp(prefix="bench-align-"))   # tài liệu trống tạm, bị dừng giữa chừng
     #                                                                      cũng không để sót vào data/docs
+    atexit.register(shutil.rmtree, A.store.ROOT, ignore_errors=True)       # …và xoá khi thoát
     if not A.is_self_hosted(cfg["base_url"]):
         A.wait_for = lambda c, max_out: 60.0      # model free treo thì bỏ sau 60 s (app mặc định chờ 15 phút)
     cases = json.loads(pathlib.Path(args.gold).read_text("utf-8"))

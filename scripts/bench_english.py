@@ -9,10 +9,12 @@ embedding, softmax… — nằm trong bảng thuật ngữ) không tính.
 Chạy trong kho tạm (không đụng data/docs, data/user_terms.json). Mặc định OpenRouter free (dots-3-note-preview).
 """
 import argparse
+import atexit
 import collections
 import json
 import pathlib
 import re
+import shutil
 import sys
 import tempfile
 import time
@@ -59,6 +61,7 @@ def score(run: dict) -> dict:
 def run_once(args) -> dict:
     from fastapi.testclient import TestClient
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="vietpaper-english-"))
+    atexit.register(shutil.rmtree, tmp, ignore_errors=True)     # xoá khi thoát (~10 MB mỗi lượt)
     A.store.ROOT, A.USER_TERMS_FILE, A._uterms = tmp, tmp / "user_terms.json", {}
     keys = json.loads((ROOT / "data" / "keys.json").read_text())
     A.KEYS_FILE = tmp / "keys.json"

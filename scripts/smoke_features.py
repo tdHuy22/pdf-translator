@@ -6,11 +6,13 @@ lưu xuống đĩa rồi mở lại sau khi khởi động lại app (dùng thư
 
 In ✓/✗ cho từng mục; dùng sau khi sửa app.py để biết có làm hỏng đường nào không."""
 import asyncio
+import atexit
 import contextlib
 import io
 import json
 import pathlib
 import re
+import shutil
 import sys
 import tempfile
 
@@ -24,6 +26,7 @@ import app as A
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 A.store.ROOT = pathlib.Path(tempfile.mkdtemp(prefix="vietpaper-smoke-"))
+atexit.register(shutil.rmtree, A.store.ROOT, ignore_errors=True)   # xoá khi thoát, không để sót thư mục tạm
 A.KEYS_FILE, A._keys = A.store.ROOT / "keys.json", {}   # không đụng key thật trong data/keys.json
 A.USER_TERMS_FILE = A.store.ROOT / "user_terms.json"    # …và thuật ngữ người dùng đã dạy (data/user_terms.json)
 A.PROVIDERS_FILE = A.store.ROOT / "providers.json"      # …và nhà cung cấp người dùng đã lưu (data/providers.json)
