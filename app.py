@@ -1725,25 +1725,34 @@ def background_color(page: pymupdf.Page, rect: pymupdf.Rect) -> tuple:
 
 # ---------------------------------------------------------------- Fonts
 SYS = "/System/Library/Fonts/Supplemental"
+LIB = "/usr/share/fonts/truetype/liberation"   # Linux (server TUF): Liberation cùng độ rộng chữ với Times/Arial/Courier
 FONT_DIR = BASE / "fonts"
+
+
+def sys_font(mac: str, liberation: str | None = None) -> dict[str, str]:
+    """Font hệ thống của macOS; máy không có (Linux) thì bản Liberation cùng độ rộng chữ nếu có, không thì font
+    bị ẩn (font_available)."""
+    if liberation and not Path(f"{SYS}/{mac}.ttf").exists():
+        return {k: f"{LIB}/Liberation{liberation}-{v}.ttf" for k, v in
+                {"regular": "Regular", "bold": "Bold", "italic": "Italic", "bolditalic": "BoldItalic"}.items()}
+    return {k: f"{SYS}/{mac}{v}.ttf" for k, v in
+            {"regular": "", "bold": " Bold", "italic": " Italic", "bolditalic": " Bold Italic"}.items()}
+
+
 # tên -> (loại, {kiểu: đường dẫn}); thứ tự trong mỗi loại = thứ tự ưu tiên khi "auto"
 FONTS: dict[str, tuple[str, dict[str, str]]] = {
     "Source Serif 4": ("serif", {k: str(FONT_DIR / f"SourceSerif4-{v}.ttf") for k, v in
                                  {"regular": "Regular", "bold": "Bold", "italic": "It", "bolditalic": "BoldIt"}.items()}),
     "Noto Serif": ("serif", {k: str(FONT_DIR / f"NotoSerif-{v}.ttf") for k, v in
                              {"regular": "Regular", "bold": "Bold", "italic": "Italic", "bolditalic": "BoldItalic"}.items()}),
-    "Times New Roman": ("serif", {k: f"{SYS}/Times New Roman{v}.ttf" for k, v in
-                                  {"regular": "", "bold": " Bold", "italic": " Italic", "bolditalic": " Bold Italic"}.items()}),
-    "Georgia": ("serif", {k: f"{SYS}/Georgia{v}.ttf" for k, v in
-                          {"regular": "", "bold": " Bold", "italic": " Italic", "bolditalic": " Bold Italic"}.items()}),
+    "Times New Roman": ("serif", sys_font("Times New Roman", "Serif")),
+    "Georgia": ("serif", sys_font("Georgia")),
     "Be Vietnam Pro": ("sans", {k: str(FONT_DIR / f"BeVietnamPro-{v}.ttf") for k, v in
                                 {"regular": "Regular", "bold": "SemiBold", "italic": "Italic", "bolditalic": "SemiBoldItalic"}.items()}),
     "Noto Sans": ("sans", {k: str(FONT_DIR / f"NotoSans-{v}.ttf") for k, v in
                            {"regular": "Regular", "bold": "Bold", "italic": "Italic", "bolditalic": "BoldItalic"}.items()}),
-    "Arial": ("sans", {k: f"{SYS}/Arial{v}.ttf" for k, v in
-                       {"regular": "", "bold": " Bold", "italic": " Italic", "bolditalic": " Bold Italic"}.items()}),
-    "Courier New": ("mono", {k: f"{SYS}/Courier New{v}.ttf" for k, v in
-                             {"regular": "", "bold": " Bold", "italic": " Italic", "bolditalic": " Bold Italic"}.items()}),
+    "Arial": ("sans", sys_font("Arial", "Sans")),
+    "Courier New": ("mono", sys_font("Courier New", "Mono")),
 }
 GENERIC = {"serif": "serif", "sans": "sans-serif", "mono": "monospace"}
 
@@ -5285,4 +5294,6 @@ app.mount("/", NoCache(directory=BASE / "static", html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    # HOST/PORT: mặc định chỉ máy này mở được; server TUF chạy HOST=192.168.1.10 cho máy trong mạng nhà (app không
+    # có đăng nhập nên đừng dùng 0.0.0.0)
+    uvicorn.run(app, host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", "8000")))

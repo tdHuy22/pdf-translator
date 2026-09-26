@@ -4,8 +4,8 @@
 #   ./restart.sh start|stop|status
 #   ./restart.sh logs       xem log đang chạy (Ctrl-C để thoát)
 cd "$(dirname "$0")" || exit 1
-PORT=8000
-URL="http://127.0.0.1:$PORT"
+PORT=${PORT:-8000}                     # HOST/PORT giống app.py (mặc định 127.0.0.1:8000)
+URL="http://${HOST:-127.0.0.1}:$PORT"
 LOG=app.log
 
 # PID của app: tiến trình đang nghe cổng 8000 và đúng là python chạy app.py (không đụng tiến trình khác)
