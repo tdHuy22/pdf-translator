@@ -266,8 +266,14 @@ def is_self_hosted(url: str) -> bool:
 # Tham số tuỳ chọn mà một (url, model) từ chối — đã hỏi lại không có nó và được, nên lần sau khỏi gửi:
 # - "temperature": model suy nghĩ của OpenAI chỉ nhận giá trị mặc định (đo 24/09/2026: gpt-6-luna qua proxy ChatGPT OAuth
 #   trả 500 "Bad Request" khi có temperature, còn stream thì trả 200 rồi ngắt kết nối; gpt-5.6-terra thì nhận).
-# - "reasoning": model trên OpenRouter bắt buộc suy nghĩ thì báo lỗi khi bị tắt.
+# - "reasoning": model trên OpenRouter bắt buộc suy nghĩ thì báo lỗi khi bị tắt → "reasoning:min" = xin mức suy nghĩ
+#   thấp nhất (REASONING_MIN); mức đó cũng bị từ chối thì "reasoning" = bỏ hẳn tham số.
 _REFUSED: dict[tuple[str, str], set[str]] = {}
+# Model bắt buộc suy nghĩ: OpenRouter trả 400 "Reasoning is mandatory for this endpoint and cannot be disabled" khi bị
+# tắt (stealth/space-bunny-alpha, 03/10/2026). Bỏ hẳn tham số thì model nghĩ hết mức — một trang 14 đoạn của BERT:
+# 4.142 token / 42 s, phần nghĩ ăn hết trần token nên JSON bị cắt, chỉ 5/14 đoạn được dịch; xin mức thấp nhất thì
+# 1.906 token / 14 s, đủ 14/14.
+REASONING_MIN = {"effort": "minimal"}
 
 
 def refused_param(body: dict, status: int, text: str) -> str | None:
@@ -284,6 +290,16 @@ def refused_param(body: dict, status: int, text: str) -> str | None:
     return None
 
 
+def relax(body: dict, k: str) -> str:
+    """Nới tham số bị từ chối (refused_param) để hỏi lại; trả tên cần nhớ trong _REFUSED. `reasoning` (tắt suy nghĩ)
+    lùi về mức suy nghĩ thấp nhất trước, không được nữa mới bỏ hẳn."""
+    if k == "reasoning" and body.get("reasoning") != REASONING_MIN:
+        body["reasoning"] = dict(REASONING_MIN)
+        return "reasoning:min"
+    body.pop(k, None)
+    return k
+
+
 def no_think(cfg: "Config", base_url: str, body: dict) -> dict:
     """Tắt chế độ suy nghĩ: server tự host (Ollama/llama.cpp/LM Studio) bằng reasoning_effort/chat_template_kwargs,
     OpenRouter bằng `reasoning` (phần lớn model free là model suy nghĩ: để nguyên thì phần nghĩ ăn hết trần token —
@@ -293,7 +309,10 @@ def no_think(cfg: "Config", base_url: str, body: dict) -> dict:
         body["chat_template_kwargs"] = {"enable_thinking": False}  # llama.cpp / vLLM (Qwen3, Qwen3.5…)
     elif cfg.disable_thinking and "openrouter.ai" in base_url:
         body["reasoning"] = {"enabled": False}
-    for k in _REFUSED.get((base_url, body.get("model", "")), ()):
+    refused = _REFUSED.get((base_url, body.get("model", "")), set())
+    if "reasoning:min" in refused and "reasoning" in body:
+        body["reasoning"] = dict(REASONING_MIN)
+    for k in refused - {"reasoning:min"}:
         body.pop(k, None)
     return body
 
@@ -2375,10 +2394,12 @@ async def chat_json(cfg: Config, system: str, payload: dict, schema: dict, max_o
     try:
         async with httpx.AsyncClient(timeout=wait_for(cfg, max_out)) as client, llm_sem(cfg.base_url, slots):
             r = await client.post(url, headers=headers, json=body)
-            if r.status_code >= 400 and kind != "ollama" and (k := refused_param(body, r.status_code, r.text)):
-                body.pop(k)                                               # model không nhận tham số này → hỏi lại
+            for _ in range(2):        # model không nhận tham số này → nới rồi hỏi lại (reasoning: tắt → thấp nhất → bỏ)
+                if r.status_code < 400 or kind == "ollama" or not (k := refused_param(body, r.status_code, r.text)):
+                    break
+                key = relax(body, k)
                 if (r := await client.post(url, headers=headers, json=body)).status_code < 400:
-                    _REFUSED.setdefault((url, cfg.model), set()).add(k)
+                    _REFUSED.setdefault((url, cfg.model), set()).add(key)
     except httpx.HTTPError as e:
         raise LLMError(f"Không kết nối được LLM tại {url}: {e!r}")
     if r.status_code >= 400:
@@ -5187,16 +5208,15 @@ async def chat_stream(cfg: Config, system: str, messages: list[dict], num_ctx: i
         if engine and "openrouter.ai" in url:
             body["plugins"] = [{"id": "file-parser", "pdf": {"engine": engine}}]
     got = False           # đã nhận được chữ nào chưa (chưa thì hỏi lại được mà người dùng không thấy gì lạ)
-    dropped = None        # tham số đã bỏ để hỏi lại; hỏi lại được thì nhớ cho lần sau
-    for attempt in range(2):
+    dropped = []          # tham số đã nới / bỏ để hỏi lại; hỏi lại được thì nhớ cho lần sau
+    for attempt in range(3):
         try:
             async with httpx.AsyncClient(timeout=wait_for(cfg, 4096)) as client, llm_sem(cfg.base_url, slots):
                 async with client.stream("POST", url, headers=headers, json=body) as r:
                     if r.status_code >= 400:
                         text = (await r.aread()).decode(errors="replace")
-                        if not attempt and kind != "ollama" and (k := refused_param(body, r.status_code, text)):
-                            body.pop(k)                                  # model không nhận tham số này → hỏi lại
-                            dropped = k
+                        if attempt < 2 and kind != "ollama" and (k := refused_param(body, r.status_code, text)):
+                            dropped.append(relax(body, k))               # model không nhận tham số này → hỏi lại
                             continue
                         raise LLMError(f"Lỗi LLM {r.status_code}: {text[:300]}")
                     async for line in r.aiter_lines():
@@ -5220,7 +5240,7 @@ async def chat_stream(cfg: Config, system: str, messages: list[dict], num_ctx: i
                         if obj.get("done"):
                             break
             if dropped:
-                _REFUSED.setdefault((url, cfg.model), set()).add(dropped)
+                _REFUSED.setdefault((url, cfg.model), set()).update(dropped)
             return
         except httpx.HTTPError as e:
             # Proxy ChatGPT OAuth với gpt-6-luna: có temperature thì trả 200, gửi một mẩu rỗng rồi NGẮT kết nối
@@ -5229,7 +5249,7 @@ async def chat_stream(cfg: Config, system: str, messages: list[dict], num_ctx: i
             if (not attempt and not got and kind != "ollama" and "temperature" in body
                     and isinstance(e, httpx.RemoteProtocolError)):
                 body.pop("temperature")
-                dropped = "temperature"
+                dropped.append("temperature")
                 continue
             raise LLMError(f"Không kết nối được LLM tại {url}: {e!r}")
 

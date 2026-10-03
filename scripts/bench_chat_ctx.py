@@ -66,6 +66,8 @@ if args.no_see:   # model trò chuyện đọc được ảnh thì app dùng lu�
 
 
 def score(answer: str, must: list[str]) -> float:
+    # số viết kiểu LaTeX: 1{,}000{,}000 / 0{,}24 (dấu phẩy thập phân tiếng Việt), 3{.}3, 10\,000 → chữ số liền như thường
+    answer = re.sub(r"\{([,.])\}", r"\1", answer).replace("\\,", "")
     return sum(bool(re.search(p, answer, re.I)) for p in must) / len(must)
 
 

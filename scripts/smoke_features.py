@@ -182,6 +182,18 @@ with TestClient(A.app) as c:
     ok(A.refused_param(body, 500, '{"error":{"message":"Bad Request"}}') == "temperature"
        and A.refused_param(body, 400, "Reasoning is mandatory for this endpoint") == "reasoning",
        "proxy từ chối temperature / model bắt buộc suy nghĩ → bỏ đúng tham số đó rồi hỏi lại")
+    b2 = dict(body)
+    ok(A.relax(b2, "reasoning") == "reasoning:min" and b2["reasoning"] == A.REASONING_MIN
+       and A.relax(b2, "reasoning") == "reasoning" and "reasoning" not in b2 and b2["temperature"] == 0.2,
+       "model bắt buộc suy nghĩ: lùi về mức suy nghĩ thấp nhất, vẫn bị từ chối mới bỏ hẳn")
+    OR_URL = "https://openrouter.ai/api/v1/chat/completions"
+    A._REFUSED[(OR_URL, "bunny")] = {"reasoning:min"}
+    nb = A.no_think(A.Config(model="bunny"), OR_URL, {"model": "bunny"})
+    A._REFUSED[(OR_URL, "bunny")] = {"reasoning:min", "reasoning"}
+    nb2 = A.no_think(A.Config(model="bunny"), OR_URL, {"model": "bunny"})
+    A._REFUSED.pop((OR_URL, "bunny"))
+    ok(nb.get("reasoning") == A.REASONING_MIN and "reasoning" not in nb2,
+       "đã nhớ model bắt buộc suy nghĩ: lần sau xin luôn mức thấp nhất (mức đó cũng bị từ chối thì bỏ hẳn)")
 
     print("5. Khôi phục sau khi tải lại trang")
     st = c.get(f"/api/{did}/state").json()
