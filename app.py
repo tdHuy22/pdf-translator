@@ -933,7 +933,8 @@ def split_at_columns(lines: list[dict]) -> list[dict]:
 def table_cells(lines: list[dict]) -> list[list[dict]]:
     """Dòng trong vùng bảng → ô. PyMuPDF vốn tách mỗi ô thành một dòng (khối PyMuPDF thì có khi gồm cả bảng):
     gộp các mảnh sát nhau trên cùng hàng (chỉ số trên/dưới bị tách riêng), rồi nối dòng dưới vào ô phía trên khi
-    rõ là câu viết tiếp (ô nhiều chữ như ví dụ prompt): dòng trên hết bằng gạch nối, hoặc dòng trên dài và dòng
+    rõ là câu viết tiếp (ô nhiều chữ như ví dụ prompt): dòng trên hết bằng gạch nối sau chữ cái ("Ig-"; ô chỉ có "-"
+    là ô trống của bảng số liệu, không phải từ bị ngắt), hoặc dòng trên dài và dòng
     dưới bắt đầu bằng chữ thường — trừ khi hàng dưới có nhiều ô ở cột khác hơn hàng trên (dòng dưới mở đầu một hàng
     mới của bảng, vd. nhãn hàng viết thường "gender" dưới dòng tiêu đề). Các hàng của một cột cách nhau như dòng chữ
     thường nên không nối theo khoảng cách."""
@@ -975,7 +976,7 @@ def table_cells(lines: list[dict]) -> list[list[dict]]:
             if -0.3 * size < box[1] - row[3] < 0.6 * size \
                     and (abs(row[0] - box[0]) < size or min(row[2], box[2]) - max(row[0], box[0])
                          > 0.5 * min(row[2] - row[0], box[2] - box[0])) \
-                    and (c["text"].endswith("-") or t[:1].islower() and len(c["text"]) >= 25) \
+                    and (re.search(r"[^\W\d_]-$", c["text"]) or t[:1].islower() and len(c["text"]) >= 25) \
                     and mates(box, min(cx0, box[0]), max(cx1, box[2])) <= mates(row, cx0, cx1):
                 c["lines"] += ls
                 c["box"] = (min(cx0, box[0]), cy0, max(cx1, box[2]), box[3])
@@ -1083,12 +1084,14 @@ def algorithm_lines(lines: list[dict]) -> list[list[dict]]:
     return out
 
 
-def extract_blocks(page: pymupdf.Page, textpage=None) -> list[dict]:
+def extract_blocks(page: pymupdf.Page, textpage=None, regions: list[dict] | None = None) -> list[dict]:
     """Lấy các đoạn văn bản cùng vị trí, cỡ chữ, màu, đậm/nghiêng.
     Có PP-DocLayout: gom dòng theo vùng (một đoạn = một vùng, bỏ công thức/hình/số trang; bảng dịch từng ô).
-    Dòng không thuộc vùng nào, hoặc không nạp được model layout → gom theo khối của PyMuPDF như cũ."""
+    Dòng không thuộc vùng nào, hoặc không nạp được model layout → gom theo khối của PyMuPDF như cũ.
+    `regions`: vùng layout đã có của trang (page_regions) — khỏi chạy lại model."""
     lines = text_lines(page, textpage)
-    regions = detect_layout(page) if lines else None
+    if regions is None:
+        regions = detect_layout(page) if lines else None
     keep_hyphen = hyphen_rule(page.parent)
     return [b for b in (text_block(ls, g and g["label"], keep_hyphen) for ls, g in layout_groups(lines, regions)) if b]
 
@@ -4286,7 +4289,7 @@ def page_display(d: dict, n: int, page: pymupdf.Page | None = None) -> list[dict
     if ("fdisp", n) not in d:
         page = page or pymupdf.open(d["src"])[n]
         blocks = (d["blocks"].get(n) or (None, d.get(("layer", n)) or []))[1]
-        regs = detect_layout(page) if page_has_text(page) else None
+        regs = page_regions(d, n, page)
         out = []
         if regs is None:
             out = [{"bbox": tuple(r), "no": "", "text": t} for r, t in display_formulas(page, blocks)]
@@ -4313,8 +4316,17 @@ def page_layer_blocks(d: dict, n: int, page: pymupdf.Page | None = None) -> list
         return got[1]
     if ("layer", n) not in d:
         page = page or pymupdf.open(d["src"])[n]
-        d["layer", n] = extract_blocks(page) if page_has_text(page) else []
+        d["layer", n] = extract_blocks(page, regions=page_regions(d, n, page)) if page_has_text(page) else []
     return d["layer", n]
+
+
+def page_regions(d: dict, n: int, page: pymupdf.Page | None = None) -> list[dict] | None:
+    """Vùng layout của trang n, một lần cho mỗi trang (~0,8 giây/trang trên CPU), dùng chung cho công thức, bảng và
+    lớp chữ. Trang không có lớp chữ (scan) hay không nạp được model layout: None."""
+    if ("regions", n) not in d:
+        page = page or pymupdf.open(d["src"])[n]
+        d["regions", n] = detect_layout(page) if page_has_text(page) else None
+    return d["regions", n]
 
 
 def formula_jobs(d: dict, n: int) -> list[tuple[str, tuple, str, dict | None]]:
@@ -4452,15 +4464,345 @@ def formulas_ready(d: dict, pages: list[int], cfg: Config) -> list[asyncio.Task]
     return out
 
 
-def page_pair(d: dict, n: int, mode: str = "pair") -> str:
+def latex_missing(d: dict, pages: list[int], nos: list[str]) -> bool:
+    """Công thức đứng riêng dòng của các trang (chỉ công thức mang số hiệu `nos` nếu câu hỏi nêu số và tìm thấy) còn
+    chưa có LaTeX — tắt nhận dạng, server lỗi, kết quả không khớp glyph: chữ glyph của nó dễ lộn xộn (ma trận, phân
+    số) → nên gửi ảnh trang cho model xem ảnh."""
+    lat = d.get("flatex", {})
+    for n in pages:
+        fs = page_display(d, n)
+        named = [f for f in fs if f["no"].strip("() ") in nos] if nos else []
+        if any(not lat.get(n, {}).get(f["key"]) for f in named or fs):
+            return True
+    return False
+
+
+# ---------------- Bảng → lưới chữ
+# Khối để dịch bỏ ô chỉ có số (should_translate: không có gì để dịch), nên trước đây chữ gửi model trò chuyện chỉ có
+# tiêu đề và tên hàng của bảng, không có số liệu nào (03/10/2026: Bảng 2 bài Attention, Bảng 1 bài BERT) — hỏi về
+# bảng là phải gửi ảnh trang. Dựng lại bảng thẳng từ lớp chữ PDF trong vùng "table" của PP-DocLayout thành lưới
+# Markdown thì model chỉ đọc chữ cũng đọc đúng số liệu theo hàng/cột.
+
+_NUM_CELL = re.compile(r"[\d.,%±×^{}()*\-–—\s kKMB]+")   # ô số liệu: 84.6, 392k, 3.3 · 10^{18}, 13B, -
+
+
+def cell_text(lines: list[dict]) -> tuple[str, float, float]:
+    """Chữ một ô bảng (đủ cả số), vị trí hàng của ô (≈ tâm chữ dòng đầu, tính theo đường chân chữ: ô có số mũ cao
+    hơn ô bên cạnh 1–2pt mà vẫn cùng hàng) và cỡ chữ. Chữ nhỏ nằm cao hơn chân chữ thành ^…, thấp hơn thành _…:
+    lũy thừa "3.3 · 10^{18}" chép thẳng ra "3.3 · 1018" là sai giá trị. Ô in đậm cả ô (kết quả tốt nhất) bọc **…**."""
+    out, y, size0, bold, ink_n = [], None, 0.0, 0, 0
+    for row in rows_of(lines):
+        chars = list(heapq.merge(*[[(c, s) for s in ln["spans"] for c in s["chars"]] for ln in row],
+                                 key=lambda cs: cs[0]["origin"][0]))
+        ink = [(c, s) for c, s in chars if not c["c"].isspace()]
+        if not ink:
+            continue
+        size = max(s["size"] for _, s in ink)
+        base = collections.Counter(round(c["origin"][1], 1) for c, s in ink
+                                   if s["size"] >= 0.8 * size).most_common(1)[0][0]
+        if y is None:
+            y, size0 = base - 0.35 * size, size
+        seq, prev = [], None          # (kiểu, ký tự): "" chữ thường, "^" chỉ số trên, "_" chỉ số dưới
+        for c, s in chars:
+            if c["c"].isspace():
+                if seq and seq[-1][1] != " ":
+                    seq.append(("", " "))
+                continue
+            small, dy = s["size"] < 0.8 * size, c["origin"][1] - base
+            m = "^" if small and dy < -0.12 * size else "_" if small and dy > 0.12 * size else ""
+            if prev is not None and c["bbox"][0] - prev > 0.25 * size and seq[-1][1] != " ":
+                seq.append(("", " "))     # hai mảnh PyMuPDF tách riêng, giữa không có ký tự cách
+            seq.append((m, c["c"]))
+            prev = c["bbox"][2]
+            ink_n += 1
+            bold += span_style(s)[0]
+        text = ""
+        for m, grp in itertools.groupby(seq, key=lambda x: x[0]):
+            g = "".join(ch for _, ch in grp)
+            text += (f"{m}{{{g}}}" if len(g) > 1 else m + g) if m else g
+        out.append(text.strip())
+    text = " ".join(t for t in out if t)
+    if text and bold >= 0.9 * ink_n:
+        text = f"**{text}**"
+    return text, y or 0.0, size0
+
+
+def line_pieces(ln: dict, size: float, ok=lambda a, b: True) -> list[dict]:
+    """Dòng → các mảnh tách ở khoảng trống rộng hơn 0,4 cỡ chữ mà ok(x trái, x phải) cho tách: PyMuPDF có khi gộp ô
+    của các cột liền nhau thành một dòng ("TriQA HumanE" — khe 0,52 cỡ chữ; "69.5% 77.9% 68.7%" ở bảng Mistral —
+    0,68; khoảng cách giữa hai từ thường 0,25–0,31)."""
+    pieces, cur, last = [], [], None
+    for s in ln["spans"]:
+        for c in s["chars"]:
+            if not c["c"].isspace():
+                if last is not None and c["bbox"][0] - last > 0.4 * size and ok(last, c["bbox"][0]):
+                    pieces.append(cur)
+                    cur = []
+                last = c["bbox"][2]
+            cur.append((c, s))
+    pieces.append(cur)
+    if len(pieces) < 2:
+        return [ln]
+    out = []
+    for pc in pieces:
+        ink = [c for c, _ in pc if not c["c"].isspace()]
+        spans: list[tuple] = []
+        for c, s in pc:
+            if spans and spans[-1][0] is s:
+                spans[-1][1].append(c)
+            else:
+                spans.append((s, [c]))
+        # col_start: table_cells không gộp lại mảnh này với mảnh bên trái (như mảnh split_at_columns tách ra)
+        out.append({**ln, "bbox": (min(c["bbox"][0] for c in ink), min(c["bbox"][1] for c in ink),
+                                   max(c["bbox"][2] for c in ink), max(c["bbox"][3] for c in ink)),
+                    "spans": [{**s, "chars": cs} for s, cs in spans], "col_start": bool(out) or ln.get("col_start")})
+    return out
+
+
+def table_pieces(lines: list[dict]) -> list[dict]:
+    """Dòng trong vùng bảng → mảnh (line_pieces), chỉ tách ở khoảng trống nằm trên "kênh trống" dọc của bảng: trong
+    các dòng khác hàng đi ngang qua khoảng x đó, không quá nửa có chữ ở nửa giữa khoảng đó. Khe giữa hai cột thẳng
+    hàng qua các dòng (chỉ tiêu đề căn giữa có thể lấn vào); còn khoảng giãn của chữ căn đều (0,66 cỡ chữ ở bảng
+    DataSentinel — rộng như khe cột) nằm lung tung, các dòng khác của đoạn có chữ ngay chỗ đó."""
+    inks = [[(c["bbox"][0], c["bbox"][2]) for s in ln["spans"] for c in s["chars"] if not c["c"].isspace()]
+            for ln in lines]
+
+    def channel(k: int, a: float, b: float) -> bool:
+        y0, y1 = lines[k]["bbox"][1], lines[k]["bbox"][3]
+        cross = [j for j, ln in enumerate(lines) if j != k and ln["bbox"][0] < a and ln["bbox"][2] > b
+                 and (ln["bbox"][3] <= y0 or ln["bbox"][1] >= y1)]
+        m0, m1 = a + 0.25 * (b - a), b - 0.25 * (b - a)
+        return 2 * sum(any(x0 < m1 and x1 > m0 for x0, x1 in inks[j]) for j in cross) <= len(cross)
+
+    return [p for k, ln in enumerate(lines)
+            for p in line_pieces(ln, max(s["size"] for s in ln["spans"]), lambda a, b, k=k: channel(k, a, b))]
+
+
+def table_grid(groups: list[list[dict]], rules: list[tuple] = ()) -> tuple[list[list[str]], list[tuple], list[tuple]]:
+    """Ô bảng (các dòng của từng ô, table_cells) → (lưới hàng × cột, khung từng ô, (hàng, các cột) của từng ô).
+    `rules`: đường kẻ ngang trong bảng [(y, x0, x1)] (table_rules).
+    Hàng: các ô có vị trí hàng gần nhau. Cột: theo hàng nhiều ô nhất (hàng đủ ô của phần thân bảng; bảng thưa như
+    Bảng 3 bài Attention thì hàng "phổ biến nhất" lại là hàng có ô gộp 7 cột), ô không chạm cột nào thêm cột mới.
+    Ô mà các dòng / mảnh dòng (line_pieces) nằm ở các cột khác nhau thì tách theo cột: tiêu đề sát nhau ("TriQA" |
+    "HumanE" ở bảng Mixtral) bị PyMuPDF gộp thành một dòng, hay bị table_cells gộp làm một ô.
+    Ô có tâm nằm ở khe giữa các cột (tiêu đề "BLEU" trên EN-DE | EN-FR, giá trị gộp hai cột) hay phủ ≥ 3 cột là ô
+    gộp → chép vào mọi cột nó phủ, như read_html của pandas (chữ dài thì chỉ cột đầu); tiêu đề rộng chỉ lấn sang cột
+    bên thì tâm vẫn nằm trong cột của nó. Nhãn nhóm ở cột đầu (\\multirow: "(A)" căn giữa theo chiều dọc của cả nhóm
+    hàng giữa hai đường kẻ) → chuyển lên hàng đầu của nhóm, không thì các hàng phía trên nó trong nhóm như thuộc
+    nhóm trước. Hàng nằm sát hàng dưới mà hàng dưới còn trống đúng các cột của nó (tiêu đề hai dòng, nhãn giữa hai
+    hàng của bảng không kẻ) thì gộp vào hàng dưới; tiêu đề nhiều tầng gộp thành một hàng ("BLEU EN-DE")."""
+    def make(ls) -> tuple | None:      # (khung, vị trí hàng, cỡ chữ, chữ, các dòng)
+        text, y, sz = cell_text(ls)
+        box = (min(l["bbox"][0] for l in ls), min(l["bbox"][1] for l in ls),
+               max(l["bbox"][2] for l in ls), max(l["bbox"][3] for l in ls))
+        return (box, y, sz, text, ls) if text else None
+
+    cells = [c for c in map(make, groups) if c]
+    if len(cells) < 2:
+        return [], [], []
+    size = sorted(c[2] for c in cells)[len(cells) // 2]
+
+    def merged(spans) -> list[list[float]]:
+        out: list[list[float]] = []
+        for x0, x1 in sorted(spans):
+            if out and x0 < out[-1][1]:
+                out[-1][1] = max(out[-1][1], x1)
+            else:
+                out.append([x0, x1])
+        return out
+
+    def over(b, c) -> float:
+        return min(b[2], c[1]) - max(b[0], c[0])
+
+    def layout(cells) -> tuple[list[list], list[list[float]]]:
+        rows: list[list] = []                 # [vị trí hàng, [số thứ tự ô]]
+        for i in sorted(range(len(cells)), key=lambda i: cells[i][1]):
+            if rows and abs(cells[i][1] - rows[-1][0]) < 0.4 * size:
+                rows[-1][1].append(i)
+            else:
+                rows.append([cells[i][1], [i]])
+        full = max(len(ids) for _, ids in rows)
+        cols = merged((cells[i][0][0], cells[i][0][2]) for _, ids in rows if len(ids) == full for i in ids)
+        # Ô không chạm cột nào: cột chỉ có ở các hàng thưa → thêm cột. Riêng ô đứng một mình trong khe giữa hai cột
+        # (tiêu đề "NER" trên Fine-tune | Feature-based) là ô gộp hai cột đó, không phải cột mới
+        lone = [i for i in range(len(cells)) if not any(over(cells[i][0], c) > 0 for c in cols)]
+        new = [cells[i][0] for i in lone
+               if any(over(cells[j][0], (cells[i][0][0], cells[i][0][2])) > 0 for j in lone if j != i)
+               or not any(a[1] <= cells[i][0][0] and cells[i][0][2] <= b[0] for a, b in zip(cols, cols[1:]))]
+        if new:
+            cols = merged([tuple(c) for c in cols] + [(b[0], b[2]) for b in new])
+        return rows, cols
+
+    rows, cols = layout(cells)
+
+    def owner(b) -> int | None:        # cột duy nhất chứa tâm của khung
+        ks = [k for k, c in enumerate(cols) if c[0] <= (b[0] + b[2]) / 2 <= c[1]]
+        return ks[0] if len(ks) == 1 else None
+
+    split = []
+    for c in cells:
+        parts = [p for ln in c[4] for p in line_pieces(ln, c[2])]
+        own = [owner(p["bbox"]) for p in parts]
+        if len(parts) > 1 and None not in own and len(set(own)) > 1:
+            split += [x for k in sorted(set(own)) if (x := make([p for p, o in zip(parts, own) if o == k]))]
+        else:
+            split.append(c)
+    if len(split) != len(cells):
+        cells = split
+        rows, cols = layout(cells)
+
+    ys = sorted(y for y, x0, x1 in rules if x0 < cols[0][1] and x1 > cols[0][0])   # đường kẻ phủ cột đầu
+    head = next((r for r in ys if r > rows[0][0]), None)   # hàng tiêu đề: trên đường kẻ đầu tiên dưới hàng đầu
+    wide = cols[-1][1] - cols[0][0]
+    row_of = {i: ids for _, ids in rows for i in ids}
+    row_idx = {i: r for r, (_, ids) in enumerate(rows) for i in ids}
+
+    def spread(i) -> list[int]:
+        b = cells[i][0]
+        mid = (b[0] + b[2]) / 2
+        # ô tiêu đề có nét kẻ ngắn sát ngay dưới (\\cmidrule dưới tiêu đề nhóm "French" trên Arc-c | HellaS | MMLU):
+        # ô phủ đúng các cột nằm trong đoạn kẻ. Nét kẻ gần hết bề rộng bảng là \\midrule dưới hàng tiêu đề, không
+        # tính; nét kẻ ngắn trong thân bảng (\\cline giữa các nhóm hàng), hay nét kẻ chung cho nhiều ô cùng hàng (bảng
+        # kẻ ô: nét dưới hàng tên model phủ cả sáu cột của ba model) cũng không
+        under = [(x0, x1) for y, x0, x1 in rules if head is not None and cells[i][1] < head
+                 and b[3] - 1 <= y <= b[3] + 0.6 * size and x0 - 2 <= mid <= x1 + 2 and b[2] - b[0] + 4 < x1 - x0 < 0.85 * wide
+                 and not any(j != i and x0 <= (cells[j][0][0] + cells[j][0][2]) / 2 <= x1 for j in row_of[i])]
+        if under:
+            x0, x1 = min(under, key=lambda r: r[1] - r[0])
+            span = [k for k, c in enumerate(cols) if x0 - 1 <= (c[0] + c[1]) / 2 <= x1 + 1]
+            if len(span) >= 2:
+                return span
+        # tiêu đề nhóm không kẻ ("French" | "German" ở bảng Mixtral): hàng tiêu đề ngay dưới có ≥ 2 ô nằm trong vùng của
+        # ô (biên ở giữa khoảng trống tới ô bên cạnh; phía không có ô bên cạnh thì lấy đối xứng qua tâm ô) và ô nằm
+        # giữa các ô con đó → phủ đúng các cột của chúng. Tiêu đề hai dòng xếp chồng ("Active" / "Params") không có
+        # hai ô con cân hai bên nên không tính
+        r = row_idx[i]
+        if head is not None and cells[i][1] < head and r + 1 < len(rows) and rows[r + 1][0] < head:
+            mates = sorted(rows[r][1], key=lambda j: cells[j][0][0])
+            k = mates.index(i)
+            lo = (cells[mates[k - 1]][0][2] + b[0]) / 2 if k else None
+            hi = (b[2] + cells[mates[k + 1]][0][0]) / 2 if k + 1 < len(mates) else None
+            if lo is not None or hi is not None:
+                lo, hi = (lo if lo is not None else 2 * mid - hi), (hi if hi is not None else 2 * mid - lo)
+                subs = [cells[j][0] for j in rows[r + 1][1] if lo <= (cells[j][0][0] + cells[j][0][2]) / 2 <= hi]
+                u0, u1 = min((s[0] for s in subs), default=0), max((s[2] for s in subs), default=0)
+                if len(subs) >= 2 and abs((u0 + u1) / 2 - mid) < 0.15 * (u1 - u0):
+                    span = [k for k, c in enumerate(cols) if u0 - 1 <= (c[0] + c[1]) / 2 <= u1 + 1]
+                    if len(span) >= 2:
+                        return span
+        hit = [k for k, c in enumerate(cols) if over(b, c) > 0]
+        if not hit:                    # nằm trong khe giữa hai cột: ô gộp hai cột đó; không thì cột gần nhất
+            gap = [k for k in range(len(cols) - 1) if cols[k][1] <= b[0] and b[2] <= cols[k + 1][0]]
+            return [gap[0], gap[0] + 1] if gap else \
+                [min(range(len(cols)), key=lambda k: abs((cols[k][0] + cols[k][1]) / 2 - mid))]
+        inside = [k for k in hit if cols[k][0] <= mid <= cols[k][1]]
+        return inside if len(hit) == 2 and inside else hit
+
+    placed = [[y, [(i, spread(i)) for i in sorted(ids, key=lambda i: cells[i][0][0])]] for y, ids in rows]
+    bands = collections.defaultdict(list)     # nhóm hàng giữa hai đường kẻ
+    for k, (y, _) in enumerate(placed):
+        bands[sum(r < y for r in ys)].append(k)
+    for ks in bands.values() if ys else ():
+        lab = [k for k in ks if any(0 in h for _, h in placed[k][1])]
+        if len(lab) != 1:
+            continue
+        k = lab[0]
+        rest = [j for j in ks if j != k] if all(h == [0] for _, h in placed[k][1]) else ks
+        if len(rest) >= 2 and rest[0] != k \
+                and abs(placed[k][0] - (placed[rest[0]][0] + placed[rest[-1]][0]) / 2) < 0.5 * size:
+            moved = [it for it in placed[k][1] if 0 in it[1]]
+            placed[k][1] = [it for it in placed[k][1] if 0 not in it[1]]
+            placed[rest[0]][1][:0] = moved
+    placed = [p for p in placed if p[1]]
+    kept = []
+    for k, (y, items) in enumerate(placed):
+        nxt = placed[k + 1] if k + 1 < len(placed) else None
+        if nxt and nxt[0] - y < 0.9 * size and not {c for _, h in items for c in h} & {c for _, h in nxt[1] for c in h}:
+            nxt[1][:0] = items
+            continue
+        kept.append((y, items))
+    # Tiêu đề nhiều tầng (các hàng trước đường kẻ đầu tiên, phần thân ở dưới) → một hàng, ghép theo cột từ trên
+    # xuống: "BLEU EN-DE", "train steps", "Active Params" — mỗi cột tự đủ nghĩa. Hàng số liệu không gộp (bảng không
+    # kẻ dưới hàng tiêu đề thì đoạn trước đường kẻ đầu tiên có cả hàng thân bảng)
+    band = [sum(r < y for r in ys) for y, _ in kept]
+    top = [k for k in range(len(kept)) if band[k] == band[0]] if ys and kept else []
+    if 2 <= len(top) <= 4 and len(top) < len(kept) and not any(
+            2 * sum(bool(_NUM_CELL.fullmatch(cells[i][3].strip("*"))) for i, _ in kept[k][1]) >= len(kept[k][1])
+            for k in top[1:]):
+        kept = [(kept[0][0], [it for k in top for it in kept[k][1]])] + kept[len(top):]
+    grid, where = [], [(0, [0])] * len(cells)
+    for _, items in kept:
+        line = [""] * len(cols)
+        for i, hit in items:
+            hit = hit if len(cells[i][3]) <= 25 else hit[:1]   # ô gộp chữ dài (mô tả cả hàng): ghi một lần
+            for c in hit:
+                line[c] = f"{line[c]} {cells[i][3]}".strip()
+            where[i] = (len(grid), hit)
+        grid.append(line)
+    return grid, [c[0] for c in cells], where
+
+
+def table_markdown(rows: list[list[str]]) -> str:
+    """Lưới → bảng Markdown: bỏ hàng, cột trống; hàng đầu làm hàng tiêu đề."""
+    rows = [r for r in rows if any(r)]
+    keep = [k for k in range(len(rows[0])) if any(r[k] for r in rows)] if rows else []
+    if not keep:
+        return ""
+    out = ["| " + " | ".join(r[k].replace("|", "\\|") for k in keep) + " |" for r in rows]
+    out.insert(1, "|" + "---|" * len(keep))
+    return "\n".join(out)
+
+
+def table_rules(page: pymupdf.Page, rects: list[tuple]) -> list[list[tuple]]:
+    """Đường kẻ ngang (\\hline, booktabs: nét thẳng hay hình chữ nhật mỏng) trong từng vùng bảng: [(y, x0, x1)]."""
+    out: list[list[tuple]] = [[] for _ in rects]
+    for dr in page.get_drawings():
+        for it in dr["items"]:
+            if it[0] == "l" and abs(it[1].y - it[2].y) < 0.6:
+                (a, b), y = sorted((it[1].x, it[2].x)), it[1].y
+            elif it[0] == "re" and it[1].height < 1.5:
+                a, b, y = it[1].x0, it[1].x1, (it[1].y0 + it[1].y1) / 2
+            else:
+                continue
+            for k, (x0, y0, x1, y1) in enumerate(rects):
+                if b - a > 10 and y0 - 3 <= y <= y1 + 3 and b > x0 and a < x1:
+                    out[k].append((y, a, b))
+    return out
+
+
+def page_tables(d: dict, n: int, page: pymupdf.Page | None = None) -> list[dict]:
+    """Bảng của trang n dạng lưới chữ: [{"bbox" (vùng bảng), "rows" (lưới, xem table_grid), "cells" (khung từng ô),
+    "where" (hàng, các cột của từng ô)}], một lần cho mỗi trang. Ô tách như khi dịch (table_cells) nhưng giữ cả ô số.
+    Trang scan (không có lớp chữ), lớp chữ rác (phải OCR) hay không nạp được model layout: [] — hỏi về bảng thì gửi
+    ảnh trang."""
+    if ("ftab", n) not in d:
+        page = page or pymupdf.open(d["src"])[n]
+        out = []
+        regs = [g for g in page_regions(d, n, page) or () if g["label"] == "table"]
+        if regs and text_is_garbled(page):
+            regs = []
+        lines = text_lines(page) if regs else []
+        rules = table_rules(page, [g["bbox"] for g in regs]) if regs else []
+        for g, rl in zip(regs, rules):
+            inside = table_pieces([ln for ln in lines if _inter(ln["bbox"], g["bbox"]) >= 0.5 * _area(ln["bbox"])])
+            rows, boxes, where = table_grid(table_cells(inside), rl) if inside else ([], [], [])
+            if len(boxes) >= 2:
+                out.append({"bbox": tuple(g["bbox"]), "rows": rows, "cells": boxes, "where": where})
+        d["ftab", n] = out
+    return d["ftab", n]
+
+
+def page_pair(d: dict, n: int, mode: str = "pair", layout: bool = False) -> str:
     """Chữ của một trang để gửi LLM, ghép theo từng đoạn. `mode`: "pair" = chữ gốc kèm bản dịch tiếng Việt,
     "source" = chỉ chữ gốc (đỡ nửa số token), "translation" = chỉ bản dịch (đoạn chưa dịch thì chữ gốc).
-    Công thức ({vN} trong chữ đã trích) được thay bằng chữ của công thức đặt trong ⟦…⟧.
+    Công thức ({vN} trong chữ đã trích) được thay bằng chữ của công thức đặt trong ⟦…⟧, bảng thành lưới Markdown đủ
+    số liệu (page_tables).
     Trang chưa trích khối (chưa dịch, chưa mở lớp chữ) thì lấy thẳng chữ của trang — hỏi về trang nào cũng có nội
-    dung để LLM đọc."""
+    dung để LLM đọc; `layout` = trang câu hỏi nhắm tới: có bảng thì vẫn trích khối để dựng lưới bảng."""
     # trang scan chưa dịch nhưng đã đọc tạm cho bảng thuật ngữ (glossary_blocks) → dùng chữ đó
     blocks = (d["blocks"].get(n) or (None, d.get(("layer", n)) or d.get("gloss_ocr", {}).get(n) or []))[1]
-    if not blocks and d.get("flatex", {}).get(n):   # trang đã có LaTeX công thức: trích khối để thay đúng chỗ
+    # trang đã có LaTeX công thức / có bảng: trích khối để thay đúng chỗ
+    if not blocks and (d.get("flatex", {}).get(n) or layout and page_tables(d, n)):
         blocks = page_layer_blocks(d, n)
     if not blocks:
         return pymupdf.open(d["src"])[n].get_text().strip()
@@ -4476,8 +4818,36 @@ def page_pair(d: dict, n: int, mode: str = "pair") -> str:
                  if b["bbox"][3] <= r[1] + 2 and b["bbox"][0] < r[2] and b["bbox"][2] > r[0]]
         body = f"$${lat[f['key']]}$$" if lat.get(f["key"]) else f["text"]
         after[max(above)[1] if above else -1].append(f"[công thức{' ' + f['no'] if f['no'] else ''}] ⟦{body}⟧")
+    # bảng → lưới Markdown đủ số liệu (page_tables), đặt ở chỗ ô đầu tiên của bảng theo thứ tự đọc; các ô rời của nó
+    # (khối để dịch: không có ô số) thì bỏ. Bảng toàn số không còn khối nào → đặt dưới đoạn nằm trên nó, như công thức
+    hide, at = set(), collections.defaultdict(list)
+    for t in page_tables(d, n):
+        x0, y0, x1, y1 = t["bbox"]
+        own = [i for i, b in enumerate(blocks) if b.get("label", "table") == "table"
+               and x0 <= (b["bbox"][0] + b["bbox"][2]) / 2 <= x1 and y0 <= (b["bbox"][1] + b["bbox"][3]) / 2 <= y1]
+        rows = [r[:] for r in t["rows"]]
+        for i in own if mode != "source" else ():     # ô đã dịch: "gốc → dịch" (chế độ bản dịch: chỉ chữ dịch)
+            src, vi = untag(blocks[i]["text"]), untag(tr.get(i, ""))
+            k = max(range(len(t["cells"])), key=lambda k: _inter(t["cells"][k], blocks[i]["bbox"]))
+            if vi and vi != src and _inter(t["cells"][k], blocks[i]["bbox"]) > 0:
+                r, cs = t["where"][k]
+                for c in cs:
+                    rows[r][c] = vi if mode == "translation" else f"{rows[r][c]} → {vi}"
+        if not (grid := table_markdown(rows)):
+            continue
+        hide.update(own)
+        if own:
+            at[min(own)].append("[bảng]\n" + grid)
+        else:
+            above = [(b["bbox"][3], i) for i, b in enumerate(blocks)
+                     if b["bbox"][3] <= y0 + 2 and b["bbox"][0] < x1 and b["bbox"][2] > x0]
+            after[max(above)[1] if above else -1].append("[bảng]\n" + grid)
     parts = list(after.get(-1, []))
     for i, b in enumerate(blocks):
+        parts += at.get(i, [])
+        if i in hide:
+            parts += after.get(i, [])
+            continue
         src, vi = untag(b["text"]), untag(tr.get(i, ""))
         if b.get("formulas") and "{v" in src + vi:
             if (n, i) not in ftext:
@@ -4571,11 +4941,21 @@ _Q_FIG = re.compile(rf"(?:{_NOT_FIG}\bhình|\bfigure|\bfig\.?)\s*(\d{{1,3}})\b",
 _Q_TAB = re.compile(r"(?:\bbảng|\btable|\btab\.)\s*(\d{1,3})\b", re.I)
 _Q_EQ = re.compile(r"(?:công thức|phương trình|biểu thức|equation|eq\.?)\s*\(\s*(\d{1,3})\s*\)|(?:equation|eq\.)\s*(\d{1,3})\b",
                    re.I)
-_Q_VISUAL = re.compile(
-    r"\b(?:biểu đồ|đồ thị|sơ đồ|công thức|phương trình|ký hiệu|kí hiệu|đường cong|trục (?:x|y|hoành|tung)|"
-    r"figures?|fig|tables?|charts?|plots?|graphs?|diagrams?|equations?|eq|formulas?|axis|axes)\b"
-    rf"|(?:{_NOT_FIG}\bhình (?:vẽ|ảnh|minh hoạ|minh họa|này|trên|dưới|bên|đó|kia)\b|\btrong hình\b)"
-    r"|\bbảng (?:này|trên|dưới|đó|kết quả|số liệu|so sánh)\b|\btrong bảng\b(?! thuật ngữ)", re.I)
+# Câu hỏi về hình / bảng / công thức. Chỉ HÌNH mới cần ảnh trang (chữ trích từ PDF chỉ có chú thích của hình); bảng
+# đã là lưới chữ đủ số liệu (page_tables) và công thức đã có LaTeX (recognize_page) thì chữ là đủ, model trò chuyện
+# trả lời — ảnh chỉ khi bảng không dựng được thành chữ / công thức chưa có LaTeX. "graph" không tính là hình: trong
+# bài ML thường là đồ thị cấu trúc (knowledge graph, GNN).
+_Q_FIGURE = re.compile(
+    r"\b(?:biểu đồ|đồ thị|sơ đồ|đường cong|trục (?:x|y|hoành|tung)|figures?|fig|charts?|plots?|diagrams?|axis|axes)\b"
+    rf"|(?:{_NOT_FIG}\bhình (?:vẽ|ảnh|minh hoạ|minh họa|này|trên|dưới|bên|đó|kia)\b|\btrong hình\b)", re.I)
+_Q_TABLE = re.compile(r"\btables?\b|\bbảng (?:này|trên|dưới|đó|kết quả|số liệu|so sánh)\b|\btrong bảng\b(?! thuật ngữ)",
+                      re.I)
+_Q_FORMULA = re.compile(r"\b(?:công thức|phương trình|biểu thức|ký hiệu|kí hiệu|equations?|eq|formulas?|notation)\b",
+                        re.I)
+# Đoạn bôi đen là chú thích hình / bảng ("Figure 3: …", "Bảng 1."): hỏi về đoạn đó là hỏi về hình / bảng. Đoạn văn chỉ
+# nhắc tới hình ("as shown in Figure 3", "Table 2 summarizes…") thì không — vẫn tìm trang của hình, nhưng hỏi gì thì
+# theo câu hỏi.
+_SEL_CAPTION = re.compile(r"\s*(?:(figure|fig\.|hình)|(table|bảng))\s*\d+\s*[:.]", re.I)
 _Q_GLOBAL = re.compile(r"tóm tắt|tổng quan|tổng kết|cả bài|toàn bài|toàn bộ|cả tài liệu|đóng góp|kết luận|hạn chế|"
                        r"ý chính|nội dung chính|bài (?:này|báo) (?:nói|đề xuất|làm|giải quyết)|summar|overview|"
                        r"contribution|conclusion|limitation", re.I)
@@ -4640,7 +5020,8 @@ def equation_page(d: dict, num: str) -> int | None:
 
 def chat_plan(d: dict, ask: ChatAsk, question: str, budget: int, see: bool) -> dict:
     """Chọn nguồn ngữ cảnh cho câu hỏi. Trả về {"mode", "pages" (trang gửi chữ, quan trọng trước), "images" (trang
-    gửi ảnh), "why"}. `see` = có model xem được ảnh trang."""
+    gửi ảnh), "why"}, thêm "formula" {"pages", "nos"} khi hỏi về công thức: endpoint chờ nhận dạng công thức xong
+    rồi mới quyết có gửi ảnh không (latex_missing). `see` = có model xem được ảnh trang."""
     n_pages = d["out"].page_count
     if ask.context == "near":         # như trước 25/09/2026 (mốc so sánh cho bench): trang đang xem + lân cận
         return {"mode": "pair" if budget >= 6000 else "source", "pages": [] if ask.page is None else [ask.page],
@@ -4655,22 +5036,30 @@ def chat_plan(d: dict, ask: ChatAsk, question: str, budget: int, see: bool) -> d
             main.append(int(m[1]) - 1)
             why.append(f"câu hỏi nhắc trang {m[1]}")
     figs = [("fig", m[1]) for m in _Q_FIG.finditer(q)] + [("tab", m[1]) for m in _Q_TAB.finditer(q)]
+    tab_pages, eqs = [], []           # trang có bảng được nhắc; (số hiệu, trang) của công thức được nhắc
     for kind, num in figs:
-        if (p := caption_page(d, kind, num)) is not None and p not in main:
-            main.append(p)
-            why.append(f"{'Hình' if kind == 'fig' else 'Bảng'} {num} ở trang {p + 1}")
+        if (p := caption_page(d, kind, num)) is not None:
+            tab_pages += [p] if kind == "tab" else []
+            if p not in main:
+                main.append(p)
+                why.append(f"{'Hình' if kind == 'fig' else 'Bảng'} {num} ở trang {p + 1}")
     for m in _Q_EQ.finditer(q):
         num = m[1] or m[2]
-        if (p := equation_page(d, num)) is not None and p not in main:
-            main.append(p)
-            why.append(f"công thức ({num}) ở trang {p + 1}")
+        if (p := equation_page(d, num)) is not None:
+            eqs.append((num, p))
+            if p not in main:
+                main.append(p)
+                why.append(f"công thức ({num}) ở trang {p + 1}")
     if not main and ask.page is not None:
         main.append(ask.page)
     if ask.context == "pdf":   # cả file PDF gốc đi kèm; hỏi về bản dịch thì thêm bản dịch của trang liên quan
         trans = bool(_Q_TRANS.search(question)) or ask.side == "translated"
         return {"mode": "pdf", "pages": main if trans else [], "images": [],
                 "why": "gửi nguyên file PDF gốc" + (" + bản dịch trang liên quan" if trans else "")}
-    visual = bool(figs) or bool(_Q_VISUAL.search(q))
+    cap = _SEL_CAPTION.match(ask.selection)
+    asks_fig = bool(_Q_FIG.search(question) or _Q_FIGURE.search(question) or cap and cap[1])
+    asks_tab = bool(_Q_TAB.search(question) or _Q_TABLE.search(question) or cap and cap[2])
+    asks_eq = bool(_Q_EQ.search(question) or _Q_FORMULA.search(question))
     mode = ask.context if ask.context in CONTEXT_MODES else "auto"
     if mode == "auto":
         if _Q_GLOBAL.search(question) and not ask.selection.strip() and not figs:
@@ -4686,18 +5075,33 @@ def chat_plan(d: dict, ask: ChatAsk, question: str, budget: int, see: bool) -> d
             why.append("hỏi về bản dịch → chữ gốc + bản dịch")
         else:
             mode = "pair" if budget >= 6000 else "source"
-    images = []
-    if see and main and (ask.context == "image" or (ask.context == "auto" and visual)):
-        images = main[:2]
-        why.append("hỏi về hình/bảng/công thức → gửi ảnh trang")
-    elif ask.context == "image":
-        why.append("chưa cấu hình model xem ảnh trang → chỉ gửi chữ")
+    # Ảnh trang (model xem ảnh trả lời thay model trò chuyện) chỉ khi chữ không đủ: hỏi về hình; bảng không dựng được
+    # thành lưới chữ (trang scan, bảng là ảnh); công thức chưa có LaTeX — cái này chỉ biết sau khi chờ nhận dạng công
+    # thức, nên để lại cho endpoint ("formula": trang + số hiệu cần kiểm tra)
+    images, check = [], None
+    if ask.context == "image" or ask.context == "auto" and asks_fig:
+        if see and main:
+            images = main[:2]
+            why.append("hỏi về hình → gửi ảnh trang" if ask.context == "auto" else "chọn 🖼 Ảnh trang")
+        elif not see:
+            why.append("chưa cấu hình model xem ảnh trang → chỉ gửi chữ")
+    elif ask.context == "auto" and (asks_tab or asks_eq):
+        if asks_tab:
+            where = tab_pages or main[:2]
+            if any(page_tables(d, p) for p in where):
+                why.append("bảng gửi dạng chữ, đủ số liệu")
+            elif see and where:
+                images = where[:2]
+                why.append("bảng không đọc được thành chữ (trang scan / bảng là ảnh) → gửi ảnh trang")
+        if asks_eq and see and not images and main:
+            check = {"pages": [p for _, p in eqs] or main[:2], "nos": [num for num, _ in eqs]}
     if mode == "image":
         mode = "pair"
     rel = [p for p in related_pages(d, q) if p not in main] if mode != "full" else []
     if rel:
         why.append("trang liên quan: " + ", ".join(str(p + 1) for p in rel))
-    return {"mode": mode, "pages": main + rel, "images": images, "why": "; ".join(why)}
+    return {"mode": mode, "pages": main + rel, "images": images, "why": "; ".join(why),
+            **({"formula": check} if check else {})}
 
 
 def chat_context(d: dict, ask: ChatAsk, plan: dict, budget: int) -> tuple[str, list[int]]:
@@ -4727,7 +5131,7 @@ def chat_context(d: dict, ask: ChatAsk, plan: dict, budget: int) -> tuple[str, l
              "pdf": "bản dịch"}
     fmt = {"full": "source", "pdf": "translation"}.get(plan["mode"], plan["mode"])
     for n in order:
-        if not (text := page_pair(d, n, fmt)):
+        if not (text := page_pair(d, n, fmt, layout=n in plan["pages"])):
             continue
         if used + (t := est_tokens(text)) > budget:
             if plan["mode"] in ("full", "pdf") or n not in plan["pages"]:
@@ -4951,11 +5355,17 @@ async def doc_chat(doc_id: str, ask: ChatAsk):
     else:
         plan = await asyncio.to_thread(chat_plan, d, ask, question, budget0, see is not None)
     if plan["mode"] != "pdf":
-        # công thức → LaTeX: chờ trang chính (tối đa FORMULA_WAIT giây, lần sau đã có sẵn), các trang khác chạy nền
-        need = plan["pages"] or ([ask.page] if ask.page is not None else [])
+        # công thức → LaTeX: chờ trang chính và trang của công thức được hỏi (tối đa FORMULA_WAIT giây, lần sau đã có
+        # sẵn), các trang khác chạy nền
+        fpages = plan.get("formula", {}).get("pages", [])
+        need = list(dict.fromkeys(fpages + (plan["pages"] or ([ask.page] if ask.page is not None else []))))
         tasks = formulas_ready(d, need + (list(range(d["out"].page_count)) if plan["mode"] == "full" else []), cfg0)
         if tasks:
-            await asyncio.wait(tasks[:2], timeout=FORMULA_WAIT)
+            await asyncio.wait(tasks[:max(2, len(fpages))], timeout=FORMULA_WAIT)
+    if f := plan.pop("formula", None):   # hỏi về công thức: đã có LaTeX thì chữ là đủ, chưa có thì gửi ảnh trang
+        miss = await asyncio.to_thread(latex_missing, d, f["pages"], f["nos"])
+        plan = {**plan, "images": f["pages"][:2] if miss else [], "why": "; ".join(x for x in (
+            plan["why"], "công thức chưa có LaTeX → gửi ảnh trang" if miss else "công thức đã có LaTeX → chỉ gửi chữ") if x)}
     if plan["images"]:              # trả lời bằng model xem ảnh; ngữ cảnh chữ theo ngữ cảnh của model đó
         cfg = see
     system, history, ctx, info = await prepare(plan, cfg)

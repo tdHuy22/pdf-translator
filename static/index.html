@@ -458,6 +458,11 @@
   <label class="ocr-opt" data-engine="custom">API key <input id="ocr_custom_api_key" type="password" placeholder="(tuỳ chọn)"></label>
 
   <h3 class="sec">3. Trò chuyện về tài liệu</h3>
+  <div style="grid-column:1/-1" class="hint">Ba model, ba việc, <b>mỗi câu hỏi chỉ một model trả lời</b>:<br>
+    • <b>Model dịch</b> (mục 1): chỉ dịch. Không tự tham gia trò chuyện, trừ khi bật “Dùng đúng server/model đang dịch” ngay dưới (khi đó nó cũng là model trò chuyện).<br>
+    • <b>Model trò chuyện</b>: trả lời các câu hỏi thường, đọc chữ trích từ PDF + bản dịch.<br>
+    • <b>Model xem ảnh</b> (ô bên dưới): chỉ vào việc khi chữ không đủ — câu hỏi về <b>hình, biểu đồ, sơ đồ</b> (chữ trích từ PDF chỉ có chú thích của hình), bảng không đọc được thành chữ (trang scan), công thức chưa có LaTeX — hoặc khi bạn chọn “🖼 Ảnh trang” ở ô ngữ cảnh. Nó nhận ảnh 1–2 trang kèm chữ và <b>trả lời thay</b> model trò chuyện. Bảng thường được gửi dạng lưới chữ đủ số liệu, công thức đã chép sang LaTeX thì model trò chuyện tự đọc được. Model trò chuyện tự đọc được ảnh (OpenRouter báo 👁) thì dùng luôn nó. Model xem ảnh lỗi thì app tự quay về model trò chuyện, chỉ gửi chữ.<br>
+    Dưới mỗi câu trả lời có dòng 📎 ghi đúng model đã trả lời và trang nào gửi ảnh (🖼).</div>
   <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="chat_same"> Dùng đúng server/model đang dịch</label>
   <label class="chat-opt">Nhà cung cấp
     <span class="prow"><select id="chat_preset" class="provider-sel"></select><button type="button" class="psave" data-for="chat_preset" title="Lưu Base URL + model đang nhập thành nhà cung cấp của bạn (hoặc cập nhật nhà cung cấp đang chọn)">💾</button></span></label>
@@ -466,14 +471,14 @@
   <label class="chat-opt">Model
     <div class="mpick"><input id="chat_model" autocomplete="off" spellcheck="false" placeholder="gõ để tìm model…"><button id="btnChatModels" type="button" title="Tải lại danh sách model của server này">↻</button><div class="mlist" hidden></div></div></label>
 
-  <label style="grid-column:1/-1;flex-direction:row;align-items:center;gap:6px" title="Câu hỏi về hình, bảng, biểu đồ, công thức: gửi kèm ảnh trang cho một model đọc được ảnh (chữ trích từ PDF mất hình và làm rối công thức). Model trò chuyện đã đọc được ảnh (theo danh sách model của OpenRouter) thì dùng luôn nó."><input type="checkbox" id="see_on"> Gửi ảnh trang khi hỏi về hình, bảng, công thức — model xem ảnh:</label>
+  <label style="grid-column:1/-1;flex-direction:row;align-items:center;gap:6px" title="Câu hỏi về hình, biểu đồ, sơ đồ (chữ trích từ PDF chỉ có chú thích của hình), bảng không đọc được thành chữ, công thức chưa có LaTeX: gửi kèm ảnh trang cho một model đọc được ảnh. Model trò chuyện đã đọc được ảnh (theo danh sách model của OpenRouter) thì dùng luôn nó."><input type="checkbox" id="see_on"> Câu hỏi về hình (và bảng, công thức khi chữ không đủ): gửi ảnh trang cho model xem ảnh trả lời:</label>
   <label class="see-opt">Nhà cung cấp
     <span class="prow"><select id="see_preset" class="provider-sel"></select><button type="button" class="psave" data-for="see_preset" title="Lưu Base URL + model đang nhập thành nhà cung cấp của bạn">💾</button></span></label>
   <label class="see-opt">Base URL <input id="see_base_url"></label>
   <label class="see-opt">API key <input id="see_api_key" type="password" placeholder="(để trống nếu local)"></label>
   <label class="see-opt">Model (phải đọc được ảnh 👁)
     <div class="mpick"><input id="see_model" autocomplete="off" spellcheck="false" placeholder="gõ để tìm model…"><button id="btnSeeModels" type="button" title="Tải lại danh sách model của server này">↻</button><div class="mlist" hidden></div></div></label>
-  <label style="grid-column:1/-1" title="Chữ chép từ PDF làm rối công thức (ma trận ra một dãy ô lẫn lộn, phân số và căn mất gạch). Bật thì khi trò chuyện app cắt ảnh từng công thức cho model đọc ảnh chép ra LaTeX — một lần cho mỗi công thức, lưu lại dùng mãi. Trang đang hỏi chờ tối đa 30 giây, các trang khác chạy nền.">Công thức → LaTeX khi trò chuyện
+  <label style="grid-column:1/-1" title="Việc riêng, không liên quan ai trả lời câu hỏi. Chữ chép từ PDF làm rối công thức (ma trận ra một dãy ô lẫn lộn, phân số và căn mất gạch). Bật thì khi trò chuyện app cắt ảnh từng công thức cho model đọc ảnh chép ra LaTeX — một lần cho mỗi công thức, lưu lại dùng mãi. Trang đang hỏi chờ tối đa 30 giây, các trang khác chạy nền. Công thức đã có LaTeX thì model trò chuyện (kể cả loại không đọc được ảnh) đọc được đúng.">Công thức → LaTeX khi trò chuyện (model nào chép công thức, chạy nền)
     <select id="formula_ocr"><option value="ocr">Model OCR ở mục 2 (mặc định PaddleOCR-VL, chạy local)</option>
       <option value="see">Model xem ảnh ở trên</option><option value="off">Tắt — chỉ chép chữ từ PDF</option></select></label>
 
@@ -587,7 +592,7 @@
     <div id="editbox" hidden>✏️ Đang sửa câu hỏi cuối — gửi để hỏi lại <button id="editDrop" type="button" title="Huỷ sửa">✕</button></div>
     <form id="ask"><textarea id="q" rows="2" placeholder="Hỏi về bài báo… (Enter để gửi, Shift+Enter xuống dòng)"></textarea>
       <div class="askbar">
-        <select id="ctxMode" title="LLM đọc phần nào của tài liệu. Tự động: bôi đen → đoạn đó + trang của nó; hỏi về hình/bảng/công thức → gửi ảnh trang (nếu có model xem ảnh); hỏi về cả bài → cả bài (vừa ngữ cảnh) hoặc mở đầu + kết luận; còn lại → trang đang xem + trang liên quan. Nguyên PDF: gửi cả file PDF gốc mỗi câu hỏi (chỉ OpenRouter / OpenAI; tốn token hơn — hợp model ngữ cảnh lớn; server khác thì gửi chữ cả bài)">
+        <select id="ctxMode" title="LLM đọc phần nào của tài liệu. Tự động: bôi đen → đoạn đó + trang của nó; hỏi về hình → gửi ảnh trang (nếu có model xem ảnh); hỏi về bảng → bảng dạng lưới chữ đủ số liệu (bảng trên trang scan thì gửi ảnh); hỏi về công thức → công thức dạng LaTeX (chưa có LaTeX thì gửi ảnh); hỏi về cả bài → cả bài (vừa ngữ cảnh) hoặc mở đầu + kết luận; còn lại → trang đang xem + trang liên quan. Nguyên PDF: gửi cả file PDF gốc mỗi câu hỏi (chỉ OpenRouter / OpenAI; tốn token hơn — hợp model ngữ cảnh lớn; server khác thì gửi chữ cả bài)">
           <option value="auto">🎯 Tự động</option><option value="pair">Gốc + dịch</option><option value="source">Chữ gốc</option>
           <option value="translation">Bản dịch</option><option value="image">🖼 Ảnh trang</option><option value="full">📄 Cả bài</option><option value="pdf">📎 Nguyên PDF</option></select>
         <button class="primary" id="send" type="submit">Gửi</button></div></form>

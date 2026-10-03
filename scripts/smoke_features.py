@@ -375,11 +375,15 @@ with TestClient(A.app) as c:
 A.chat = _fc
 
 print("12. Sửa sau rà soát (25/09/2026)")
-vis = lambda q: bool(A._Q_VISUAL.search(q) or A._Q_FIG.search(q) or A._Q_TAB.search(q))  # noqa: E731
-ok(not any(vis(q) for q in ["Mô hình này khác BERT thế nào?", "Bảng thuật ngữ dịch attention là gì", "Mô hình 2 lớp?",
-                            "Hình thức huấn luyện?", "Tình hình nghiên cứu?"])
-   and all(vis(q) for q in ["Hình 2 nói gì?", "Trong hình, mũi tên chỉ gì?", "Bảng 3?", "Giải thích công thức (1)"]),
-   "“mô hình”, “bảng thuật ngữ”… không bị coi là hỏi về hình/bảng; “Hình 2”, “công thức” thì có")
+fig = lambda q: bool(A._Q_FIGURE.search(q) or A._Q_FIG.search(q))  # noqa: E731
+tab = lambda q: bool(A._Q_TABLE.search(q) or A._Q_TAB.search(q))  # noqa: E731
+eq = lambda q: bool(A._Q_FORMULA.search(q) or A._Q_EQ.search(q))  # noqa: E731
+ok(not any(fig(q) or tab(q) or eq(q) for q in ["Mô hình này khác BERT thế nào?", "Bảng thuật ngữ dịch attention là gì",
+                                                "Mô hình 2 lớp?", "Hình thức huấn luyện?", "Tình hình nghiên cứu?"])
+   and all(fig(q) for q in ["Hình 2 nói gì?", "Trong hình, mũi tên chỉ gì?"]) and not fig("Graph neural network là gì?")
+   and tab("Bảng 3?") and not fig("Bảng 3?") and eq("Giải thích công thức (1)") and not fig("Giải thích công thức (1)"),
+   "“mô hình”, “bảng thuật ngữ”… không bị coi là hỏi về hình/bảng; “Hình 2” là hình, “Bảng 3” là bảng, “công thức” "
+   "là công thức (chỉ hình mới cần ảnh)")
 with TestClient(A.app) as c:
     with open(ROOT / "data/attention-is-all-you-need.pdf", "rb") as f:
         aid = c.post("/api/upload", files={"file": ("att2.pdf", f, "application/pdf")}).json()["id"]
@@ -404,7 +408,37 @@ with TestClient(A.app) as c:
     r = c.post(f"/api/{aid}/translate/4?span=3", json=cfg).json()
     ok([p["page"] for p in r["pages"]] == [4], "trang có yêu cầu dịch riêng không bị gộp vào nhóm của trang khác")
     P = A.chat_plan(d, A.ChatAsk(cfg=A.Config(**cfg), question="Viết lại công thức (1)", page=0), "Viết lại công thức (1)", 9000, True)
-    ok(P["pages"][0] == 3 and P["images"] == [3], "“công thức (1)” → trang có số hiệu (1) (tr.4), gửi ảnh trang đó")
+    ok(P["pages"][0] == 3 and not P["images"] and P.get("formula") == {"pages": [3], "nos": ["1"]},
+       "“công thức (1)” → trang có số hiệu (1) (tr.4); gửi ảnh hay không thì chờ nhận dạng công thức xong mới quyết")
+    r = c.post(f"/api/{aid}/chat", json={"cfg": c2, "question": "Viết lại công thức (1)", "page": 0})
+    info = json.loads(r.headers["x-context"])
+    ok(info["images"] == [4] and info["model"] == "eye" and "chưa có LaTeX" in info["why"],
+       f"công thức chưa có LaTeX (tắt nhận dạng) → gửi ảnh trang cho model xem ảnh: {info['why']}")
+    d.setdefault("flatex", {})[3] = {f["key"]: "x" for f in A.page_display(d, 3)}
+    r = c.post(f"/api/{aid}/chat", json={"cfg": c2, "question": "Viết lại công thức (1)", "page": 0})
+    info = json.loads(r.headers["x-context"])
+    ok(info["images"] == [] and info["model"] == "m" and "đã có LaTeX" in info["why"],
+       "công thức đã có LaTeX → model trò chuyện trả lời bằng chữ, không gửi ảnh")
+    d["flatex"].pop(3)
+    grid = A.table_markdown(A.page_tables(d, 7)[0]["rows"]) if A.page_tables(d, 7) else ""
+    ok("| Transformer (big) | **28.4** | **41.8** |" in grid and "3.3 · 10^{18}" in grid and "| Model | BLEU EN-DE |" in grid,
+       "Bảng 2 (tr.8) thành lưới đủ số liệu: số mũ 10^{18}, tiêu đề nhiều tầng gộp “BLEU EN-DE”")
+    txt = A.page_pair(d, 7, "source", layout=True)
+    ok("[bảng]\n| Model |" in txt and "| ConvS2S Ensemble [9] | 26.36 | **41.29** |" in txt and "\n[3] Model\n" not in txt,
+       "chữ gửi model trò chuyện có bảng dạng lưới thay cho các ô rời")
+    q2 = "Theo Bảng 2, Transformer (big) đạt BLEU bao nhiêu?"
+    P = A.chat_plan(d, A.ChatAsk(cfg=A.Config(**cfg), question=q2, page=0), q2, 9000, True)
+    ok(P["pages"][0] == 7 and not P["images"] and "bảng gửi dạng chữ" in P["why"], "hỏi về bảng: gửi bảng dạng chữ, không gửi ảnh")
+    real_tables, A.page_tables = A.page_tables, lambda d_, n, page=None: []
+    P = A.chat_plan(d, A.ChatAsk(cfg=A.Config(**cfg), question=q2, page=0), q2, 9000, True)
+    A.page_tables = real_tables
+    ok(P["images"] == [7] and "không đọc được thành chữ" in P["why"], "bảng không dựng được thành chữ (trang scan) → gửi ảnh trang")
+    P = A.chat_plan(d, A.ChatAsk(cfg=A.Config(**cfg), question="Dịch lại đoạn này", page=7,
+                                 selection="Table 2 summarizes our results, see also Figure 1."), "Dịch lại đoạn này", 9000, True)
+    ok(not P["images"] and "formula" not in P, "đoạn bôi đen chỉ nhắc tới hình / bảng: không gửi ảnh")
+    P = A.chat_plan(d, A.ChatAsk(cfg=A.Config(**cfg), question="Giải thích", page=3,
+                                 selection="Figure 2: (left) Scaled Dot-Product Attention."), "Giải thích", 9000, True)
+    ok(P["images"] == [3], "bôi đen chú thích hình rồi hỏi → hỏi về hình → gửi ảnh trang")
     P = A.chat_plan(d, A.ChatAsk(cfg=A.Config(**cfg), question="Hình 1?", page=5, context="near"), "Hình 1?", 9000, True)
     ok(P["pages"] == [5] and not P["images"], "chế độ near (mốc so sánh của bench): chỉ trang đang xem")
     ok(3 - 1 in A.related_pages({"src": ROOT / "data/bert.pdf", "trans": {}}, "BERT-large có bao nhiêu tham số?"),

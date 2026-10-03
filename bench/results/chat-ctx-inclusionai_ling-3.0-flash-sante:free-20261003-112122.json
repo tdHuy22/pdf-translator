@@ -1,0 +1,73 @@
+{
+ "model": "inclusionai/ling-3.0-flash-sante:free",
+ "formula": "off",
+ "no_see": false,
+ "rows": [
+  {
+   "n": 5,
+   "paper": "attention-is-all-you-need",
+   "kind": "formula",
+   "img": null,
+   "mode": "auto",
+   "q": "Viết lại công thức (1) của bài và giải thích ngắn.",
+   "score": 1.0,
+   "pages": [
+    4,
+    5,
+    3,
+    6,
+    2,
+    7,
+    1,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+   ],
+   "images": [
+    4
+   ],
+   "why": "công thức (1) ở trang 4; công thức chưa có LaTeX → gửi ảnh trang",
+   "model": "dots-studio/dots-3-note-preview:free",
+   "secs": 22.0,
+   "answer": "### Công thức (1) của bài:\n\n$$\\text{Attention}(Q, K, V) = \\text{softmax}\\left(\\frac{QK^\\top}{\\sqrt{d_k}}\\right)V$$\n\n---\n\n### Giải thích ngắn:\n\n* **$Q, K, V$**: Lần lượt là các ma trận chứa các vector truy vấn (queries), khóa (keys), và giá trị (values). Chiều của keys và queries là $d_k$, còn của values là $d_v$.\n* **$QK^\\top$**: Tích vô hướng (dot product) giữa truy vấn và tất cả các khóa, đo lường mức độ tương thích (compatibility) giữa chúng.\n* **$\\sqrt{d_k}$ (Hệ số tỉ lệ - Scaling factor)**: Dùng để chia chuẩn hóa cho tích vô hướng. Nếu không chia, với chiều $d_k$ lớn, các giá trị tích vô hướng có thể trở nên rất lớn, đẩy hàm $\\text{softmax}$ vào vùng có độ dốc gradient cực kỳ nhỏ (vấn đề biến mất của gradient). Việc chia cho $\\sqrt{d_k}$ giúp các giá trị giữ ở mức ổn định.\n* **$\\text{softmax}$**: Chuyển các điểm tương thích (compatibility scores) thành các trọng số (weights) tổng bằng $1$, biểu thị mức độ quan trọng tương ứng của mỗi giá trị.\n* **$\\cdot V$**: Nhân ma trận trọng số này với ma trận giá trị $V$ để tính ra đầu ra cuối cùng là một weighted sum của các giá trị."
+  },
+  {
+   "n": 6,
+   "paper": "attention-is-all-you-need",
+   "kind": "formula",
+   "img": null,
+   "mode": "auto",
+   "q": "Công thức (3) dùng để làm gì?",
+   "score": 1.0,
+   "pages": [
+    7,
+    8,
+    6,
+    9,
+    5,
+    10,
+    4,
+    11,
+    3,
+    12,
+    2,
+    13,
+    1,
+    14,
+    15
+   ],
+   "images": [
+    7
+   ],
+   "why": "công thức (3) ở trang 7; công thức chưa có LaTeX → gửi ảnh trang",
+   "model": "dots-studio/dots-3-note-preview:free",
+   "secs": 10.8,
+   "answer": "**Công thức (3)** (trang 7, phần 5.3 Optimizer) dùng để **điều chỉnh (thay đổi) learning rate (tốc độ học)** trong quá trình đào tạo mô hình Transformer theo thời gian. \n\nCụ thể, công thức này thực hiện một chiến lược điều chỉnh learning rate (gọi là *warmup* kết hợp với việc giảm dần theo hàm căn bậc hai nghịch đảo) với các chi tiết sau:\n\n### 1. Ý nghĩa của các thành phần trong công thức:\n*   $\\text{lrate}$: Learning rate hiện tại tại bước训练 $step\\_num$.\n*   $d_{\\text{model}}^{-0.5}$: Hằng số điều chỉnh dựa trên kích thước embedding của mô hình ($d_{\\text{model}}$).\n*   $\\min(step\\_num^{-0.5},\\; step\\_num \\cdot warmup\\_steps^{-1.5})$: Hàm chọn giá trị nhỏ hơn trong hai trường hợp:\n    *   $step\\_num \\cdot warmup\\_steps^{-1.5}$: Tốc độ học tăng tuyến tính trong giai đoạn *warmup* (giai đoạn đầu).\n    *   $step\\_num^{-0.5}$: Tốc độ học giảm dần theo tỉ lệ nghịch đảo với căn bậc hai của số bước训练, sau khi vượt qua giai đoạn *warmup*.\n*   $warmup\\_steps$: Số bước训练用来 làm ấm (warmup) mô hình, trong bài báo này được set bằng $4000$ bước.\n\n### 2. Chức năng và Mục đích:\n*   **Giai đoạn tăng dần (Warmup):** Trong $4000$ bước đầu tiên, learning rate được tăng lên tuyến tính để tránh hiện tượng training diverge (bùng nổ gradients) ngay từ đầu do các trọng số đang ngẫu nhiên.\n*   **Giai đoạn giảm dần (Decay):** Sau $4000$ bước, learning rate bắt đầu giảm dần theo công thức $\\frac{1}{\\sqrt{step\\_num}}$. Điều này giúp thuần hóa mô hình ở giai đoạn sau, giúp tìm kiếm cực tiểu locally một cách ổn định và cải thiện độ chính xác cuối cùng."
+  }
+ ]
+}

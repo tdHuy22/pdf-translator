@@ -35,6 +35,7 @@ ap.add_argument("--model", default="dots-studio/dots-3-note-preview:free")   # n
 ap.add_argument("--see-model", default="", help="model xem ảnh (mặc định = --model)")
 ap.add_argument("--modes", default="near,auto")
 ap.add_argument("--only", default="", help="số thứ tự câu hỏi, vd. 1,5,6")
+ap.add_argument("--kinds", default="", help="chỉ chạy các loại câu hỏi (kind), vd. table,figure")
 ap.add_argument("--retries", type=int, default=3)
 ap.add_argument("--budget", type=int, default=0,
                 help="ngân sách token ngữ cảnh khi không hỏi cả bài (mặc định như app: CHAT_BUDGET). Bài ngắn chưa dịch "
@@ -53,6 +54,9 @@ if args.budget:
     A.CHAT_BUDGET = args.budget
 bench = json.loads((ROOT / "bench/chat_ctx.json").read_text())["questions"]
 pick = {int(x) for x in args.only.split(",") if x.strip()}
+kinds = {x.strip() for x in args.kinds.split(",") if x.strip()}
+if kinds:
+    pick = {k for k, q in enumerate(bench, 1) if q["kind"] in kinds and (not pick or k in pick)}
 modes = [m.strip() for m in args.modes.split(",") if m.strip()]
 cfg = {"base_url": args.base_url, "model": args.model, "ocr_mode": "off", "glossary_auto": False,
        "see_base_url": "" if args.no_see else args.base_url, "see_model": "" if args.no_see else args.see_model or args.model,
@@ -100,7 +104,7 @@ with TestClient(A.app) as c:
                 print(f"   ↻ lỗi, thử lại: {ans.strip()[:120]}")
                 time.sleep(10 * (attempt + 1))
             sc = score(ans, q["must"])
-            rows.append({"n": k, "paper": q["paper"], "kind": q["kind"], "mode": mode, "q": q["q"], "score": sc,
+            rows.append({"n": k, "paper": q["paper"], "kind": q["kind"], "img": q.get("img"), "mode": mode, "q": q["q"], "score": sc,
                          "pages": info.get("pages", []), "images": info.get("images", []), "why": info.get("why", ""),
                          "model": info.get("model", ""), "secs": round(secs, 1), "answer": ans})
             print(f"{k:2} {mode:5} {sc:4.2f}  {secs:5.1f}s  tr.{info.get('pages', [])[:6]} ảnh{info.get('images', [])}"
@@ -119,6 +123,14 @@ for kind in ["retrieval", "formula", "figure", "table", "global", "local", "trap
         x = [r["score"] for r in sub if r["mode"] == m]
         cells.append(f"{sum(x) / len(x):10.2f}" if x else f"{'—':>10}")
     print(f"{'cả bộ' if kind == '*' else kind:10}" + "".join(cells) + f"   ({len(sub) // max(len(modes), 1)} câu)")
+exp = [r for r in rows if r["mode"] == "auto" and r.get("img") is not None]
+if exp and not args.no_see:   # chỉ hình mới cần ảnh trang; bảng (lưới chữ) và câu thường thì không
+    bad = [r for r in exp if bool(r["images"]) != r["img"]]
+    print(f"gửi ảnh đúng dự kiến: {len(exp) - len(bad)}/{len(exp)}" + (": sai " + ", ".join(
+        f"#{r['n']} ({r['kind']}, {'có' if r['images'] else 'không'} ảnh)" for r in bad) if bad else ""))
+eqs = [r for r in rows if r["kind"] == "formula" and r["mode"] == "auto"]
+if eqs and not args.no_see:   # công thức: có LaTeX thì không gửi ảnh, chưa có thì gửi
+    print("câu công thức: " + "; ".join(f"#{r['n']} {'có' if r['images'] else 'không'} ảnh ({r['why'][-45:]})" for r in eqs))
 traps = [r for r in rows if r["kind"] == "trap" and r["mode"] == "auto"]
 if traps:
     print(f"câu bẫy “mô hình”: {sum(bool(r['images']) for r in traps)}/{len(traps)} lần gửi ảnh (phải là 0)")
