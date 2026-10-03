@@ -1,6 +1,8 @@
 // Model xem ảnh mặc định: nex-n2.5-pro:free (chọn 25/09/2026) bị OpenRouter gỡ cùng ngày → dots-3-note-preview:free
 // (đọc ảnh, ngữ cảnh 512k; chép đúng ma trận RoPE 7×7 trong 3,8 s, trả lời tiếng Việt)
-const SEE_MODEL = "dots-studio/dots-3-note-preview:free", GONE_MODELS = ["nex-agi/nex-n2.5-pro:free"];
+const SEE_MODEL = "dots-studio/dots-3-note-preview:free";
+// Model OpenRouter đã bị gỡ / hết free: cài đặt cũ còn để chúng thì đổi sang mặc định mới (xem loadSettings)
+const GONE_MODELS = ["nex-agi/nex-n2.5-pro:free", "inclusionai/ling-3.0-flash-fin:free"];
 const PADDLE_OCR = "hf.co/PaddlePaddle/PaddleOCR-VL-1.6-GGUF:latest";  // OCR tốt nhất đã đo (18/09/2026)
 // Nhà cung cấp: nạp từ server (/api/providers — có sẵn + của người dùng, xem app.py). Mỗi mục: base_url, model (dịch,
 // trò chuyện), vision (OCR), gloss (lập bảng thuật ngữ; không có thì như model), parallel (số vùng OCR cùng lúc).
@@ -90,6 +92,11 @@ function loadSettings() {
   if (ver < 7) for (const [sel, model, key] of [["preset", "model", "model"], ["ocr_preset", "ocr_vlm_model", "vision"]]) {
     if (s[sel] === "openrouter" && $(model).value === "google/gemini-2.5-flash" && P("openrouter")[key]) $(model).value = P("openrouter")[key];
   }
+  // v8: ling-3.0-flash-fin hết free trên OpenRouter (03/10/2026) → ô model nào còn để nó thì lấy mặc định mới của
+  // OpenRouter (FREE_MODEL trong app.py)
+  if (ver < 8) for (const f of ["model", "chat_model", "gloss_model", "align_model"]) {
+    if (GONE_MODELS.includes($(f).value) && P("openrouter").model) $(f).value = P("openrouter").model;
+  }
   // nhà cung cấp đã lưu không còn (đã xoá) → "Tùy chỉnh", giữ nguyên Base URL và model đang có
   document.querySelectorAll("select.provider-sel").forEach(sel => { if (!sel.value) sel.value = "custom"; });
   fillKeys();
@@ -97,7 +104,7 @@ function loadSettings() {
   saveSettings();
 }
 function saveSettings() {
-  const s = { settings_v: 7 };
+  const s = { settings_v: 8 };
   FIELDS.forEach(f => s[f] = $(f).value);
   CHECKS.forEach(f => s[f] = $(f).checked);
   try { localStorage.setItem("llm", JSON.stringify(s)); } catch {}

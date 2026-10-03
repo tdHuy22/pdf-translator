@@ -664,8 +664,10 @@ async def cfg_of(provider, *sets):
     async with A.httpx.AsyncClient(transport=A.httpx.ASGITransport(app=A.app), base_url="http://t") as c:
         return await BT.build_config(c, ns)
 dflt, tuf = asyncio.run(cfg_of("openrouter")), asyncio.run(cfg_of("tuf"))
-ok(dflt == {"base_url": "https://openrouter.ai/api/v1", "model": A.FREE_MODEL} and dflt["model"].endswith(":free")
-   and A.Config().model == A.FREE_MODEL, "mặc định (script và app): OpenRouter, model free")
+# model free của OpenRouter không phải lúc nào cũng có đuôi ":free" (ling-3.1-flash, model ẩn danh "stealth/…" giá 0)
+# → chỉ kiểm script và app dùng cùng một mặc định
+ok(dflt == {"base_url": "https://openrouter.ai/api/v1", "model": A.FREE_MODEL} and A.Config().model == A.FREE_MODEL,
+   "mặc định (script và app): OpenRouter, FREE_MODEL")
 ok(tuf["base_url"].endswith(":8080/v1") and tuf["model"] == "4b" and asyncio.run(cfg_of("tuf", "model=9b"))["model"] == "9b",
    "--provider tuf: Base URL + model của nhà cung cấp đã lưu; --set/--model vẫn đè được")
 try:

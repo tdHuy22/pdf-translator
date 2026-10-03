@@ -51,10 +51,15 @@ DOCS: dict[str, dict] = {}
 OCRSPACE_DEMO = "helloworld"
 
 
-# Mặc định = model free của OpenRouter (26/09/2026). Dịch: ling-flash — bench_english 0,87 từ tiếng Anh sót/100 từ,
-# nhanh gấp 3 dots, lập bảng thuật ngữ BERT 4 s; dots lẫn chữ Hán (投影) và nửa câu tiếng Anh (1,7–2,6/100).
-# Ảnh (OCR, trò chuyện về hình): dots-3-note-preview — ling không đọc ảnh.
-FREE_MODEL = "inclusionai/ling-3.0-flash-fin:free"
+# Mặc định = model free của OpenRouter. Dịch + trò chuyện: ling-3.1-flash (03/10/2026) — bench_english 0,61 từ tiếng
+# Anh sót/100 từ (tốt nhất đã đo), 74 s cho 6 trang, đủ 69/69 đoạn, không đoạn nào bị bộ lọc loại; bench_chat_ctx 30/30
+# (~6,7 s/câu); bảng thuật ngữ dev 90,0 / 67,4%, test 84,1 / 76,5% (~8 s/bài). Tên không có đuôi ":free" — OpenRouter
+# đang để giá 0, đổi giá thì request vẫn chạy và tính tiền chứ không báo lỗi như model ":free".
+# Trước đó (26/09/2026) là ling-3.0-flash-fin:free (0,87/100, 37 s) — hết free ngày 03/10/2026. Đã thử cùng ngày:
+# ling-3.0-flash-sante:free 1,41/100, 72 s (2 đoạn lẫn chữ Hán, 3 đoạn còn nửa câu tiếng Anh), trò chuyện 30/30 ~3 s/câu;
+# Space Bunny Alpha (stealth, hạn dùng 05/10/2026) 1,29/100, 113 s, bắt buộc suy nghĩ (xem REASONING_MIN); dots lẫn chữ
+# Hán (投影) và nửa câu tiếng Anh (1,7–2,6/100). Ảnh (OCR, trò chuyện về hình): dots-3-note-preview — ling không đọc ảnh.
+FREE_MODEL = "inclusionai/ling-3.1-flash"
 FREE_VISION_MODEL = "dots-studio/dots-3-note-preview:free"
 
 
