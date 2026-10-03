@@ -38,7 +38,7 @@ function layout() {
     pane[k].style.setProperty("--pgw", Math.max(160, Math.floor((pane[k].clientWidth - 2 * PAD) * zoom[k])) + "px");
   }
   if (!shown(active)) active = other(active);
-  $("zoomPct").textContent = Math.round(zoom[active] * 100) + "%";
+  if (document.activeElement !== $("zoomPct")) showZoom();   // đang gõ dở thì không ghi đè
   $("zoomWho").textContent = mode === "both" ? (active === "original" ? "Gốc" : "Dịch") : "";
   $("linkScroll").classList.toggle("on", link);
   $("linkScroll").hidden = mode !== "both";
@@ -82,6 +82,27 @@ function setZoom(k, z, pt) {
   if (z === zoom[k]) return;
   relayout(() => { zoom[k] = z; save(ZKEY[k], z); }, pt, k);
 }
+const showZoom = () => { $("zoomPct").value = Math.round(zoom[active] * 100) + "%"; };
+
+// Ô nhập %: Enter / bấm ra ngoài thì áp (ngoài 40–400% bị kẹp lại), ↑ ↓ đổi ±10%, Esc bỏ
+const zp = $("zoomPct");
+function commitZoom() {
+  const v = parseFloat(zp.value.replace(",", "."));
+  if (v > 0) setZoom(active, v / 100);
+  showZoom();                    // số gõ sai / bị kẹp / không đổi: ô vẫn phải về đúng độ phóng hiện tại
+}
+zp.addEventListener("focus", () => zp.select());
+zp.addEventListener("blur", commitZoom);
+zp.addEventListener("keydown", e => {
+  if (e.key === "Enter") zp.blur();
+  else if (e.key === "Escape") { showZoom(); zp.blur(); }
+  else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+    e.preventDefault();
+    setZoom(active, zoom[active] + (e.key === "ArrowUp" ? 0.1 : -0.1));
+    showZoom(); zp.select();
+  }
+});
+
 function setMode(m) { relayout(() => { mode = m; save("view_mode", m); if (m !== "both") active = m; }); }
 function setActive(k) {
   if (active === k || !shown(k)) return;
@@ -95,7 +116,7 @@ $("viewbar").addEventListener("click", e => {
   if (b.dataset.mode) setMode(b.dataset.mode);
   else if (b.id === "zoomIn") setZoom(active, zoom[active] * 1.2);
   else if (b.id === "zoomOut") setZoom(active, zoom[active] / 1.2);
-  else if (b.id === "zoomFit" || b.id === "zoomPct") setZoom(active, 1);
+  else if (b.id === "zoomFit") setZoom(active, 1);
   else if (b.id === "hdrToggle") setHdr(!document.body.classList.contains("nohdr"), true);
   else if (b.id === "linkScroll") { link = !link; save("view_link", link ? "1" : "0"); layout(); follow(active); }
 });

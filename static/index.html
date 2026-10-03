@@ -57,7 +57,10 @@
   #viewbar button.on { border-color:var(--line); background:var(--tint); font-weight:600; }
   #viewbar button:hover { background:var(--hover); }
   #viewbar .sep { width:1px; height:18px; background:var(--line); margin:0 3px; }
-  #zoomPct { min-width:48px; }
+  /* Ô nhập % thu phóng: trông như nút, bấm vào mới thành ô gõ (cỡ chữ để mặc định: điện thoại đã ép 16px ở dưới) */
+  #viewbar #zoomPct { width:54px; padding:3px 4px; text-align:center; border-color:transparent; background:transparent; }
+  #viewbar #zoomPct:hover { background:var(--hover); }
+  #viewbar #zoomPct:focus { background:var(--field); border-color:var(--accent); }
   /* Kính lúp chữ nhật ngang: đọc trọn một dòng chữ; ⌥ + lăn chuột đổi độ phóng (số ở góc) */
   #lens { position:fixed; z-index:30; width:440px; height:260px; border-radius:12px; pointer-events:none;
           border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.25), 0 8px 24px rgba(0,0,0,.35);
@@ -612,7 +615,8 @@
   <span class="sep"></span>
   <span id="zoomWho" title="Khung đang chỉnh (khung chuột vừa rê vào)"></span>
   <button id="zoomOut" title="Thu nhỏ khung đang chỉnh (⌘/Ctrl + lăn chuột trên khung)">−</button>
-  <button id="zoomPct" title="Bấm: về vừa khung">100%</button>
+  <input id="zoomPct" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="100%" aria-label="Độ phóng (%)"
+         title="Gõ số % rồi Enter (40–400%) · ↑ ↓: ±10% · Esc: huỷ. Nút ⤢ bên phải: vừa bề rộng khung">
   <button id="zoomIn" title="Phóng to khung đang chỉnh (⌘/Ctrl + lăn chuột trên khung)">+</button>
   <button id="zoomFit" title="Vừa bề rộng khung">⤢</button>
   <button id="linkScroll" title="Cuộn cùng nhau: cuộn một bản thì bản kia theo tới cùng trang (mặc định tắt — hai bản cuộn độc lập)">🔗</button>
