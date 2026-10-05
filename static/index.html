@@ -163,6 +163,8 @@
   .gchip:hover { border-color:var(--accent); color:var(--accent); }
   .gchip small { color:var(--muted); margin-left:4px; }
   .gchip.hid { color:var(--muted); border-style:dashed; }
+  .gchip .gx { color:var(--muted); margin-left:6px; padding:0 2px; }
+  .gchip .gx:hover { color:#dc2626; }
   .ghelp { font-size:11px; line-height:1.4; color:var(--muted); margin-bottom:6px; }
   .ghelp summary { cursor:pointer; user-select:none; }
   #gFind { width:220px; }
@@ -535,7 +537,7 @@
     <button id="gSave" class="primary">Lưu bảng</button>
     <button id="gClose">✕</button>
   </div>
-  <details id="ghelp" class="ghelp"><summary>ⓘ Cách dùng bảng thuật ngữ</summary>Thuật ngữ <b>của riêng bài này</b>, app tự rút ra rồi hỏi LLM cách dịch. Chọn thuật ngữ nào <b>dịch</b> (sửa được cách dịch) và thuật ngữ nào <b>giữ nguyên tiếng Anh</b>. Bảng được gửi kèm mọi lượt gọi nên cả bài dùng thuật ngữ thống nhất. Trang đã dịch rồi thì bấm “↻ Dịch lại” để áp bảng mới.<br>App <b>học từ bảng bạn lưu</b>: thuật ngữ bạn xoá (✕) sẽ không được gợi ý ở tài liệu sau; cách dịch bạn sửa hay thuật ngữ bạn thêm sẽ được dùng lại ở mọi tài liệu có thuật ngữ đó.<br>Thuật ngữ bạn muốn dùng cho <b>mọi tài liệu</b> thì gõ trong ⚙️ Cấu hình — phần đó luôn được ưu tiên hơn bảng này.</details>
+  <details id="ghelp" class="ghelp"><summary>ⓘ Cách dùng bảng thuật ngữ</summary>Thuật ngữ <b>của riêng bài này</b>, app tự rút ra rồi hỏi LLM cách dịch. Chọn thuật ngữ nào <b>dịch</b> (sửa được cách dịch) và thuật ngữ nào <b>giữ nguyên tiếng Anh</b>. Bảng được gửi kèm mọi lượt gọi nên cả bài dùng thuật ngữ thống nhất. Trang đã dịch rồi thì bấm “↻ Dịch lại” để áp bảng mới.<br>App <b>học từ bảng bạn lưu</b>: xoá (✕) một dòng thì thuật ngữ về lại “Gợi ý khác”; bấm ✕ trên chip gợi ý thì thuật ngữ bị ẩn và không được gợi ý ở tài liệu sau (bấm ↺ để lấy lại); cách dịch bạn sửa hay thuật ngữ bạn thêm sẽ được dùng lại ở mọi tài liệu có thuật ngữ đó.<br>Thuật ngữ bạn muốn dùng cho <b>mọi tài liệu</b> thì gõ trong ⚙️ Cấu hình — phần đó luôn được ưu tiên hơn bảng này.</details>
   <div id="gwrap"><table id="gtab"></table></div>
   <div id="gextra"></div>
 </div>

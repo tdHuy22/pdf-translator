@@ -355,7 +355,8 @@ def remember(slot: str, key: str) -> str:
 
 # ================================================================ Thuật ngữ người dùng đã dạy
 # Học từ bảng thuật ngữ người dùng lưu (PUT /api/<id>/glossary), dùng cho MỌI tài liệu sau:
-#   blocked  thuật ngữ tự lập bị xoá (✕) → không gợi ý nữa (LLM không thấy ứng viên đó)
+#   blocked  thuật ngữ bị ẩn bằng ✕ trên chip "gợi ý khác" → không gợi ý nữa (LLM không thấy ứng viên đó).
+#            ✕ trong bảng chỉ đưa thuật ngữ về "gợi ý khác", không chặn
 #   prefer   thuật ngữ người dùng sửa cách dịch / chuyển dịch↔giữ nguyên / tự thêm → dùng đúng cách đó, và thêm vào bảng
 #            của mọi bài có thuật ngữ này dù LLM không chọn
 # Khoá = _term_key (models = model). Bỏ tích "Dùng" chỉ có tác dụng trong bài đó, không học.
@@ -382,12 +383,12 @@ def save_user_terms() -> None:
 
 
 def learn_terms(old: list[dict], new: list[dict]) -> None:
-    """So bảng cũ (app lập / lần lưu trước) với bảng người dùng vừa lưu → nhớ thuật ngữ bị xoá và cách dịch được sửa."""
+    """So bảng cũ (app lập / lần lưu trước) với bảng người dùng vừa lưu → nhớ cách dịch được sửa; thuật ngữ bị xoá khỏi
+    bảng thì quên cách dịch đã dạy (không chặn: muốn ẩn hẳn thì bấm ✕ trên chip gợi ý, xem block_term)."""
     ut = user_terms()
     key = lambda r: _term_key(r["term"].split())
     before, after = {key(r): r for r in old if r["term"].strip()}, {key(r): r for r in new if r["term"].strip()}
     for k in before.keys() - after.keys():
-        ut["blocked"][k] = before[k]["term"]
         ut["prefer"].pop(k, None)
     for k, r in after.items():
         o = before.get(k)
@@ -3789,7 +3790,7 @@ async def make_glossary(doc_id: str, cfg: Config, force: bool = False):
     await ensure_glossary(d, cfg, pymupdf.open(d["src"]))
     if "gloss" not in d:
         raise HTTPException(502, "Không gọi được LLM để lập bảng thuật ngữ")
-    return {"title": d.get("title", ""), "terms": d["gloss"], "extra": d.get("gloss_extra", [])}
+    return {"title": d.get("title", ""), "terms": d["gloss"], "extra": gloss_extra(d)}
 
 
 @app.get("/api/{doc_id}/glossary/progress")
@@ -3813,14 +3814,39 @@ class GlossaryEdit(BaseModel):
 def set_glossary(doc_id: str, body: GlossaryEdit):
     """Bảng người dùng đã chỉnh; các trang dịch sau đó dùng đúng bảng này (trang đã dịch phải bấm "Dịch lại")."""
     d = get_doc(doc_id)
-    new = [t.model_dump() for t in body.terms]
-    learn_terms(d.get("gloss", []), new)
+    new, old = [t.model_dump() for t in body.terms], d.get("gloss", [])
+    learn_terms(old, new)
     d["gloss"] = new
-    have = {_term_key(t["term"].split()) for t in new if t["term"].strip()}
-    d["gloss_extra"] = [x for x in d.get("gloss_extra", []) if _term_key(x["term"].split()) not in have]
+    key = lambda t: _term_key(t["term"].split())
+    have = {key(t) for t in new if t["term"].strip()}
+    extra = [x for x in d.get("gloss_extra", []) if key(x) not in have]
+    # Thuật ngữ vừa xoá khỏi bảng về lại "gợi ý khác" để còn bấm + lấy lại ngay trong bài này
+    seen = {key(x) for x in extra}
+    for t in old:
+        if t["term"].strip() and key(t) not in have and key(t) not in seen:
+            extra.append({"term": t["term"].strip(), "n": t.get("n", 0)})
+            seen.add(key(t))
+    d["gloss_extra"] = extra
     apply_gloss(d)
     store.save_state(d)
-    return {"terms": d["gloss"], "used": len(d["glossary"]), "extra": d["gloss_extra"]}
+    return {"terms": d["gloss"], "used": len(d["glossary"]), "extra": gloss_extra(d)}
+
+
+def gloss_extra(d: dict) -> list[dict]:
+    """"Gợi ý khác" của bài, cờ hidden tính lại theo danh sách chặn hiện tại (ẩn/bỏ ẩn ở bài khác cũng áp vào đây)."""
+    blocked = user_terms()["blocked"]
+    return [{**x, "hidden": _term_key(x["term"].split()) in blocked} for x in d.get("gloss_extra", [])]
+
+
+@app.post("/api/user_terms/blocked")
+def block_term(term: str):
+    """Ẩn một gợi ý (✕ trên chip "gợi ý khác"): không gợi ý thuật ngữ này nữa ở mọi tài liệu."""
+    k = _term_key(term.split())
+    if k and k not in user_terms()["blocked"]:
+        user_terms()["blocked"][k] = term.strip()
+        user_terms()["prefer"].pop(k, None)
+        save_user_terms()
+    return {"ok": True}
 
 
 @app.delete("/api/user_terms/blocked")
@@ -3970,7 +3996,7 @@ def doc_state(doc_id: str):
     d = get_doc(doc_id)
     return {"id": doc_id, "name": d["name"], "pages": d["out"].page_count, "done": sorted(d["done"]),
             "marks": {str(p): v for p, v in d["marks"].items() if v},
-            "terms": d.get("gloss", []), "extra": d.get("gloss_extra", []), "title": d.get("title", ""),
+            "terms": d.get("gloss", []), "extra": gloss_extra(d), "title": d.get("title", ""),
             "notes": N.ordered(d.get("notes", [])),
             "skip": {str(p): sorted(v) for p, v in d.get("skip", {}).items() if v},
             "keep": sorted(d.get("keep_pages", ())),

@@ -232,7 +232,12 @@ with TestClient(A.app) as c:
     key = lambda term: A._term_key(term.split())
     ok(key(edited) in A.user_terms()["prefer"], f"sửa cách dịch '{edited}' → nhớ cho tài liệu sau")
     r = c.put(f"/api/{did}/glossary", json={"terms": [x for x in t if x["term"] != gone]}).json()
-    ok(key(gone) in A.user_terms()["blocked"], f"xoá '{gone}' → nhớ để không gợi ý lại")
+    ok(key(gone) not in A.user_terms()["blocked"] and any(x["term"] == gone and not x["hidden"] for x in r["extra"]),
+       f"✕ '{gone}' trong bảng → về lại 'gợi ý khác', không bị chặn")
+    c.post("/api/user_terms/blocked", params={"term": gone})
+    ok(key(gone) in A.user_terms()["blocked"], f"✕ trên chip '{gone}' → nhớ để không gợi ý lại")
+    ok(any(x["term"] == gone and x["hidden"] for x in c.get(f"/api/{did}/state").json()["extra"]),
+       "ẩn từ chip: tải lại trang vẫn thấy ở mục đang ẩn")
     made = asyncio.run(A.build_glossary(A.Config(**cfg), pymupdf.open(ROOT / "data/bert.pdf")))
     rows = {x["term"]: x for x in made["rows"]}
     ok(gone not in rows and any(x["term"] == gone and x["hidden"] for x in made["extra"]),

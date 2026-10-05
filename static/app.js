@@ -401,7 +401,7 @@ $("file").onchange = async e => {
 };
 function resetDocView() {
   window.notesReset?.();                      // ghi chú chung đang chờ lưu được gửi ngay, về đúng bài đã gõ
-  MARKS = {}; newSession(); chatSessions = []; GLOSS = []; EXTRA = [];
+  MARKS = {}; newSession(); chatSessions = []; GLOSS = []; EXTRA = []; SAVED = new Set();
   $("gloss").classList.remove("open"); $("gtab").innerHTML = ""; $("gextra").innerHTML = ""; $("gcount").textContent = "";
 }
 
@@ -430,7 +430,7 @@ async function restoreDoc(id) {
   resetDocView();
   try { localStorage.setItem("last_doc", id); } catch {}
   for (const [p, ms] of Object.entries(st.marks)) MARKS[+p] = ms;
-  GLOSS = st.terms || []; EXTRA = st.extra || [];
+  GLOSS = st.terms || []; EXTRA = st.extra || []; markSaved();
   openDoc();
   if (GLOSS.length) drawGlossary();
   window.notesLoad?.(st.notes);
@@ -1145,6 +1145,8 @@ document.addEventListener("click", e => { if (!e.target.closest?.(".dlwrap")) $(
 
 // ================================================================ Bảng thuật ngữ
 let GLOSS = [], EXTRA = [];   // EXTRA: ứng viên LLM không chọn + thuật ngữ bị ẩn vì bạn từng xoá (hidden)
+let SAVED = new Set();        // thuật ngữ của bảng đã lưu trên server (app lập hoặc lần lưu trước)
+const markSaved = () => SAVED = new Set(GLOSS.map(t => t.term.trim().toLowerCase()));
 $("btnGloss").onclick = () => { $("gloss").classList.toggle("open"); if (!GLOSS.length) loadGlossary(false); };
 $("gClose").onclick = () => $("gloss").classList.remove("open");
 $("gMake").onclick = () => loadGlossary(true);
@@ -1172,7 +1174,7 @@ async function loadGlossary(force, quiet = false) {
       method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(cfg()) }).finally(() => clearInterval(poll));
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
     const j = await r.json();
-    GLOSS = j.terms || []; EXTRA = j.extra || [];
+    GLOSS = j.terms || []; EXTRA = j.extra || []; markSaved();
     drawGlossary();
   } catch (e) {
     $("gcount").textContent = "không lập được bảng: " + e.message;
@@ -1185,12 +1187,16 @@ function drawGlossary() {
       <td><label><input type="radio" name="g${i}" class="gmode" value="vi" ${t.keep ? "" : "checked"}> dịch</label>
           <label><input type="radio" name="g${i}" class="gmode" value="keep" ${t.keep ? "checked" : ""}> giữ nguyên</label></td>
       <td><input type="text" class="gvi" value="${esc(t.vi)}" ${t.keep ? "disabled" : ""}></td>
-      <td><button type="button" class="gdel" title="Xoá khỏi bảng. Sau khi Lưu bảng, app nhớ lại: tài liệu sau sẽ không gợi ý thuật ngữ này nữa">✕</button></td></tr>`).join("");
+      <td><button type="button" class="gdel" title="Xoá khỏi bảng, thuật ngữ về lại “Gợi ý khác” (muốn không gợi ý nữa thì bấm ✕ trên chip đó)">✕</button></td></tr>`).join("");
   $("gtab").innerHTML = `<tr><th>Dùng</th><th>Thuật ngữ trong bài</th><th>Cách xử lý</th><th>Dịch là</th><th></th></tr>${rows}`;
   countGloss();
   $("gtab").onclick = e => {
     if (!e.target.classList.contains("gdel")) return;
-    GLOSS.splice(+e.target.closest("tr").dataset.i, 1);
+    const [t] = GLOSS.splice(+e.target.closest("tr").dataset.i, 1), k = t.term.trim().toLowerCase();
+    // về lại "gợi ý khác" (ẩn hẳn thì bấm ✕ trên chip): thuật ngữ thêm từ gợi ý vẫn nằm trong EXTRA nên tự hiện lại;
+    // thuật ngữ của bảng đã lưu thì thêm vào EXTRA; dòng tự gõ chưa lưu thì bỏ hẳn
+    if (k && SAVED.has(k) && !EXTRA.some(x => x.term.trim().toLowerCase() === k))
+      EXTRA.push({ term: t.term.trim(), n: 0, hidden: false });
     drawGlossary();
   };
   drawExtra();
@@ -1219,19 +1225,26 @@ $("ghelp").addEventListener("toggle", () => { try { localStorage.setItem("ghelp_
 function drawExtra() {
   const have = new Set(GLOSS.map(t => t.term.trim().toLowerCase()));
   const chip = (x, i) => `<button type="button" class="gchip${x.hidden ? " hid" : ""}" data-i="${i}"
-      title="${x.hidden ? "Bạn từng xoá thuật ngữ này — bấm để bỏ ẩn và thêm lại" : "Thêm vào bảng"}">${x.hidden ? "↺" : "+"} ${esc(x.term)}<small>${x.n}</small></button>`;
+      title="${x.hidden ? "Bạn đã ẩn thuật ngữ này — bấm để bỏ ẩn và thêm lại" : "Thêm vào bảng"}">${x.hidden ? "↺" : "+"} ${esc(x.term)}${x.n ? `<small>${x.n}</small>` : ""}${
+      x.hidden ? "" : `<span class="gx" title="Ẩn: không gợi ý thuật ngữ này nữa, ở cả các tài liệu sau">✕</span>`}</button>`;
   const list = EXTRA.map((x, i) => [x, i]).filter(([x]) => !have.has(x.term.trim().toLowerCase()));
   const sug = list.filter(([x]) => !x.hidden), hid = list.filter(([x]) => x.hidden);
   $("gextra").innerHTML =
-    (sug.length ? `<div><span class="hint">Gợi ý khác — LLM cho là không phải thuật ngữ, bấm để thêm:</span> ${sug.map(([x, i]) => chip(x, i)).join("")}</div>` : "") +
-    (hid.length ? `<div><span class="hint">Đang ẩn vì bạn từng xoá:</span> ${hid.map(([x, i]) => chip(x, i)).join("")}</div>` : "");
+    (sug.length ? `<div><span class="hint">Gợi ý khác — bấm để thêm vào bảng, ✕ để ẩn hẳn:</span> ${sug.map(([x, i]) => chip(x, i)).join("")}</div>` : "") +
+    (hid.length ? `<div><span class="hint">Đang ẩn (không gợi ý ở các tài liệu sau):</span> ${hid.map(([x, i]) => chip(x, i)).join("")}</div>` : "");
   $("gextra").onclick = async e => {
     const b = e.target.closest(".gchip");
     if (!b) return;
     const x = EXTRA[+b.dataset.i];
+    if (e.target.closest(".gx")) {             // ẩn hẳn: nhớ ngay, không cần Lưu bảng
+      await fetch(`/api/user_terms/blocked?term=${encodeURIComponent(x.term)}`, { method:"POST" });
+      x.hidden = true;
+      drawExtra(); findGloss();
+      return;
+    }
     if (x.hidden) await fetch(`/api/user_terms/blocked?term=${encodeURIComponent(x.term)}`, { method:"DELETE" });
     GLOSS.push({ term: x.term, vi: "", keep: true, use: true });
-    EXTRA.splice(+b.dataset.i, 1);
+    x.hidden = false;   // vẫn giữ trong EXTRA: xoá khỏi bảng thì chip hiện lại
     drawGlossary();
     $("gwrap").scrollTop = $("gwrap").scrollHeight;
   };
@@ -1255,7 +1268,7 @@ $("gSave").onclick = async () => {
   const r = await fetch(`/api/${doc.id}/glossary`, { method:"PUT", headers:{"Content-Type":"application/json"},
     body:JSON.stringify({ terms: GLOSS }) });
   const j = await r.json();
-  EXTRA = j.extra || EXTRA;
+  EXTRA = j.extra || EXTRA; markSaved();
   drawGlossary();
   setStatus(`Đã lưu bảng thuật ngữ (${j.used} thuật ngữ) – trang đã dịch cần bấm “↻ Dịch lại” để áp bảng mới`);
 };
