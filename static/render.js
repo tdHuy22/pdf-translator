@@ -22,6 +22,10 @@ const MATH = [
   [/\\\(([\s\S]+?)\\\)/g, false],
   [/(?<![\\$\w])\$(?!\s)((?:[^$\n]|\\\$)+?)(?<![\s\\])\$(?![\w$])/g, false],
 ];
+// Model hay viết "$ \Psi $" (có cách trong dấu). Mẫu chặt ở trên bỏ qua kiểu này, nên dò thêm một lượt lỏng —
+// nhưng chỉ nhận khi bên trong RÕ là LaTeX (lệnh \…, chỉ số _ ^, ngoặc {}), để "$5 và $10" vẫn là chữ thường.
+const LOOSE = /(?<![\\$\w])\$(\s*(?:[^$\n]|\\\$)+?\s*)\$(?![\w$])/g;
+const looksTex = s => /\\[A-Za-z]|[_^{}]/.test(s);
 
 const holder = (kind, i) => `${kind}${i}`;
 
@@ -65,6 +69,11 @@ function extract(text, store, open) {
       return holder("M", store.math.length - 1);
     });
   }
+  text = text.replace(LOOSE, (m, tex) => {
+    if (!looksTex(tex)) return m;
+    store.math.push({ tex: tex.trim(), display: false, partial: false });
+    return holder("M", store.math.length - 1);
+  });
   // HTML thô trong câu trả lời không bao giờ thành thẻ thật: "<" ngoài code và công thức hiện ra đúng là chữ "<".
   // Chỉ lọc bằng DOMPurify là chưa đủ, vì phải giữ thuộc tính style cho KaTeX, mà style="background:url(…)" cũng
   // làm trình duyệt tự tải một địa chỉ bên ngoài. Code thì không cần thoát: Markdown tự thoát chữ trong code.
