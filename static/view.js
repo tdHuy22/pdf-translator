@@ -1,6 +1,8 @@
 // ================================================================ Khung đọc: hai khung xem, thu phóng, kính lúp, bề rộng khung chat
 // Bản gốc và bản dịch nằm trong HAI KHUNG XEM độc lập (#paneO | #paneT): mỗi khung tự cuộn (dọc lẫn ngang) và tự thu
 // phóng, ở giữa là thanh kéo chia bề rộng. Mặc định hai khung không cuộn theo nhau; nút 🔗 bật lại "cuộn cùng nhau".
+// Ô chọn cạnh nút thu phóng (#zoomWho: Cả hai / Gốc / Dịch) quyết định khung nào được thu phóng; bật 🔗 thì tự về
+// "Cả hai", tắt thì về khung đang chỉnh.
 // Mỗi bản chỉ có một bản sao của mỗi trang nên lớp chữ, tô vàng, ghi chú vẫn tìm trang bằng pageOf(). Lớp chữ tự co
 // theo nhờ ResizeObserver của app.js, vệt tô lưu theo toạ độ PDF nên cũng tự khớp.
 // Ảnh trang được vẽ lại nét hơn khi phóng to (server vẽ PNG theo `zoom`): mặc định ×2, tối đa ×4.
@@ -21,9 +23,24 @@ for (const k of KINDS) zoom[k] = clamp(parseFloat(load(ZKEY[k], load("view_zoom"
 let split = clamp(parseFloat(load("view_split", "0.5")) || 0.5, 0.2, 0.8);
 let link = load("view_link", "0") === "1";
 let active = mode === "translated" ? "translated" : "original";   // khung đang chỉnh: chuột vừa vào / đang hiện
+let zt = load("view_zoom_target", link ? "both" : active);         // khung được thu phóng khi xem song song
+if (![...KINDS, "both"].includes(zt)) zt = "both";
 const mark = {};                             // chỗ đang đọc của từng khung, để hiện lại đúng chỗ sau khi bị ẩn
 
 const shown = k => mode === "both" || mode === k;
+const linked = () => link && mode === "both";   // 🔗: cuộn cả hai khung cùng nhau
+/** Khung lấy độ phóng để hiện / làm mốc cho nút −, +, ô %: chế độ một bản thì là bản đó, "Cả hai" thì khung đang chỉnh. */
+const zref = () => mode !== "both" ? mode : zt === "both" ? active : zt;
+function setTarget(t) {
+  if (t === zt) return;
+  const from = zref();
+  zt = t; save("view_zoom_target", t);
+  // chọn "Cả hai" mà hai khung đang phóng khác nhau: khung kia lấy độ phóng của khung vừa chỉnh
+  if (t === "both" && mode === "both" && zoom[other(from)] !== zoom[from])
+    relayout(() => { zoom[other(from)] = zoom[from]; save(ZKEY[other(from)], zoom[from]); });
+  layout();
+  if (linked()) follow(from, true);
+}
 
 // ---------------- Bố cục: bề rộng trang = bề rộng khung × zoom của khung
 function layout() {
@@ -39,7 +56,8 @@ function layout() {
   }
   if (!shown(active)) active = other(active);
   if (document.activeElement !== $("zoomPct")) showZoom();   // đang gõ dở thì không ghi đè
-  $("zoomWho").textContent = mode === "both" ? (active === "original" ? "Gốc" : "Dịch") : "";
+  $("zoomWho").value = zt;
+  $("zoomWho").hidden = mode !== "both";
   $("linkScroll").classList.toggle("on", link);
   $("linkScroll").hidden = mode !== "both";
   document.querySelectorAll("#viewbar [data-mode]").forEach(b => b.classList.toggle("on", b.dataset.mode === mode));
@@ -77,18 +95,23 @@ function relayout(change, pt, who) {
   layout();
   for (const k of KINDS) if (shown(k)) restore(k, mark[k]);
 }
+/** Thu phóng khung k (nút −, +, ô % gọi với zref(); ⌘/Ctrl + lăn chuột, chụm hai ngón gọi với khung dưới tay).
+ *  Ô chọn đang là "Cả hai" thì cả hai khung cùng độ phóng; đang là một khung mà phóng khung kia thì ô chọn đổi theo. */
 function setZoom(k, z, pt) {
   z = clamp(Math.round(z * 100) / 100, Z_MIN, Z_MAX);
-  if (z === zoom[k]) return;
-  relayout(() => { zoom[k] = z; save(ZKEY[k], z); }, pt, k);
+  const both = mode === "both" && zt === "both", ks = both ? KINDS : [k];
+  if (mode === "both" && !both && zt !== k) { zt = k; save("view_zoom_target", k); }
+  if (ks.every(x => zoom[x] === z)) return layout();
+  relayout(() => { for (const x of ks) { zoom[x] = z; save(ZKEY[x], z); } }, pt, k);
+  if (both && linked()) follow(k, true);   // khung kia neo theo giữa khung → kéo về đúng chỗ khung đang phóng
 }
-const showZoom = () => { $("zoomPct").value = Math.round(zoom[active] * 100) + "%"; };
+const showZoom = () => { $("zoomPct").value = Math.round(zoom[zref()] * 100) + "%"; };
 
 // Ô nhập %: Enter / bấm ra ngoài thì áp (ngoài 40–400% bị kẹp lại), ↑ ↓ đổi ±10%, Esc bỏ
 const zp = $("zoomPct");
 function commitZoom() {
   const v = parseFloat(zp.value.replace(",", "."));
-  if (v > 0) setZoom(active, v / 100);
+  if (v > 0) setZoom(zref(), v / 100);
   showZoom();                    // số gõ sai / bị kẹp / không đổi: ô vẫn phải về đúng độ phóng hiện tại
 }
 zp.addEventListener("focus", () => zp.select());
@@ -98,7 +121,7 @@ zp.addEventListener("keydown", e => {
   else if (e.key === "Escape") { showZoom(); zp.blur(); }
   else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
     e.preventDefault();
-    setZoom(active, zoom[active] + (e.key === "ArrowUp" ? 0.1 : -0.1));
+    setZoom(zref(), zoom[zref()] + (e.key === "ArrowUp" ? 0.1 : -0.1));
     showZoom(); zp.select();
   }
 });
@@ -114,12 +137,17 @@ $("viewbar").addEventListener("click", e => {
   const b = e.target.closest("button");
   if (!b) return;
   if (b.dataset.mode) setMode(b.dataset.mode);
-  else if (b.id === "zoomIn") setZoom(active, zoom[active] * 1.2);
-  else if (b.id === "zoomOut") setZoom(active, zoom[active] / 1.2);
-  else if (b.id === "zoomFit") setZoom(active, 1);
+  else if (b.id === "zoomIn") setZoom(zref(), zoom[zref()] * 1.2);
+  else if (b.id === "zoomOut") setZoom(zref(), zoom[zref()] / 1.2);
+  else if (b.id === "zoomFit") setZoom(zref(), 1);
   else if (b.id === "hdrToggle") setHdr(!document.body.classList.contains("nohdr"), true);
-  else if (b.id === "linkScroll") { link = !link; save("view_link", link ? "1" : "0"); layout(); follow(active); }
+  else if (b.id === "linkScroll") {
+    link = !link; save("view_link", link ? "1" : "0");
+    setTarget(link ? "both" : active);   // bật 🔗: thu phóng cả hai; tắt: về khung đang chỉnh
+    layout(); follow(active);
+  }
 });
+$("zoomWho").addEventListener("change", e => { setTarget(e.target.value); e.target.blur(); });
 for (const k of KINDS) {
   pane[k].addEventListener("pointerenter", () => setActive(k));
   pane[k].addEventListener("pointerdown", () => setActive(k));
@@ -196,9 +224,9 @@ document.addEventListener("gesturestart", e => { if (e.target.closest?.(".vpane"
 new ResizeObserver(() => relayout()).observe(document.querySelector("header"));   // thanh trên cùng xuống dòng
 
 // ---------------- Cuộn cùng nhau (🔗, mặc định tắt): chỉ khung đang dùng kéo khung kia theo — không vòng lặp
-function follow(k) {
+function follow(k, force = false) {
   sharpenSoon();
-  if (!link || mode !== "both" || k !== active) return;
+  if (!linked() || k !== active && !force) return;
   const o = other(k), pr = pane[k].getBoundingClientRect(), a = anchorAt(k, { x: pr.left + pr.width / 2, y: pr.top + 1 });
   const el = a && pane[o].querySelector(`.page[data-p="${a.p}"]`);
   if (!el) return;

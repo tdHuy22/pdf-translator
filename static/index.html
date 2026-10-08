@@ -68,7 +68,10 @@
   #lens[hidden] { display:none; }
   #lens::after { content:attr(data-k); position:absolute; right:6px; bottom:4px; font-size:10px; color:#fff;
                  background:rgba(0,0,0,.45); border-radius:3px; padding:0 4px; }
-  #zoomWho { font-size:11px; color:var(--muted); padding-left:2px; }
+  #viewbar #zoomWho { font-size:12px; padding:2px 2px; border:1px solid transparent; border-radius:6px; background:transparent;
+                      color:var(--muted); cursor:pointer; }
+  #viewbar #zoomWho:hover { background:var(--hover); color:inherit; }
+  #viewbar #zoomWho[hidden] { display:none; }
   #linkScroll.on { border-color:var(--line); background:var(--tint); }
   .page { position:relative; overflow:hidden; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.15); }
   /* tỉ lệ A4/Letter tạm cho tới khi ảnh nạp xong: không thì trang chưa nạp cao 0, cả chục ảnh "lazy" lọt vào khung cùng lúc */
@@ -358,7 +361,6 @@
     #viewbar { left:8px; right:8px; bottom:calc(8px + env(safe-area-inset-bottom)); overflow-x:auto; scrollbar-width:none; justify-content:flex-start; }
     #viewbar::-webkit-scrollbar { display:none; }
     #viewbar > * { flex:none; }
-    #zoomWho { display:none; }
     /* Thanh bôi đen: ghim ở đáy (trên thanh xem) — đặt cạnh chữ thì đè lên tay kéo chọn và menu Sao chép của hệ điều hành */
     #selbar { left:8px !important; right:8px; top:auto !important; bottom:calc(60px + env(safe-area-inset-bottom));
               overflow-x:auto; scrollbar-width:none; z-index:21; }
@@ -620,13 +622,15 @@
   <button data-mode="both" title="Xem song song hai bản">Cả hai</button>
   <button data-mode="translated" title="Chỉ xem bản dịch (trang to gấp đôi)">Dịch</button>
   <span class="sep"></span>
-  <span id="zoomWho" title="Khung đang chỉnh (khung chuột vừa rê vào)"></span>
-  <button id="zoomOut" title="Thu nhỏ khung đang chỉnh (⌘/Ctrl + lăn chuột trên khung)">−</button>
+  <select id="zoomWho" title="Thu phóng khung nào: cả hai bản, chỉ bản gốc hay chỉ bản dịch (bật 🔗 thì tự về Cả hai)" aria-label="Khung được thu phóng">
+    <option value="both">Cả hai</option><option value="original">Gốc</option><option value="translated">Dịch</option>
+  </select>
+  <button id="zoomOut" title="Thu nhỏ khung chọn ở ô bên trái (⌘/Ctrl + lăn chuột trên khung)">−</button>
   <input id="zoomPct" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="100%" aria-label="Độ phóng (%)"
          title="Gõ số % rồi Enter (40–400%) · ↑ ↓: ±10% · Esc: huỷ. Nút ⤢ bên phải: vừa bề rộng khung">
-  <button id="zoomIn" title="Phóng to khung đang chỉnh (⌘/Ctrl + lăn chuột trên khung)">+</button>
+  <button id="zoomIn" title="Phóng to khung chọn ở ô bên trái (⌘/Ctrl + lăn chuột trên khung)">+</button>
   <button id="zoomFit" title="Vừa bề rộng khung">⤢</button>
-  <button id="linkScroll" title="Cuộn cùng nhau: cuộn một bản thì bản kia theo tới cùng trang (mặc định tắt — hai bản cuộn độc lập)">🔗</button>
+  <button id="linkScroll" title="Cuộn cùng nhau: cuộn một bản thì bản kia theo tới cùng trang, và thu phóng cả hai bản (mặc định tắt — hai bản độc lập)">🔗</button>
   <span class="sep"></span>
   <button id="skipMode" title="Bấm vào đoạn trên trang để đánh dấu / bỏ đánh dấu KHÔNG DỊCH (bản dịch giữ nguyên chữ gốc). Bấm lại nút này để thôi">⛔ Chọn đoạn</button>
   <span class="sep desk"></span>
