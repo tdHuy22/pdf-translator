@@ -59,7 +59,6 @@ def score(run: dict) -> dict:
 
 
 def run_once(args) -> dict:
-    from fastapi.testclient import TestClient
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="vietpaper-english-"))
     atexit.register(shutil.rmtree, tmp, ignore_errors=True)     # xoá khi thoát (~10 MB mỗi lượt)
     A.store.ROOT, A.USER_TERMS_FILE, A._uterms = tmp, tmp / "user_terms.json", {}
@@ -71,7 +70,7 @@ def run_once(args) -> dict:
                    temperature=0.0, google_fallback=False, page_span=1).model_dump()
     frozen = json.loads((OUT / f"{args.gloss_from}.json").read_text())["gloss"] if args.gloss_from else None
     run = {"tag": args.tag, "model": args.model, "rule": args.rule, "gloss": [], "items": [], "time": 0.0}
-    with TestClient(A.app) as c:
+    with A.test_client() as c:
         for name, pages in SETS:
             pdf = ROOT / "data" / f"{name}.pdf"
             doc = c.post("/api/upload", files={"file": (pdf.name, pdf.read_bytes(), "application/pdf")}).json()["id"]

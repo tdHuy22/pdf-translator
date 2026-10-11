@@ -22,7 +22,6 @@ import tempfile
 import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
-from fastapi.testclient import TestClient
 
 import app as A
 
@@ -95,7 +94,7 @@ def run_gold(args, cfg):
     cases = json.loads(pathlib.Path(args.gold).read_text("utf-8"))
     norm = lambda t: A._norm_map(t)[0].strip(" .,;:")  # noqa: E731
     score, bad, times = {"đúng": 0, "một phần": 0, "sai": 0, "không tìm thấy": 0, "lỗi LLM": 0}, [], []
-    with TestClient(A.app) as c:
+    with A.test_client() as c:
         did = c.post("/api/upload", files={"file": ("x.pdf", _blank(), "application/pdf")}).json()["id"]
         try:
             for i, k in enumerate(cases):
@@ -158,7 +157,7 @@ def main():
     if args.gold:
         return run_gold(args, cfg)
     rows = []
-    with TestClient(A.app) as c:
+    with A.test_client() as c:
         st = c.get(f"/api/{args.doc}/state").json()
         pool = []
         for p in st["done"]:

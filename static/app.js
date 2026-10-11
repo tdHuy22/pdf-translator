@@ -8,6 +8,13 @@ const PADDLE_OCR = "hf.co/PaddlePaddle/PaddleOCR-VL-1.6-GGUF:latest";  // OCR t�
 // trò chuyện), vision (OCR), gloss (lập bảng thuật ngữ; không có thì như model), parallel (số vùng OCR cùng lúc).
 let PRESETS = { custom: {} };
 const $ = id => document.getElementById(id);
+// Phiên đăng nhập hết hạn / bị thu hồi (đổi mật khẩu, đăng xuất) → về trang đăng nhập. Mọi lời gọi API đi qua fetch.
+const rawFetch = window.fetch.bind(window);
+window.fetch = async (...args) => {
+  const r = await rawFetch(...args);
+  if (r.status === 401 && location.pathname !== "/login.html") location.href = "/login.html";
+  return r;
+};
 // Ô chữ thường (lưu nguyên giá trị) và ô đánh dấu (lưu .checked). API key lưu riêng theo server, xem KEY_OF.
 const FIELDS = ["preset","ocr_preset","chat_preset","base_url","model","temperature","concurrency","glossary",
   "translator","length_ratio","page_span","ocr_mode","ocr_engine","ocr_lang","ocr_vlm_base_url","ocr_vlm_model",
@@ -22,26 +29,42 @@ const KEY_OF = { api_key:"base_url", ocr_vlm_api_key:"ocr_vlm_base_url", chat_ap
 let doc = null, stopFlag = false;
 
 // ================================================================ Cấu hình & API key
-// Key lưu theo TỪNG server: đổi preset OpenRouter → Ollama → OpenRouter không phải gõ lại key.
-// Server cũng giữ một bản (data/keys.json) nên xoá dữ liệu duyệt web hay mở app từ máy khác vẫn dịch được;
-// bản trên server chỉ được trả về dạng che (sk-o…9f2c) để hiện vào placeholder.
+// Key lưu theo TỪNG server (đổi preset OpenRouter → Ollama → OpenRouter không phải gõ lại key), và CHỈ trên server
+// (data/keys.json): gõ key vào ô là gửi lên một lần rồi xoá khỏi ô, trình duyệt không lưu gì — một lỗi XSS sau này
+// cũng không đọc được key. Server chỉ trả dạng che (sk-o…9f2c) để hiện vào placeholder, và tự điền key khi ô để trống.
 let SERVER_KEYS = {};
 const slotOf = f => (KEY_OF[f] === "ocrspace" ? "ocrspace" : ($(KEY_OF[f])?.value || "")).replace(/\/+$/, "");
 const keyStore = () => { try { return JSON.parse(localStorage.getItem("apikeys") || "{}"); } catch { return {}; } };
 
-function rememberKey(f) {
-  const slot = slotOf(f), ks = keyStore();
-  if (!slot) return;
-  if ($(f).value) ks[slot] = $(f).value; else delete ks[slot];
-  try { localStorage.setItem("apikeys", JSON.stringify(ks)); } catch {}
+async function sendKey(slot, key) {
+  const r = await fetch("/api/keys", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ slot, key }) });
+  if (!r.ok) throw new Error(r.statusText);
+  SERVER_KEYS = (await r.json()).keys || {};
+}
+async function rememberKey(f) {
+  const slot = slotOf(f), key = $(f).value.trim();
+  if (!slot || !key) return;
+  try { await sendKey(slot, key); fillKey(f); }
+  catch {}   // chưa gửi được: key còn trong ô, lượt gọi tới vẫn gửi kèm và server nhớ khi dùng
 }
 function fillKey(f) {
   const slot = slotOf(f);
-  $(f).value = keyStore()[slot] || "";
+  $(f).value = "";
   $(f).placeholder = SERVER_KEYS[slot] ? `đã lưu trên server (${SERVER_KEYS[slot]})`
                    : (f === "ocr_api_key" ? "helloworld (demo)" : "(để trống nếu local)");
 }
 const fillKeys = () => Object.keys(KEY_OF).forEach(fillKey);
+// Bản cũ giữ key trong localStorage "apikeys" → đưa lên server (slot nào server chưa có) rồi xoá khỏi trình duyệt.
+// Gửi hỏng thì giữ nguyên để lần mở sau thử lại.
+async function migrateKeys() {
+  const ks = keyStore();
+  if (!localStorage.getItem("apikeys")) return;
+  try {
+    for (const [slot, key] of Object.entries(ks)) if (key && !SERVER_KEYS[slot]) await sendKey(slot, key);
+  } catch { return; }
+  try { localStorage.removeItem("apikeys"); } catch {}
+  fillKeys();
+}
 
 function loadSettings() {
   let s = {};
@@ -168,6 +191,12 @@ Object.keys(KEY_OF).forEach(f => $(f).addEventListener("change", () => rememberK
 // Đổi base URL bằng tay → lấy lại key đã lưu cho server đó
 Object.values(KEY_OF).filter(u => u !== "ocrspace").forEach(u => $(u).addEventListener("change", fillKeys));
 $("btnSet").onclick = () => $("settings").classList.toggle("open");
+$("btnLogout").onclick = async () => {
+  try { await fetch("/api/logout", { method:"POST" }); } catch {}
+  location.href = "/login.html";
+};
+// bấm nút trên thanh bôi đen không được làm mất vùng đang chọn (trước là onmousedown nội tuyến, CSP không cho)
+$("selbar").addEventListener("mousedown", e => e.preventDefault());
 
 // ---------------- Nhà cung cấp
 async function loadProviders() {
@@ -357,7 +386,7 @@ $("pvSave").onclick = async () => {
   const r = await fetch("/api/providers", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) });
   if (!r.ok) { $("pvMsg").textContent = "❌ " + ((await r.json().catch(() => ({}))).detail || r.statusText); return; }
   const saved = await r.json();
-  if (key) { const ks = keyStore(); ks[base] = key; try { localStorage.setItem("apikeys", JSON.stringify(ks)); } catch {} }
+  if (key) { try { await sendKey(base, key); } catch {} }
   await loadProviders();
   pvForm(saved);
   // thử kết nối luôn: biết ngay Base URL/key đúng chưa (và server nhớ key theo Base URL)
@@ -481,7 +510,7 @@ function buildPages() {
   let o = "", t = "";
   for (let i = 0; i < doc.pages; i++) {
     o += pageBox(i, "original", `<img loading="lazy" src="/api/${doc.id}/page/${i}/original.png">`);
-    t += pageBox(i, "translated", `<div class="ph"><span>Chưa dịch</span><button onclick="translatePages([${i}])">Dịch trang này</button></div>`);
+    t += pageBox(i, "translated", `<div class="ph"><span>Chưa dịch</span><button data-act="translate" data-p="${i}">Dịch trang này</button></div>`);
   }
   $("stackO").innerHTML = o;
   $("stackT").innerHTML = t;
@@ -858,8 +887,8 @@ function busyBox(i, n) {
 }
 function idleBox(i) {
   return `<span class="num">${i+1}</span><div class="ph"><span>Chưa dịch</span>
-    <button onclick="translatePages([${i}])">Dịch trang này</button>
-    <button onclick="keepPage(${i}, true)" title="Không dịch trang này: bản dịch dùng nguyên trang gốc (không gọi LLM)">⤳ Giữ bản gốc</button></div><div class="layer"></div>`;
+    <button data-act="translate" data-p="${i}">Dịch trang này</button>
+    <button data-act="keep" data-p="${i}" title="Không dịch trang này: bản dịch dùng nguyên trang gốc (không gọi LLM)">⤳ Giữ bản gốc</button></div><div class="layer"></div>`;
 }
 const trBox = i => document.querySelector(`.page[data-p="${i}"][data-kind="translated"]`);
 
@@ -911,7 +940,7 @@ async function translatePages(pages, force = false, opts = {}) {
     if (doc !== mine) return [];
     trBox(pages[0]).innerHTML = `<span class="num">${pages[0]+1}</span><div class="ph">
       <span style="color:#b91c1c">❌ ${esc(e.message)}</span>
-      <button onclick="translatePages([${pages[0]}], ${doc.done.has(pages[0])})">Thử lại</button></div><div class="layer"></div>`;
+      <button data-act="translate" data-p="${pages[0]}"${doc.done.has(pages[0]) ? ' data-force="1"' : ""}>Thử lại</button></div><div class="layer"></div>`;
     pages.slice(1).forEach(restoreBox);
     throw e;
   }
@@ -948,13 +977,22 @@ function pageTools(i, tags = [], errTitle = "") {
   const ins = [doc.instr["*"] && `Cả bài: ${doc.instr["*"]}`, doc.instr[i] && `Trang này: ${doc.instr[i]}`].filter(Boolean);
   if (doc.keep.has(i)) {
     return `<div class="tools"><button class="kept" disabled title="Trang này giữ nguyên bản gốc, không dịch">📄 bản gốc</button>
-      <button onclick="translatePages([${i}], true)">Dịch trang này</button></div>`;
+      <button data-act="translate" data-p="${i}" data-force="1">Dịch trang này</button></div>`;
   }
   return `<div class="tools">${tags.map(x => `<button disabled title="${esc(errTitle)}">${x}</button>`).join("")}` +
     (ins.length ? `<button disabled title="${esc("Yêu cầu dịch đã nhớ — " + ins.join(" · "))}">✎</button>` : "") +
-    `<button onclick="keepPage(${i}, true)" title="Bỏ bản dịch, dùng nguyên trang gốc (không gọi LLM)">⤳ Giữ gốc</button>` +
-    `<button onclick="openRetranslate({ page: ${i}, anchor: this })" title="Dịch lại trang này, có thể kèm yêu cầu">↻ Dịch lại</button></div>`;
+    `<button data-act="keep" data-p="${i}" title="Bỏ bản dịch, dùng nguyên trang gốc (không gọi LLM)">⤳ Giữ gốc</button>` +
+    `<button data-act="retranslate" data-p="${i}" title="Dịch lại trang này, có thể kèm yêu cầu">↻ Dịch lại</button></div>`;
 }
+// Nút trong khung trang (vẽ lại bằng innerHTML) bắt chung ở đây: CSP của app (auth.py) không cho onclick="…" nội tuyến
+document.addEventListener("click", e => {
+  const b = e.target.closest("button[data-act]");
+  if (!b || b.disabled) return;
+  const p = +b.dataset.p;
+  if (b.dataset.act === "translate") translatePages([p], b.dataset.force === "1");
+  else if (b.dataset.act === "keep") keepPage(p, true);
+  else if (b.dataset.act === "retranslate") openRetranslate({ page: p, anchor: b });
+});
 
 function showTranslated(pg, res) {
   const i = pg.page, box = trBox(i);
@@ -1648,4 +1686,4 @@ async function loadFonts() {
     });
   } catch {}
 }
-loadFonts().then(loadKeys).then(loadProviders).then(loadSettings).then(() => restoreDoc());
+loadFonts().then(loadKeys).then(loadProviders).then(loadSettings).then(migrateKeys).then(() => restoreDoc());

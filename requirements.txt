@@ -1,5 +1,5 @@
 pymupdf>=1.24
-fastapi
+fastapi>=0.141  # đã kiểm 0.141: body JSON không có Content-Type bị từ chối (trang lạ không gửi được request "simple")
 uvicorn
 httpx
 python-multipart

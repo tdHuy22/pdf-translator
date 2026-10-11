@@ -5,6 +5,10 @@ Yêu cầu: macOS/Linux, Python ≥ 3.10.
 ```
 ./run.sh          # lần đầu tự tạo .venv và cài thư viện, sau đó mở http://127.0.0.1:8000
 ```
+App có **đăng nhập** (một mật khẩu): đặt một lần trên máy chạy app trước khi mở, chưa đặt thì mọi request bị từ chối (503).
+```
+.venv/bin/python auth.py --set-password     # đặt / đổi mật khẩu (đổi là đăng xuất mọi nơi)
+```
 Chạy nền và bật/tắt bằng `restart.sh` (log ghi vào `app.log`):
 ```
 ./restart.sh            # khởi động lại (sau khi sửa code thì chạy lệnh này)
@@ -12,7 +16,7 @@ Chạy nền và bật/tắt bằng `restart.sh` (log ghi vào `app.log`):
 ```
 Thử nhanh: 10 bài bench trong `data/` (PDF có lớp chữ) và bản scan của chúng trong `samples/<tên>-scan.pdf` (không nằm trong git, tạo bằng `.venv/bin/python scripts/make_scans.py`: 200 dpi, ảnh xám, lệch trang ±0,6°, nhiễu hạt, JPEG q=60, seed cố định).
 
-Mã nguồn: `app.py` (toàn bộ phía server), `store.py` (lưu tài liệu xuống đĩa), `notes.py` (ghi chú), `chats.py` (phiên trò chuyện), `static/index.html` (bố cục + CSS), `static/app.js` (giao diện), `static/render.js` (Markdown + công thức + code cho câu trả lời LLM và ghi chú), `static/notes.js` (ghi chú), `static/view.js` (hai khung xem, thu phóng, chế độ xem, kính lúp, bề rộng khung chat). File tĩnh được trả kèm `Cache-Control: no-cache` nên sửa xong tải lại trang là thấy ngay.
+Mã nguồn: `app.py` (toàn bộ phía server), `auth.py` (đăng nhập, chặn request lạ, header bảo mật), `store.py` (lưu tài liệu xuống đĩa), `notes.py` (ghi chú), `chats.py` (phiên trò chuyện), `static/index.html` (bố cục + CSS), `static/app.js` (giao diện), `static/render.js` (Markdown + công thức + code cho câu trả lời LLM và ghi chú), `static/notes.js` (ghi chú), `static/view.js` (hai khung xem, thu phóng, chế độ xem, kính lúp, bề rộng khung chat), `static/login.html` + `login.js` (trang đăng nhập), `static/theme.js` (nút sáng/tối). Không có script nội tuyến hay `onclick="…"` trong HTML: CSP của app chặn chúng. File tĩnh được trả kèm `Cache-Control: no-cache` nên sửa xong tải lại trang là thấy ngay.
 
 ## LLM hỗ trợ (mọi API tương thích OpenAI)
 Có sẵn (API cloud, cần API key; không sửa/xoá được):
@@ -209,8 +213,8 @@ Mỗi PDF tải lên được lưu trong `data/docs/<id>/` (`store.py`): `src.pd
 - **💬 Hỏi về tài liệu**: hỏi bất cứ điều gì về bài. LLM nhận: tên bài, bảng thuật ngữ, **mục lục bài** (rút từ các dòng dạng `3.2 Scaled Dot-Product Attention`), rồi đoạn đang bôi đen, rồi nội dung trang đang xem và các trang bên cạnh — **kèm cả bản gốc lẫn bản dịch của từng đoạn** — nhồi tới 55% ngữ cảnh. Trả lời chảy về từng chữ (streaming). Mặc định dùng đúng server/model đang dịch; bỏ tích "Dùng đúng server/model đang dịch" trong ⚙️ Cấu hình để chọn model khác (ví dụ dịch bằng model chuyên dịch, còn hỏi đáp bằng Qwen3.5).
   - **Câu trả lời hiện đúng công thức, bảng và ký tự đặc biệt** (`static/render.js`): Markdown (marked) + công thức LaTeX (KaTeX) + lọc HTML (DOMPurify), thư viện nằm sẵn trong `static/vendor/` (~600 KB, không gọi CDN — tải lại bằng `.venv/bin/python scripts/download_vendor.py`; thiếu file thì chat lùi về chữ thô chứ không hỏng). Prompt trò chuyện bảo model viết công thức bằng `$…$` / `$$…$$` và so sánh bằng bảng Markdown — trước đây prompt **cấm** LaTeX nên có dựng engine cũng không có gì để dựng. Nút **📋 Chép** chép bản Markdown gốc (còn nguyên LaTeX), không phải chữ đã dựng.
   - Đang chảy chữ thì bong bóng được vẽ lại ~12 lần/giây; mỗi công thức chỉ dựng bằng KaTeX **một lần** rồi nhớ lại, nên công thức hiện ngay và không nhấp nháy, còn `$$` đang gõ dở thì hiện chữ thô thay vì lỗi đỏ. Đo 21/09/2026 trên câu trả lời thật của `4b` (TUF): 970 lần lấy mẫu trong lúc chảy, 60 công thức + 2 bảng, **0 lần công thức biến mất, 0 khung lỗi đỏ**; vẽ ~0,3 ms/lần.
-  - Câu trả lời LLM là dữ liệu không tin được (bài báo có thể chứa câu dặn model làm gì đó): HTML thô trong câu trả lời **không bao giờ thành thẻ** (dấu `<` bị thoát, hiện ra đúng là chữ), và mọi thẻ trình duyệt **tự tải** khi hiện ra (`img`, `video`, `iframe`…) bị bỏ — nếu không, một câu kiểu "chèn ảnh `https://…/?q=<tóm tắt cuộc trò chuyện>`" là đủ để nội dung bị gửi ra ngoài lúc câu trả lời hiện lên. Link thường vẫn giữ (phải bấm mới đi).
-  - Sửa `static/render.js` xong thì mở **http://127.0.0.1:8000/render-test.html**: 21 ca (công thức 4 kiểu dấu, `$5` không phải công thức, `$` trong code, bảng, LaTeX hỏng, chặn tự tải…) và giả lập chảy chữ từng ký tự, không cần server LLM.
+  - Câu trả lời LLM là dữ liệu không tin được (bài báo có thể chứa câu dặn model làm gì đó): HTML thô trong câu trả lời **không bao giờ thành thẻ** (dấu `<` bị thoát, và marked được cài để thoát cả HTML thô nó tự nhận ra — kẽ hở "\\`<div …>`" tìm thấy khi rà 11/10/2026), thẻ dựng được giao diện giả (`form`, `input`, `button`, `style`) bị bỏ, `style` có `url(…)` hay `position:fixed/absolute` bị bỏ, khung trả lời giới hạn bằng `contain: paint`; mọi thẻ trình duyệt **tự tải** khi hiện ra (`img`, `video`, `iframe`…) bị bỏ — nếu không, một câu kiểu "chèn ảnh `https://…/?q=<tóm tắt cuộc trò chuyện>`" là đủ để nội dung bị gửi ra ngoài lúc câu trả lời hiện lên. Link thường vẫn giữ (phải bấm mới đi).
+  - Sửa `static/render.js` xong thì mở **http://127.0.0.1:8000/render-test.html** (đã đăng nhập): 24 ca (công thức 4 kiểu dấu, `$5` không phải công thức, `$` trong code, bảng, LaTeX hỏng, chặn tự tải, các lối lách HTML/CSS…) và giả lập chảy chữ từng ký tự, không cần server LLM.
 
 
 ## Ghi chú (25/09/2026)
@@ -270,13 +274,24 @@ Khung bên phải có hai tab **💬 Trò chuyện | 📝 Ghi chú** (nút 📝 
 - `-j 2`: hai lượt gọi dịch song song trong một bài (như ô “song song” trong giao diện); `--span`: số trang giữ chỗ cho một lượt gọi.
 
 ## API key
-Key lưu **theo từng server**, nên đổi qua lại OpenRouter → Ollama → OpenRouter không phải gõ lại:
-- trong trình duyệt (`localStorage`), và
-- một bản trên máy chạy app (`data/keys.json`, quyền `600`) — xoá dữ liệu duyệt web hoặc mở app từ máy khác vẫn dịch được. Request gửi key rỗng thì server tự điền key đã nhớ của base URL đó.
+Key lưu **theo từng server**, nên đổi qua lại OpenRouter → Ollama → OpenRouter không phải gõ lại, và **chỉ trên máy chạy app** (`data/keys.json`, quyền `600`, ghi bằng file tạm rồi đổi tên nên mất điện giữa chừng không hỏng file). Gõ key vào ô là gửi lên server một lần (`POST /api/keys`) rồi ô tự xoá; trình duyệt không lưu key (từ 11/10/2026 — bản cũ giữ trong `localStorage`, lần mở đầu tiên app chuyển lên server rồi xoá khỏi trình duyệt), nên một lỗi XSS sau này cũng không đọc được key. Request gửi key rỗng thì server tự điền key đã nhớ của base URL đó.
 
-Server **không bao giờ trả key đầy đủ** về giao diện, chỉ trả dạng che (`sk-o…9f2c`) để hiện vào ô nhập. Xoá một key: `curl -X DELETE "http://127.0.0.1:8000/api/keys?slot=<base_url>"`.
+Server **không bao giờ trả key đầy đủ** về giao diện, chỉ trả dạng che (`sk-o…9f2c`) để hiện vào ô nhập. Xoá một key: đăng nhập app trên trình duyệt, mở Console (DevTools) rồi chạy `fetch("/api/keys?slot=" + encodeURIComponent("<base_url>"), {method: "DELETE"})` (API cần phiên đăng nhập, curl trơn nhận 401).
 
 Trò chuyện / lập thuật ngữ / căn vệt tô chạy trên **server riêng** thì chỉ dùng key của server đó; để trống base URL mới dùng chung server + key đang dịch. (Trước 25/09/2026, ô key để trống thì app lấy key của server dịch gửi sang — với cấu hình mặc định, key OpenRouter bị gửi tới proxy ChatGPT mỗi lần tô vàng.)
+
+## Đăng nhập và vào app từ xa (11/10/2026)
+- **Một mật khẩu**, đặt bằng `.venv/bin/python auth.py --set-password` trên máy chạy app (không có trang đặt mật khẩu trên web). Lưu băm `scrypt` trong `data/auth.json` (quyền `600`); phiên là token ngẫu nhiên, server chỉ giữ bản băm, giữ **30 ngày** và tự gia hạn khi dùng. Đổi mật khẩu = thu hồi mọi phiên; nút **Đăng xuất** ở cuối ⚙️ Cấu hình.
+- **Chặn mặc định** (`auth.Guard`): chưa đăng nhập thì chỉ mở được trang đăng nhập — mọi route, file tĩnh, `/docs`, `/openapi.json` đều trả 401 (hay chuyển về trang đăng nhập), kể cả route thêm sau này. Sai mật khẩu 5 lần trong một phút thì khoá đăng nhập một phút.
+- **Chặn trang lạ**: request đổi dữ liệu (POST/PUT/PATCH/DELETE) phải có `Origin` khớp đúng scheme://host:cổng của app (CSRF; dịch vụ khác cùng tên máy khác cổng cũng bị chặn); header `Host` phải nằm trong danh sách cho phép (chặn DNS rebinding) — mặc định `localhost`, `127.0.0.1`, thêm tên khác bằng biến môi trường `ALLOWED_HOSTS`.
+- **Header bảo mật** trên mọi phản hồi: CSP chỉ cho script của chính app, không tải ảnh/font/kết nối nơi khác, không cho nhúng khung; `nosniff`.
+- **Giới hạn**: file tải lên tối đa 200 MB và 2.000 trang (`MAX_UPLOAD`, `MAX_PAGES` trong `app.py`; không có `Content-Length` — vd. HTTP/2 qua proxy — thì đếm từng mẩu lúc nhận), body đăng nhập tối đa 4 KB, phân tích PDF trong luồng riêng; ảnh trang `zoom` trong 0,5–4; một câu trả lời trò chuyện tối đa 8.192 token.
+- **Trên server TUF**: app chỉ nghe `127.0.0.1:8000`; máy trong tailnet (Mac, iPhone) vào bằng **https://<máy>.<tailnet>.ts.net:8443** qua `tailscale serve` (HTTPS, chỉ trong tailnet, **không** bật Funnel — app còn tự từ chối mọi request có header `Tailscale-Funnel-Request`, phòng khi lỡ bật). Unit systemd đặt `HOST=127.0.0.1 ALLOWED_HOSTS=<máy>.<tailnet>.ts.net`; bật lối vào:
+  ```
+  tailscale serve --bg --https=8443 http://127.0.0.1:8000
+  ```
+- `scripts/batch_translate.py` đăng nhập bằng mật khẩu ở biến môi trường `VIETPAPER_PASSWORD`, không có thì hỏi khi chạy.
+- Threat model và các chốt chặn: `.agent/threat-model.md`; kiểm bằng `scripts/test_security.py`.
 
 ## Font bản dịch
 Bản dịch tự dùng font **cùng loại với chữ gốc** (có chân / không chân / đơn cách), giữ đậm-nghiêng. Chế độ "auto" chọn font có **độ rộng chữ gần font gốc nhất** (đo từ PDF): bài LaTeX dùng Times (0,44 em/chữ) → Times New Roman (0,44), thay vì Source Serif 4 (0,51) làm chữ phải co. Font nhúng được cắt chỉ còn ký tự đã dùng (MuPDF, không cần cài thêm) nên PDF tải về thường nhỏ hơn cả bản gốc.
@@ -286,8 +301,10 @@ Bản dịch tự dùng font **cùng loại với chữ gốc** (có chân / kh�
 
 ## Kiểm tra nhanh sau khi sửa code
 ```
-.venv/bin/python scripts/smoke_features.py    # ~20 giây, KHÔNG cần server LLM
+.venv/bin/python scripts/smoke_features.py    # ~3 phút, KHÔNG cần server LLM
+.venv/bin/python scripts/test_security.py     # ~3 giây: đăng nhập, chặn route, Origin, Host, header, giới hạn
 ```
+Script chạy app trong cùng tiến trình dùng `A.test_client()` / `A.test_async_client()` (Host localhost, phiên chỉ sống trong bộ nhớ, không cần mật khẩu); `TestClient(A.app)` trơn bị chặn như mọi request chưa đăng nhập.
 Thay hàm gọi LLM bằng hàm giả rồi chạy thật cả luồng trên `data/bert.pdf`: gộp trang, bảng thuật ngữ (lập → sửa → lưu → vào đúng prompt), lớp chữ hai bản khớp số hiệu đoạn, tô vàng → annotation trong PDF tải về, ngữ cảnh gửi cho phần trò chuyện, nhớ API key, khôi phục sau khi tải lại trang, và lưu xuống đĩa rồi mở lại như sau khi khởi động lại app (xoá bộ nhớ → state, ảnh trang dịch, số hiệu đoạn, thuật ngữ, trò chuyện giống hệt; tải lên lại cùng file ra cùng id; xoá tài liệu). Dùng thư mục lưu tạm, không đụng `data/docs/`. In ✓/✗ từng mục và trả mã lỗi ≠ 0 nếu có mục sai.
 
 ## Bench bố cục PDF có lớp chữ

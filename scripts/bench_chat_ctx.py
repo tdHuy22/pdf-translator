@@ -24,7 +24,6 @@ import tempfile
 import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
-from fastapi.testclient import TestClient
 
 import app as A
 
@@ -76,7 +75,7 @@ out = pathlib.Path(args.resume) if args.resume else \
                               + ("-nosee" if args.no_see else "") + f"-{time.strftime('%Y%m%d-%H%M%S')}.json")
 rows = json.loads(out.read_text())["rows"] if args.resume else []
 have = {(r["n"], r["mode"]) for r in rows}
-with TestClient(A.app) as c:
+with A.test_client() as c:
     ids = {}
     for paper in sorted({q["paper"] for k, q in enumerate(bench, 1) if not pick or k in pick}):
         with open(ROOT / f"data/{paper}.pdf", "rb") as f:

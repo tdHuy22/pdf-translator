@@ -6,6 +6,8 @@
 cd "$(dirname "$0")" || exit 1
 PORT=${PORT:-8000}                     # HOST/PORT giống app.py (mặc định 127.0.0.1:8000)
 URL="http://${HOST:-127.0.0.1}:$PORT"
+# Trang đăng nhập là trang duy nhất trả 200 khi chưa đăng nhập (auth.py) → dùng để biết app còn sống
+PROBE="$URL/login.html"
 LOG=app.log
 
 # PID của app: tiến trình đang nghe cổng 8000 và đúng là python chạy app.py (không đụng tiến trình khác)
@@ -36,7 +38,7 @@ start() {
   nohup ./run.sh >>"$LOG" 2>&1 &
   i=0
   while [ $i -lt 120 ]; do                                                    # chờ tối đa 60 giây (lần đầu còn cài thư viện)
-    if curl -sf -o /dev/null "$URL"; then
+    if curl -sf -o /dev/null "$PROBE"; then
       echo "Đã chạy: $URL (PID $(pids | tr '\n' ' ')· log: $LOG)"
       return 0
     fi
@@ -56,7 +58,7 @@ case "${1:-restart}" in
     found=$(pids)
     if [ -n "$found" ]; then
       echo "Đang chạy: $URL (PID $(echo $found))"
-      curl -sf -o /dev/null "$URL" && echo "Trang web trả lời bình thường" || echo "Nhưng trang web không trả lời!"
+      curl -sf -o /dev/null "$PROBE" && echo "Trang web trả lời bình thường" || echo "Nhưng trang web không trả lời!"
     else
       echo "Không chạy"
     fi ;;

@@ -14,11 +14,14 @@ Nhà cung cấp (--provider, theo id hoặc tên) lấy từ app — có sẵn (
 Còn lại = mặc định của app (Config trong app.py), sửa bằng --model/--base-url/--translator, --config (file JSON các
 trường của Config) hoặc --set trường=giá_trị (thứ tự ưu tiên tăng dần: nhà cung cấp < --config < --set < --model…).
 Key API không cần truyền: app lấy key đã nhớ theo base_url.
+Đăng nhập: mật khẩu của app (auth.py) lấy từ biến môi trường VIETPAPER_PASSWORD, không có thì hỏi khi chạy.
 --format: translated (bản dịch), dual-side (song ngữ cạnh nhau), dual-alt (song ngữ xen trang), original (bản gốc có tô).
 """
 import argparse
 import asyncio
+import getpass
 import json
+import os
 import pathlib
 import re
 import sys
@@ -88,6 +91,16 @@ def pick_provider(ps: list[dict], want: str) -> dict:
         if want.casefold() in (p["id"].casefold(), p["name"].casefold()):
             return p
     sys.exit(f"Không có nhà cung cấp {want!r}. Có: {', '.join(p['id'] for p in ps)} (xem --list-providers)")
+
+
+async def login(c: httpx.AsyncClient, server: str) -> None:
+    """Lấy phiên đăng nhập (cookie nằm trong client). Trình duyệt chưa có phiên thì mọi API trả 401."""
+    if (await c.get("/api/login")).json().get("logged_in"):
+        return
+    pw = os.environ.get("VIETPAPER_PASSWORD") or getpass.getpass(f"Mật khẩu app ({server}): ")
+    r = await c.post("/api/login", json={"password": pw})
+    if r.status_code != 200:
+        sys.exit(f"Đăng nhập thất bại: {r.json().get('detail', r.status_code)}")
 
 
 async def build_config(c: httpx.AsyncClient, args) -> dict:
@@ -207,7 +220,7 @@ async def main():
         sys.exit("Không có file PDF nào")
     async with httpx.AsyncClient(base_url=args.server, timeout=httpx.Timeout(30, read=None)) as c:
         try:
-            await c.get("/api/docs")
+            await login(c, args.server)
         except httpx.HTTPError:
             sys.exit(f"App chưa chạy ở {args.server} → ./restart.sh start")
         if args.list_providers:

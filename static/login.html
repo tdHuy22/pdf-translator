@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Đăng nhập · VietPaper</title>
+<!-- Trang duy nhất mở được khi chưa đăng nhập (auth.PUBLIC). Script ở login.js: CSP không cho script nội tuyến. -->
+<style>
+  :root { --bg:#f5f4ed; --panel:#faf9f5; --line:#e3e0d3; --text:#141413; --muted:#73726c; --accent:#c96442;
+          --field:#fff; --bad:#b91c1c; color-scheme:light; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#262624; --panel:#1f1e1d; --line:#3e3d39; --text:#ecebe6; --muted:#a3a29c; --accent:#d97757;
+    --field:#30302e; --bad:#fca5a5; color-scheme:dark; } }
+  :root[data-theme="dark"] {
+    --bg:#262624; --panel:#1f1e1d; --line:#3e3d39; --text:#ecebe6; --muted:#a3a29c; --accent:#d97757;
+    --field:#30302e; --bad:#fca5a5; color-scheme:dark; }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); display:grid; place-items:center; padding:16px; }
+  form { width:100%; max-width:340px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:24px; display:grid; gap:14px; }
+  h1 { font-family:ui-serif,Georgia,"Times New Roman",serif; font-weight:500; color:var(--accent); font-size:22px; margin:0; }
+  label { display:grid; gap:6px; font-size:14px; }
+  input, button { font:inherit; font-size:15px; padding:9px 10px; border:1px solid var(--line); border-radius:8px; background:var(--field); color:inherit; }
+  input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 2px rgba(201,100,66,.2); }
+  button { cursor:pointer; background:var(--accent); color:#fff; border-color:var(--accent); }
+  button:disabled { opacity:.6; cursor:default; }
+  #msg { min-height:1.2em; font-size:13px; color:var(--bad); margin:0; }
+  #msg code { font-size:12px; overflow-wrap:anywhere; }
+</style>
+</head>
+<body>
+<form id="form">
+  <h1>📄 VietPaper</h1>
+  <label>Mật khẩu <input id="pw" type="password" autocomplete="current-password" required autofocus></label>
+  <button id="go" type="submit">Đăng nhập</button>
+  <p id="msg" role="alert"></p>
+</form>
+<script src="/login.js"></script>
+</body>
+</html>

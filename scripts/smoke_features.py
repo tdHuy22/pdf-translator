@@ -19,7 +19,6 @@ import tempfile
 import pymupdf
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
-from fastapi.testclient import TestClient
 
 import app as A
 
@@ -66,7 +65,7 @@ def ok(cond, msg):
     if not cond:
         FAIL.append(msg)
 
-with TestClient(A.app) as c:
+with A.test_client() as c:
     with open(pathlib.Path(__file__).resolve().parent.parent / "data/bert.pdf", "rb") as f:
         did = c.post("/api/upload", files={"file":("bert.pdf",f,"application/pdf")}).json()["id"]
     cfg = {"translator":"llm","base_url":"http://x/v1","model":"m","ocr_mode":"off","google_fallback":False,
@@ -291,7 +290,7 @@ with TestClient(A.app) as c:
     ok(not A.store.folder(did).exists(), "việc còn chạy của bài đã xoá không lỗi, không làm bài sống lại")
 
 print("10. Phiên trò chuyện, chọn ngữ cảnh")
-with TestClient(A.app) as c:
+with A.test_client() as c:
     with open(ROOT / "data/attention-is-all-you-need.pdf", "rb") as f:
         aid = c.post("/api/upload", files={"file": ("att.pdf", f, "application/pdf")}).json()["id"]
     c.post(f"/api/{aid}/translate/3?span=1", json=cfg)
@@ -346,7 +345,7 @@ async def fc2(cfg_, system, payload, max_out=0, est_in=0):
     SYS.append((system, [it["id"] for it in payload["items"]]))
     return await _fc(cfg_, system, payload, max_out, est_in)
 A.chat = fc2
-with TestClient(A.app) as c:
+with A.test_client() as c:
     with open(ROOT / "data/bert.pdf", "rb") as f:
         bid = c.post("/api/upload", files={"file": ("b.pdf", f, "application/pdf")}).json()["id"]
     c1 = {**cfg, "glossary_auto": False}
@@ -401,7 +400,7 @@ ok(not any(fig(q) or tab(q) or eq(q) for q in ["Mô hình này khác BERT thế 
    and tab("Bảng 3?") and not fig("Bảng 3?") and eq("Giải thích công thức (1)") and not fig("Giải thích công thức (1)"),
    "“mô hình”, “bảng thuật ngữ”… không bị coi là hỏi về hình/bảng; “Hình 2” là hình, “Bảng 3” là bảng, “công thức” "
    "là công thức (chỉ hình mới cần ảnh)")
-with TestClient(A.app) as c:
+with A.test_client() as c:
     with open(ROOT / "data/attention-is-all-you-need.pdf", "rb") as f:
         aid = c.post("/api/upload", files={"file": ("att2.pdf", f, "application/pdf")}).json()["id"]
     d = A.DOCS[aid]
@@ -472,7 +471,7 @@ ok(A.pdf_input(A.Config(base_url=OR, model="nex-agi/nex-n2.5-pro:free")) == "pdf
    and not A.pdf_input(A.Config(base_url="http://192.168.1.10:10531/v1", model="gpt-6-luna"))
    and not A.pdf_input(A.Config(base_url="http://localhost:11434/v1", model="q")),
    "server nhận file PDF: OpenRouter (pdf-text / native), OpenAI; proxy ChatGPT, Ollama thì không")
-with TestClient(A.app) as c:
+with A.test_client() as c:
     with open(ROOT / "data/attention-is-all-you-need.pdf", "rb") as f:
         aid = c.post("/api/upload", files={"file": ("att3.pdf", f, "application/pdf")}).json()["id"]
     d = A.DOCS[aid]
@@ -551,7 +550,7 @@ class FMock(RealClient):
     def __init__(self, *a, **k):
         super().__init__(*a, transport=A.httpx.MockTransport(fhandler), **k)
 A.httpx.AsyncClient = FMock
-with TestClient(A.app) as c:
+with A.test_client() as c:
     with open(ROOT / "data/roformer-rope.pdf", "rb") as f:
         rid = c.post("/api/upload", files={"file": ("rope.pdf", f, "application/pdf")}).json()["id"]
     d = A.DOCS[rid]
@@ -596,7 +595,7 @@ with TestClient(A.app) as c:
 A.httpx.AsyncClient = RealClient
 
 print("9. Nhà cung cấp, thông tin model")
-with TestClient(A.app) as c:
+with A.test_client() as c:
     ps = c.get("/api/providers").json()["providers"]
     ok({"openrouter", "tuf", "chatgpt"} <= {p["id"] for p in ps} and not next(p for p in ps if p["id"] == "tuf")["builtin"],
        "lần đầu: có sẵn + gieo TUF/ChatGPT thành nhà cung cấp của người dùng")
@@ -641,8 +640,7 @@ async def batch(*argv):
     for kv in argv:
         k, v = kv.split("=", 1)
         setattr(ap_args, k, v.split(",") if k == "format" else [v] if k == "set" else v)
-    async with A.httpx.AsyncClient(transport=A.httpx.ASGITransport(app=A.app), base_url="http://t",
-                                   timeout=None) as c:
+    async with A.test_async_client(timeout=None) as c:
         cfg = await BT.build_config(c, ap_args)
         with contextlib.redirect_stdout(io.StringIO()) as log:
             err = await BT.translate_doc(c, pathlib.Path(ap_args.paths[0]), cfg, ap_args)
@@ -666,7 +664,7 @@ except SystemExit as e:
 async def cfg_of(provider, *sets):
     ns = BT.argparse.Namespace(provider=provider, config="", set=list(sets), model="", base_url="", translator="",
                                effective={})
-    async with A.httpx.AsyncClient(transport=A.httpx.ASGITransport(app=A.app), base_url="http://t") as c:
+    async with A.test_async_client() as c:
         return await BT.build_config(c, ns)
 dflt, tuf = asyncio.run(cfg_of("openrouter")), asyncio.run(cfg_of("tuf"))
 # model free của OpenRouter không phải lúc nào cũng có đuôi ":free" (ling-3.1-flash, model ẩn danh "stealth/…" giá 0)

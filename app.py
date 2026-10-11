@@ -32,7 +32,9 @@ from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+import auth
 import chats as C
 import notes as N
 import store
@@ -41,7 +43,32 @@ BASE = Path(__file__).parent
 DATA = BASE / "data"
 DATA.mkdir(exist_ok=True)
 
+# Giới hạn mỗi file tải lên: cỡ (auth.Guard: theo Content-Length, không có thì đếm lúc nhận) và số trang (sau khi mở)
+MAX_UPLOAD = 200 << 20
+MAX_PAGES = 2000
+BODY_LIMITS = {"/api/upload": MAX_UPLOAD, "/api/login": 4096}   # đăng nhập mở cho người chưa đăng nhập: body nhỏ
+
 app = FastAPI(title="VietPaper")
+# Thêm sau = bọc ngoài. TrustedHost ngoài cùng (Host lạ → 400, chặn DNS rebinding), rồi auth.Guard (Origin, đăng nhập,
+# cỡ body, header bảo mật) — mọi route và file tĩnh đều đi qua cả hai. Xem auth.py.
+app.add_middleware(auth.Guard, auth=auth.AUTH, body_limits=BODY_LIMITS)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=auth.allowed_hosts(), www_redirect=False)
+app.include_router(auth.router)
+
+
+def test_client(**kw):
+    """TestClient cho script chạy trong cùng process (bench, smoke): Host localhost và một phiên chỉ sống trong bộ
+    nhớ — không cần mật khẩu, không ghi data/auth.json."""
+    from fastapi.testclient import TestClient
+    c = TestClient(app, base_url="http://localhost", **kw)
+    c.cookies.set(auth.COOKIE, auth.AUTH.new_session(persist=False))
+    return c
+
+
+def test_async_client(**kw) -> httpx.AsyncClient:
+    """Như test_client nhưng async (httpx + ASGITransport), cho script chạy hàm async gọi API của app."""
+    return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://localhost",
+                             cookies={auth.COOKIE: auth.AUTH.new_session(persist=False)}, **kw)
 
 # doc_id -> {"id", "src": Path, "out": pymupdf.Document, "done": set[int], "lock": asyncio.Lock, "name": str, …}
 # Bộ đệm của tài liệu đang mở; bản lưu thật nằm trên đĩa (store.py, data/docs/{id}/) nên xoá DOCS không mất gì.
@@ -292,6 +319,8 @@ def refused_param(body: dict, status: int, text: str) -> str | None:
         return "reasoning"
     if "temperature" in body and ("temperature" in t or '"bad request"' in t):
         return "temperature"
+    if "max_tokens" in body and "max_tokens" in t:
+        return "max_tokens"
     return None
 
 
@@ -324,8 +353,8 @@ def no_think(cfg: "Config", base_url: str, body: dict) -> dict:
 
 # ================================================================ API key đã dùng
 # slot (base_url của server LLM, "ocrspace", hoặc URL endpoint OCR tuỳ chỉnh) → API key.
-# Trình duyệt vẫn lưu key theo từng base_url trong localStorage; bản sao ở đây để xoá dữ liệu duyệt web hoặc mở app
-# từ máy khác vẫn dịch được mà không phải gõ lại. KHÔNG bao giờ trả key đầy đủ ra UI (ai mở được app cũng đọc được).
+# Chỉ server giữ key (trình duyệt gửi lên một lần qua POST /api/keys rồi xoá khỏi ô nhập, không lưu localStorage):
+# một lỗi XSS sau này cũng không đọc được key. KHÔNG bao giờ trả key đầy đủ ra UI, chỉ dạng che.
 KEYS_FILE = DATA / "keys.json"
 _keys: dict[str, str] = {}
 
@@ -345,12 +374,16 @@ def remember(slot: str, key: str) -> str:
         return key
     if key and key != _keys.get(slot):
         _keys[slot] = key
-        try:
-            KEYS_FILE.write_text(json.dumps(_keys, indent=1, ensure_ascii=False))
-            KEYS_FILE.chmod(0o600)
-        except OSError as e:  # noqa: BLE001 — không lưu được thì vẫn dịch bình thường
-            print(f"[key] không lưu được {KEYS_FILE}: {e!r}")
+        save_keys()
     return key or _keys.get(slot, "")
+
+
+def save_keys() -> None:
+    # file tạm + os.replace, quyền 0600 ngay từ lúc tạo: mất điện giữa chừng không làm hỏng (= mất hết) key đã lưu
+    try:
+        auth.write_private(KEYS_FILE, json.dumps(_keys, indent=1, ensure_ascii=False))
+    except OSError as e:  # noqa: BLE001 — không lưu được thì vẫn dịch bình thường
+        print(f"[key] không lưu được {KEYS_FILE}: {e!r}")
 
 
 # ================================================================ Thuật ngữ người dùng đã dạy
@@ -426,13 +459,23 @@ def list_keys():
     return {"keys": {k: mask(v) for k, v in _keys.items()}}
 
 
+class KeyIn(BaseModel):
+    slot: str
+    key: str
+
+
+@app.post("/api/keys")
+def save_key(k: KeyIn):
+    """Ô API key vừa nhập: server nhớ ngay, trình duyệt xoá ô đi và chỉ hiện dạng che."""
+    if k.slot.strip("/") and k.key.strip():
+        remember(k.slot, k.key.strip())
+    return list_keys()
+
+
 @app.delete("/api/keys")
 def forget_key(slot: str):
     _keys.pop(slot.rstrip("/"), None)
-    try:
-        KEYS_FILE.write_text(json.dumps(_keys, indent=1, ensure_ascii=False))
-    except OSError:
-        pass
+    save_keys()
     return {"keys": sorted(_keys)}
 
 
@@ -3259,23 +3302,36 @@ async def translate_items(cfg: Config, items: list[dict], stats: dict, system: s
 async def upload(file: UploadFile):
     """Tải lên một PDF. Đúng file đã tải lên trước đây (cùng sha256) → trả lại tài liệu cũ, kèm `existing`: bản
     dịch, tô vàng, thuật ngữ vẫn còn, không phải dịch lại."""
+    if (file.size or 0) > MAX_UPLOAD:   # Content-Length đã chặn trong auth.Guard; đây chặn nốt nếu đo lệch
+        raise HTTPException(413, f"File quá lớn (tối đa {MAX_UPLOAD >> 20} MB)")
     data = await file.read()
     sha = store.digest(data)
     if old := store.find(sha):
         d = get_doc(old)
         return {"id": old, "pages": d["out"].page_count, "name": d["name"], "existing": True,
-                "scanned_pages": sum(not page_has_text(p) for p in pymupdf.open(d["src"]))}
-    try:
-        out = pymupdf.open("pdf", data)
-    except Exception:
-        raise HTTPException(400, "File PDF không hợp lệ")
+                "scanned_pages": await asyncio.to_thread(count_scanned, pymupdf.open(d["src"]))}
+
+    def open_pdf() -> tuple[pymupdf.Document, int]:
+        # chạy trong luồng riêng: PDF lớn (hay cố tình khai hàng trăm nghìn trang) không chặn cả server
+        try:
+            out = pymupdf.open("pdf", data)
+        except Exception:
+            raise HTTPException(400, "File PDF không hợp lệ")
+        if out.page_count > MAX_PAGES:
+            raise HTTPException(413, f"PDF có {out.page_count} trang, tối đa {MAX_PAGES}")
+        return out, count_scanned(out)
+
+    out, scanned = await asyncio.to_thread(open_pdf)
     doc_id = uuid.uuid4().hex[:12]
-    scanned = sum(not page_has_text(p) for p in out)
     DOCS[doc_id] = d = {"id": doc_id, "src": store.create(doc_id, data), "out": out, "done": set(),
                         "lock": asyncio.Lock(), "name": file.filename, "sha256": sha, "created": time.time(),
                         "blocks": {}, "placed": {}, "trans": {}, "marks": {}}
     store.save_state(d)
     return {"id": doc_id, "pages": out.page_count, "name": file.filename, "scanned_pages": scanned}
+
+
+def count_scanned(doc: pymupdf.Document) -> int:
+    return sum(not page_has_text(p) for p in doc)
 
 
 @app.get("/api/docs")
@@ -3299,6 +3355,8 @@ def page_png(doc_id: str, n: int, kind: str, zoom: float = 2.0):
     doc = d["out"] if kind == "translated" else pymupdf.open(d["src"])
     if not 0 <= n < doc.page_count:
         raise HTTPException(404)
+    # ?zoom=40 trên trang Letter = ảnh ~24k×32k điểm (~2,3 GB RAM); nan/inf lọt qua min/max nên chặn riêng
+    zoom = min(max(zoom, 0.5), 4.0) if math.isfinite(zoom) else 2.0
     pix = doc[n].get_pixmap(matrix=pymupdf.Matrix(zoom, zoom))
     return Response(pix.tobytes("png"), media_type="image/png", headers={"Cache-Control": "no-store"})
 
@@ -5201,6 +5259,11 @@ def page_image(d: dict, n: int) -> str:
     return base64.b64encode(png).decode()
 
 
+# Trần token một câu trả lời trò chuyện: câu trả lời thật hiếm khi quá ~2.000 token; trần này chặn model lặp vô hạn
+# tốn tiền trên API trả phí. Server không nhận tham số thì refused_param bỏ nó rồi hỏi lại.
+CHAT_MAX_OUT = 8192
+
+
 async def chat_stream(cfg: Config, system: str, messages: list[dict], num_ctx: int = 0):
     """Trả lời của LLM theo từng mẩu chữ (Ollama trả NDJSON ở /api/chat, server kiểu OpenAI trả SSE)."""
     kind, n_ctx, slots = await server_info(cfg.base_url, cfg.model)
@@ -5230,12 +5293,13 @@ async def chat_stream(cfg: Config, system: str, messages: list[dict], num_ctx: i
     if kind == "ollama":  # API kiểu OpenAI của Ollama bỏ qua num_ctx (luôn 4096) → dùng API gốc
         url = re.sub(r"/v1/?$", "", cfg.base_url.rstrip("/")) + "/api/chat"
         body = {"model": cfg.model, "messages": msgs, "stream": True,
-                "options": {"temperature": 0.3, "num_ctx": num_ctx or min(n_ctx, 16384)}}
+                "options": {"temperature": 0.3, "num_ctx": num_ctx or min(n_ctx, 16384), "num_predict": CHAT_MAX_OUT}}
         if cfg.disable_thinking:
             body["think"] = False
     else:
         url = cfg.base_url.rstrip("/") + "/chat/completions"
-        body = no_think(cfg, url, {"model": cfg.model, "messages": msgs, "stream": True, "temperature": 0.3})
+        body = no_think(cfg, url, {"model": cfg.model, "messages": msgs, "stream": True, "temperature": 0.3,
+                                   "max_tokens": CHAT_MAX_OUT})
         if engine and "openrouter.ai" in url:
             body["plugins"] = [{"id": "file-parser", "pdf": {"engine": engine}}]
     got = False           # đã nhận được chữ nào chưa (chưa thì hỏi lại được mà người dùng không thấy gì lạ)
@@ -5755,6 +5819,8 @@ app.mount("/", NoCache(directory=BASE / "static", html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn
-    # HOST/PORT: mặc định chỉ máy này mở được; server TUF chạy HOST=192.168.1.10 cho máy trong mạng nhà (app không
-    # có đăng nhập nên đừng dùng 0.0.0.0)
+    # HOST/PORT: mặc định chỉ máy này mở được. Server TUF cũng để 127.0.0.1 và mở ra tailnet bằng `tailscale serve`
+    # (HTTPS, cổng 8443, KHÔNG bật Funnel) — đặt ALLOWED_HOSTS=<tên máy>.ts.net để Host đó qua được, xem auth.py.
+    if not auth.AUTH.has_password():
+        print(f"[auth] {auth.NO_PASSWORD} — trước khi đặt, mọi request bị từ chối (503)")
     uvicorn.run(app, host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", "8000")))
