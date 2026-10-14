@@ -42,8 +42,10 @@ MIN_LEN = 8
 SCRYPT = {"n": 2 ** 15, "r": 8, "p": 1}
 NO_PASSWORD = "Chưa đặt mật khẩu: chạy `.venv/bin/python auth.py --set-password` trên máy chạy app"
 
-# Mở khi chưa đăng nhập: chỉ trang đăng nhập và API của nó
-PUBLIC = {"/login.html", "/login.js", "/api/login"}
+# Mở khi chưa đăng nhập: trang đăng nhập và API của nó, cùng manifest + icon để "Thêm vào Màn hình chính" (trình duyệt
+# tải manifest KHÔNG kèm cookie; trong đó không có gì riêng tư)
+PUBLIC = {"/login.html", "/login.js", "/api/login",
+          "/manifest.json", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"}
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 # CSP: chỉ chạy script của chính app (không script nội tuyến, không onclick="…"), không tải ảnh/font/kết nối nơi khác.
 # Đây là lớp chặn thứ hai cho câu trả lời LLM (đã lọc ở static/render.js): CSS lọt lưới như background:url(…) cũng không

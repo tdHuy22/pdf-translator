@@ -93,7 +93,8 @@ with client() as anon:
     ok(not leaks, f"{n_routes} cặp method/route: chưa đăng nhập đều nhận 401 (trừ API đăng nhập)" + (f" — lọt: {leaks}" if leaks else ""))
     for path, accept, want in [("/app.js", "*/*", 401), ("/index.html", "text/html", 303), ("/render-test.html", "text/html", 303),
                                ("/openapi.json", "*/*", 401), ("/docs", "text/html", 303),
-                               ("/login.html", "text/html", 200), ("/login.js", "*/*", 200)]:
+                               ("/login.html", "text/html", 200), ("/login.js", "*/*", 200),
+                               ("/manifest.json", "*/*", 200), ("/apple-touch-icon.png", "*/*", 200)]:
         code = anon.get(path, headers={"accept": accept}).status_code
         ok(code == want, f"GET {path} (chưa đăng nhập) → {code}, cần {want}")
 
