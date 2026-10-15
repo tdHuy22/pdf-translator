@@ -477,6 +477,36 @@ with A.test_client() as c:
     d = A.DOCS[aid]
     ok(sorted(A.refs_boxes(d)) == [9, 10, 11], "phụ lục không có chữ “Appendix” (Attention Visualizations, tr.13–15) vẫn dịch")
     ok(sorted(A.refs_boxes({"src": ROOT / "data/bert.pdf"})) == [9, 10, 11], "BERT: tài liệu tham khảo tr.10–12, phụ lục dịch")
+    # chú thích hình dòng đầu dài vẫn kết thúc References; mục tài liệu dài trông như tiêu đề phụ lục ("A lite bert…",
+    # RoFormer tr.14) thì không
+    sc = A.RefsScan()
+    sc.step("References", (10.0, True))
+    ok(sc.step("A lite bert for self-supervised learning of language representations. In International Conference on "
+               "Learning", (9.0, False)) == "ref"
+       and sc.step("Figure 9: Proportion of tokens assigned to each expert on different subsets from The Pile dataset, "
+                   "separated", (10.0, False)) == "", "RefsScan: chú thích hình ≥ 80 ký tự hết References, mục dài thì không")
+    mx = {"src": ROOT / "data/mixtral.pdf"}
+    with pymupdf.open(mx["src"]) as pdf:
+        caps = {n: A.extract_blocks(pdf[n]) for n in (11, 12)}
+    ok(all(A.skipped(mx, n, bl, A.Config()) == set() and A.untag(bl[0]["text"]).startswith("Figure") for n, bl in caps.items()),
+       "Mixtral tr.12–13 (Phụ lục): chú thích “Figure 9”, “Figure 10” vẫn dịch — trước 15/10/2026 bị giữ nguyên chữ gốc")
+    # mục tài liệu hai dòng: PyMuPDF tách mỗi dòng một khối, tâm vùng layout rơi vào khe giữa hai khung dòng
+    two = [pymupdf.Rect(113, 615, 504, 625.1), pymupdf.Rect(129.6, 625.9, 229.8, 636)]
+    ok(A.refs_share((113, 615, 504, 636), two) > 0.9 and A.refs_share((113, 640, 504, 660), two) == 0
+       and A.refs_share((300, 615, 540, 636), [pymupdf.Rect(60, 600, 302, 650)]) == 0,
+       "refs_share: mục hai dòng tách khối vẫn thuộc References; khối bên dưới, khung cột bên chạm mép thì không")
+    with open(ROOT / "data/bert.pdf", "rb") as f:
+        bid = c.post("/api/upload", files={"file": ("bert3.pdf", f, "application/pdf")}).json()["id"]
+    for name, did, n in (("Attention", aid, 9), ("BERT", bid, 11)):
+        L = c.get(f"/api/{did}/page/{n}/layer").json()
+        bl = (A.DOCS[did]["blocks"].get(n) or (None, A.DOCS[did].get(("layer", n))))[1]
+        # Attention tr.10: thân bài, tiêu đề References, rồi 4 mục (cách thử tâm khối cũ sót cả 4); BERT tr.12: mục
+        # cuối danh mục (layout gán nhãn "text") rồi Phụ lục — canh Phụ lục không bị bỏ nhầm
+        want = ({i for i, b in enumerate(bl) if b.get("label") == "reference_content"} if n == 9 else
+                set(range(next(i for i, b in enumerate(bl) if A.untag(b["text"]).startswith("Appendix")))))
+        ok(want and set(L["refs"]) == want,
+           f"{name} tr.{n + 1}: không dịch {len(want & set(L['refs']))}/{len(want)} mục tài liệu, mọi đoạn khác (tiêu đề "
+           "References, Phụ lục) vẫn dịch — trước 15/10/2026 Attention tr.10 sót cả 4 mục")
     cor = {**cfg, "chat_base_url": OR, "chat_model": "nex-agi/nex-n2.5-pro:free"}
     r = c.post(f"/api/{aid}/chat", json={"cfg": cor, "question": "Bảng 2 có gì?", "page": 0, "context": "pdf"})
     info = json.loads(r.headers["x-context"])

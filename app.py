@@ -2614,7 +2614,8 @@ class RefsScan:
     """Đi qua các khối chữ theo thứ tự đọc, cho biết khối nào thuộc phần Tài liệu tham khảo: từ tiêu đề References tới
     mục kế tiếp — tiêu đề Phụ lục ("Appendix", "A  Details…"), tiêu đề cùng kiểu chữ với tiêu đề References (in đậm,
     không nhỏ hơn: phụ lục không đánh số như "Attention Visualizations" của bài Attention), hay chú thích hình/bảng —
-    hoặc tới hết bài."""
+    hoặc tới hết bài. Dòng đầu dưới 80 ký tự chỉ đòi ở tiêu đề (mục tài liệu "A lite bert for…" khớp _APPX_HEAD), không
+    đòi ở chú thích: "Figure 9: …" 108 ký tự của Mixtral tr.12 từng không kết thúc được References."""
 
     def __init__(self):
         self.on, self.head = False, None
@@ -2624,9 +2625,9 @@ class RefsScan:
         if len(first) < 40 and _REFS_HEAD.fullmatch(first):
             self.on, self.head = True, style
             return "head"
-        if self.on and len(first) < 80 and (_APPX_HEAD.match(first) or _CAPTION.match(first) or (
+        if self.on and (_CAPTION.match(first) or len(first) < 80 and (_APPX_HEAD.match(first) or (
                 style[1] and self.head and self.head[1] and style[0] >= self.head[0] - 0.5
-                and not re.search(r"\b(?:19|20)\d\d\b", first))):
+                and not re.search(r"\b(?:19|20)\d\d\b", first)))):
             self.on = False
         return "ref" if self.on else ""
 _TOK = re.compile(r"[A-Za-z0-9]+(?:[-.'][A-Za-z0-9]+)*")
@@ -3626,6 +3627,23 @@ def refs_boxes(d: dict) -> dict[int, list[pymupdf.Rect]]:
     return d["refs"]
 
 
+def refs_share(bbox, boxes: list[pymupdf.Rect]) -> float:
+    """Phần chiều cao của khối `bbox` nằm trên dòng thuộc Tài liệu tham khảo: hợp các khoảng y của khung refs_boxes
+    giao với khối (giao theo bề ngang quá nửa khung hẹp hơn — khung cột bên cạnh chỉ chạm mép thì không tính).
+    Khối để dịch là vùng PP-DocLayout gộp cả một mục, còn PyMuPDF hay tách mỗi dòng của mục thành một khối riêng (dòng
+    sau thụt vào): thử tâm khối như trước thì tâm rơi vào khe giữa hai khung dòng. Đo 15/10/2026 trên 10 bài bench:
+    khối reference_content vẫn bị gửi đi dịch 85/414 → 0/414, không đoạn Phụ lục/chú thích nào mới bị bỏ."""
+    x0, y0, x1, y1 = bbox
+    spans = sorted((max(y0, r.y0), min(y1, r.y1)) for r in boxes
+                   if min(x1, r.x1) - max(x0, r.x0) > 0.5 * min(x1 - x0, r.width))
+    covered, end = 0.0, y0
+    for lo, hi in spans:
+        if hi > max(lo, end):
+            covered += hi - max(lo, end)
+            end = hi
+    return covered / max(y1 - y0, 1e-6)
+
+
 def user_skips(d: dict, n: int, blocks: list[dict], heal: bool = True) -> set[int]:
     """Đoạn của trang n người dùng đánh dấu "không dịch" (⛔). Trích lại khối (đổi OCR/layout) thì số hiệu đoạn có thể
     đổi: tìm lại đoạn theo dấu chữ và ghi số hiệu mới; đoạn không còn (chữ trích khác đi) thì bỏ dấu. `heal=False`:
@@ -3677,15 +3695,13 @@ def ocr_refs(d: dict, n: int, blocks: list[dict]) -> set[int]:
 
 
 def skipped(d: dict, n: int, blocks: list[dict], cfg: Config) -> set[int]:
-    """Đoạn của trang n KHÔNG dịch (giữ nguyên chữ gốc): người dùng đánh dấu (⛔), và phần Tài liệu tham khảo."""
+    """Đoạn của trang n KHÔNG dịch (giữ nguyên chữ gốc): người dùng đánh dấu (⛔), và phần Tài liệu tham khảo — trang
+    có lớp chữ: đoạn có ít nhất nửa chiều cao nằm trên dòng thuộc refs_boxes (refs_share)."""
     out = user_skips(d, n, blocks)
     if cfg.skip_refs and any(b.get("ocr") for b in blocks):
         out |= ocr_refs(d, n, blocks)
     elif cfg.skip_refs and (boxes := refs_boxes(d).get(n)):
-        for i, b in enumerate(blocks):
-            c = pymupdf.Rect(b["bbox"])
-            if any(r.contains((c.tl + c.br) / 2) for r in boxes):
-                out.add(i)
+        out |= {i for i, b in enumerate(blocks) if refs_share(b["bbox"], boxes) >= 0.5}
     return out
 
 
