@@ -120,6 +120,11 @@ function loadSettings() {
   if (ver < 8) for (const f of ["model", "chat_model", "gloss_model", "align_model"]) {
     if (GONE_MODELS.includes($(f).value) && P("openrouter").model) $(f).value = P("openrouter").model;
   }
+  // v9: ling-3.1-flash (mặc định từ 03/10/2026, tên không có ":free") có giá từ 15/10/2026 → ô model nào còn để nó thì
+  // lấy mặc định free mới của OpenRouter (FREE_MODEL trong app.py)
+  if (ver < 9) for (const f of ["model", "chat_model", "gloss_model", "align_model"]) {
+    if ($(f).value === "inclusionai/ling-3.1-flash" && P("openrouter").model) $(f).value = P("openrouter").model;
+  }
   // nhà cung cấp đã lưu không còn (đã xoá) → "Tùy chỉnh", giữ nguyên Base URL và model đang có
   document.querySelectorAll("select.provider-sel").forEach(sel => { if (!sel.value) sel.value = "custom"; });
   fillKeys();
@@ -128,7 +133,7 @@ function loadSettings() {
   saveSettings();
 }
 function saveSettings() {
-  const s = { settings_v: 8 };
+  const s = { settings_v: 9 };
   FIELDS.forEach(f => s[f] = $(f).value);
   CHECKS.forEach(f => s[f] = $(f).checked);
   try { localStorage.setItem("llm", JSON.stringify(s)); } catch {}

@@ -78,15 +78,18 @@ DOCS: dict[str, dict] = {}
 OCRSPACE_DEMO = "helloworld"
 
 
-# Mặc định = model free của OpenRouter. Dịch + trò chuyện: ling-3.1-flash (03/10/2026) — bench_english 0,61 từ tiếng
-# Anh sót/100 từ (tốt nhất đã đo), 74 s cho 6 trang, đủ 69/69 đoạn, không đoạn nào bị bộ lọc loại; bench_chat_ctx 30/30
-# (~6,7 s/câu); bảng thuật ngữ dev 90,0 / 67,4%, test 84,1 / 76,5% (~8 s/bài). Tên không có đuôi ":free" — OpenRouter
-# đang để giá 0, đổi giá thì request vẫn chạy và tính tiền chứ không báo lỗi như model ":free".
-# Trước đó (26/09/2026) là ling-3.0-flash-fin:free (0,87/100, 37 s) — hết free ngày 03/10/2026. Đã thử cùng ngày:
+# Mặc định = model free của OpenRouter. Dịch + trò chuyện: nemotron-3.5-super-vl:free (15/10/2026) — bench_english 0,76
+# từ tiếng Anh sót/100 từ, 65 s cho 6 trang, 68/69 đoạn (bỏ sót 1, app thật thì Google dịch bù), không đoạn nào bị bộ
+# lọc loại. Cùng ngày: nemotron-3-super-120b-a12b:free 0,52/100 nhưng 250 s và 8 đoạn lẫn chữ Hán (双向, 主張);
+# gemma-4-31b-it:free 429 cả 6 trang. Model mới lên OpenRouter đúng ngày chọn; chưa bench trò chuyện, thuật ngữ.
+# Trước đó (03/10/2026) là ling-3.1-flash: 0,61/100, 74 s, trò chuyện 30/30 — tên không có đuôi ":free", OpenRouter để
+# giá 0 rồi đổi thành 0,075 / 0,225 USD mỗi triệu token (thấy ngày 15/10/2026), request vẫn chạy và tính tiền.
+# Trước nữa (26/09/2026) là ling-3.0-flash-fin:free (0,87/100, 37 s) — hết free ngày 03/10/2026. Đã thử cùng ngày:
 # ling-3.0-flash-sante:free 1,41/100, 72 s (2 đoạn lẫn chữ Hán, 3 đoạn còn nửa câu tiếng Anh), trò chuyện 30/30 ~3 s/câu;
 # Space Bunny Alpha (stealth, hạn dùng 05/10/2026) 1,29/100, 113 s, bắt buộc suy nghĩ (xem REASONING_MIN); dots lẫn chữ
-# Hán (投影) và nửa câu tiếng Anh (1,7–2,6/100). Ảnh (OCR, trò chuyện về hình): dots-3-note-preview — ling không đọc ảnh.
-FREE_MODEL = "inclusionai/ling-3.1-flash"
+# Hán (投影) và nửa câu tiếng Anh (1,7–2,6/100). Ảnh (OCR, trò chuyện về hình): vẫn dots-3-note-preview (đã đo
+# cho ảnh); model dịch mới đọc được ảnh nhưng chưa đo phần này.
+FREE_MODEL = "nvidia/nemotron-3.5-super-vl:free"
 FREE_VISION_MODEL = "dots-studio/dots-3-note-preview:free"
 
 
