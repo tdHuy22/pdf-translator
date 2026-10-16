@@ -652,7 +652,8 @@ ok(set(got) == {1, 3, 5} and got[1] == "Kết quả (a), b.",
 m = A.model_meta({"id": "a/b:free", "context_length": 262144, "architecture": {"input_modalities": ["text", "image"]},
                   "pricing": {"prompt": "0", "completion": "0"}})
 m2 = A.model_meta({"id": "local"})
-ok(m == {"id": "a/b:free", "name": "", "ctx": 262144, "vision": True, "free": True} and m2["vision"] is None and m2["free"] is None,
+ok(m == {"id": "a/b:free", "name": "", "ctx": 262144, "vision": True, "free": True, "price": [0.0, 0.0], "extra": False}
+   and m2["vision"] is None and m2["free"] is None and m2["price"] is None,
    "thông tin model: OpenRouter có ctx/ảnh/free, server khác để trống (không đoán)")
 
 print("15. Dịch hàng loạt bằng dòng lệnh (scripts/batch_translate.py)")
@@ -724,6 +725,76 @@ while y < pg.rect.height - 60:
 got = A.extract_blocks(pg)
 ok(got and not any(re.search(r"(?<![\d.])0\d\d(?![\d.])", b["text"]) for b in got),
    "số dòng ở lề không lẫn vào đoạn nào, không thành đoạn riêng để dịch")
+
+print("17. Kiểm giá model (OpenRouter /models công khai → data/model_meta.json → dải cảnh báo)")
+import httpx
+SEEN, FEED = [], {"status": 200, "body": None}
+def or_models(req):
+    SEEN.append(req)
+    return httpx.Response(FEED["status"], content=FEED["body"])
+real_client = A.httpx.Client
+A.httpx.Client = lambda **kw: real_client(transport=httpx.MockTransport(or_models), **kw)
+try:
+    FEED["body"] = json.dumps({"data": [
+        {"id": "inclusionai/ling-3.1-flash", "context_length": 131072, "pricing": {"prompt": "0.000000075", "completion": "0.000000225"}},
+        {"id": "nvidia/nemotron-3.5-super-vl:free", "context_length": 262144, "pricing": {"prompt": "0", "completion": "0"}},
+        {"id": "x/nan", "context_length": 1, "pricing": {"prompt": "NaN", "completion": "0"}},
+        {"id": "x/neg", "context_length": 1, "pricing": {"prompt": "-1", "completion": "abc"}},
+        {"id": "x/huge", "context_length": 1, "pricing": {"prompt": 10 ** 400, "completion": "0"}},
+        {"id": "x/img", "context_length": 1, "pricing": {"prompt": "0", "completion": "0", "image": "0.001"}},
+        {"id": "<img src=x onerror=alert(1)>" * 20, "context_length": 1}, "rác", {"id": 5}]}).encode()
+    ok(A.refresh_prices() and len(SEEN) == 1 and str(SEEN[0].url) == "https://openrouter.ai/api/v1/models"
+       and "authorization" not in SEEN[0].headers, "tải giá: đúng URL OpenRouter cố định, không gửi Authorization")
+    meta = json.loads(A.MODEL_META_FILE.read_text())[A.OPENROUTER]
+    ling = meta["inclusionai/ling-3.1-flash"]
+    ok(ling["price"] == [7.5e-08, 2.25e-07] and isinstance(ling["t"], int) and abs(ling["t"] - __import__("time").time()) < 60,
+       "model_meta.json lưu giá vào/ra (USD/token) cùng thời điểm tải")
+    ok(meta["x/nan"]["price"] is None and meta["x/neg"]["price"] is None and meta["x/huge"]["price"] is None
+       and len(meta) == 6, "giá NaN / âm / chữ / số quá lớn → không biết giá; id quá dài, mục không phải dict, id không "
+       "phải chuỗi bị bỏ")
+    ok(meta["x/img"]["extra"] and not meta["inclusionai/ling-3.1-flash"]["extra"], "tính tiền theo ảnh/request → cờ extra")
+    with A.test_client() as c:
+        items = [{"base_url": A.OPENROUTER + "/", "model": "inclusionai/ling-3.1-flash"},
+                 {"base_url": A.OPENROUTER, "model": "nvidia/nemotron-3.5-super-vl:free"},
+                 {"base_url": A.OPENROUTER, "model": "inclusionai/khong-con"},
+                 {"base_url": "http://192.168.1.10:8080/v1", "model": "4b"},
+                 {"base_url": A.OPENROUTER, "model": "x/nan"}]
+        got = c.post("/api/model_prices", json={"items": items}).json()["items"]
+        ok(got[4]["listed"] and got[4]["price"] is None and not got[2]["listed"],
+           "/api/model_prices: model có trong danh sách mà không đọc được giá → listed (giao diện cảnh báo)")
+        got = got[:4]
+        ok([g["price"] for g in got] == [[7.5e-08, 2.25e-07], [0.0, 0.0], None, None]
+           and [g["missing"] for g in got] == [False, False, True, False],
+           "/api/model_prices: có giá, giá 0, model OpenRouter vắng (missing), server khác không biết giá (không cảnh báo)")
+        cost = 15 * (1200 * got[0]["price"][0] + 1000 * got[0]["price"][1])
+        ok(0.004 < cost < 0.006, f"ước tính trong app.js: {cost:.4f} USD cho 15 trang ở 0,075/0,225 USD mỗi triệu token (~0,005)")
+        js = (ROOT / "static/app.js").read_text()
+        ok("PRICE_IN = 1200, PRICE_OUT = 1000" in js and "span.textContent = msg" in js and "innerHTML" not in js[js.index("async function checkPrices"):js.index("FIELDS.concat(CHECKS).forEach(f => $(f).addEventListener(\"change\", schedulePrice")],
+           "dải cảnh báo dựng bằng textContent (id model từ server ngoài không thành HTML)")
+    # tải lỗi (mạng, HTTP 500, không phải JSON, quá lớn) → giữ giá cũ
+    before = json.dumps(A.MODEL_META[A.OPENROUTER], sort_keys=True)
+    FEED.update(status=500, body=b"oops")
+    r1 = A.refresh_prices()
+    FEED.update(status=200, body=b"<html>")
+    r2 = A.refresh_prices()
+    FEED.update(status=200, body=b'{"data": []}')
+    r3 = A.refresh_prices()
+    max_b, A.PRICE_MAX_BYTES = A.PRICE_MAX_BYTES, 100
+    FEED.update(status=200, body=b'{"data": [' + b'{"id": "a"},' * 50 + b'{"id": "b"}]}')
+    r4 = A.refresh_prices()
+    A.PRICE_MAX_BYTES = max_b
+    FEED.update(status=200, body=json.dumps({"data": [{"id": 5}, {"id": "x" * 300}]}).encode())
+    r5 = A.refresh_prices()
+    ok(A.store_models(A.OPENROUTER, []) == [] and A.store_models(A.OPENROUTER, {"error": "x"}) == [],
+       "store_models: danh sách rỗng / lỗi kèm HTTP 200 → không ghi đè")
+    ok(not (r1 or r2 or r3 or r4 or r5) and json.dumps(A.MODEL_META[A.OPENROUTER], sort_keys=True) == before,
+       "tải giá lỗi (HTTP 500, không phải JSON, danh sách rỗng, mọi id hỏng, phản hồi quá lớn) → giữ giá cũ, không xoá")
+    A.MODEL_META.clear()
+    A.load_model_meta()
+    ok(A.MODEL_META[A.OPENROUTER]["inclusionai/ling-3.1-flash"]["price"] == [7.5e-08, 2.25e-07],
+       "khởi động lại app: đọc lại giá từ model_meta.json")
+finally:
+    A.httpx.Client = real_client
 
 print("\nTẤT CẢ ĐỀU ĐẠT" if not FAIL else f"\n{len(FAIL)} MỤC SAI: " + "; ".join(FAIL))
 sys.exit(1 if FAIL else 0)

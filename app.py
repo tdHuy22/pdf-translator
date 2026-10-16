@@ -5768,20 +5768,99 @@ async def list_models(cfg: Config):
         raise HTTPException(502, repr(e))
     if r.status_code >= 400:
         raise HTTPException(502, r.text[:300])
-    data = r.json().get("data", [])
+    try:
+        data = r.json().get("data", [])
+    except (ValueError, AttributeError):
+        raise HTTPException(502, "server trả danh sách model không phải JSON")
+    out = store_models(cfg.base_url, data)
+    if data and not out:
+        raise HTTPException(502, "server trả danh sách model không đọc được")
+    return {"models": sorted(out, key=lambda m: m["id"])}
+
+
+def store_models(base_url: str, data) -> list[dict]:
+    """Ghi danh sách `/models` của một server vào MODEL_META (kèm giá, thời điểm tải) và data/model_meta.json.
+    Danh sách rỗng (lỗi trả kèm HTTP 200) thì giữ dữ liệu cũ: xoá đi thì mất giá đã biết, dải cảnh báo im lặng."""
+    data = [m for m in data if isinstance(m, dict)] if isinstance(data, list) else []
     # llama.cpp router còn liệt kê model tự quét từ HF cache (--hf-repo) và mục "default"
     # không trỏ tới file nào -> chỉ giữ preset có --model. Server khác (không có status.args) giữ nguyên.
     presets = [m for m in data if "--model" in ((m.get("status") or {}).get("args") or [])]
-    out = [model_meta(m) for m in (presets or data) if m.get("id")]
-    MODEL_META[cfg.base_url.rstrip("/")] = {m["id"]: m for m in out}
-    save_model_meta()
-    return {"models": sorted(out, key=lambda m: m["id"])}
+    t = int(time.time())
+    out = [{**model_meta(m), "t": t} for m in (presets or data)
+           if isinstance(m.get("id"), str) and 0 < len(m["id"]) <= 200]
+    if out:
+        with _meta_lock:
+            MODEL_META[base_url.rstrip("/")] = {m["id"]: m for m in out}
+            save_model_meta()
+    return out
+
+
+# Giá model trên OpenRouter: model không có đuôi ":free" có thể bị đổi từ giá 0 sang có giá mà request vẫn chạy và tính
+# tiền, không báo lỗi gì (ling-3.1-flash, thấy ngày 15/10/2026). Lúc khởi động (`python app.py`) và sau đó mỗi 6 giờ,
+# tải danh sách công khai (không gửi key) để giao diện cảnh báo khi model đang chọn có giá (/api/model_prices).
+# Host cố định, không lấy từ request.
+OPENROUTER = "https://openrouter.ai/api/v1"
+PRICE_EVERY, PRICE_RETRY = 6 * 3600, 300
+PRICE_MAX_BYTES = 20 << 20
+
+
+def refresh_prices() -> bool:
+    """Tải `OPENROUTER/models` (không header Authorization), ghi vào MODEL_META. Lỗi thì giữ giá cũ, trả False."""
+    try:
+        with httpx.Client(timeout=20) as client, client.stream("GET", OPENROUTER + "/models") as r:
+            if r.status_code >= 400:
+                raise httpx.HTTPError(f"HTTP {r.status_code}")
+            buf = bytearray()
+            for chunk in r.iter_bytes():
+                buf += chunk
+                if len(buf) > PRICE_MAX_BYTES:
+                    raise httpx.HTTPError("phản hồi quá lớn")
+        data = json.loads(buf).get("data")
+        if not isinstance(data, list) or not data:
+            raise ValueError("không có danh sách model")
+        if not store_models(OPENROUTER, data):
+            raise ValueError("không model nào đọc được")
+        return True
+    except Exception as e:   # thread nền: lỗi gì (mạng, JSON lạ, lồng quá sâu) cũng chỉ log, giữ giá cũ
+        print(f"[models] không tải được giá model OpenRouter: {e!r}")
+        return False
+
+
+def price_loop() -> None:
+    """Tải lỗi (vd. khởi động lúc mạng chưa lên) thì thử lại sau 5 phút, không chờ 6 giờ."""
+    while True:
+        time.sleep(PRICE_EVERY if refresh_prices() else PRICE_RETRY)
+
+
+class PriceItem(BaseModel):
+    base_url: str
+    model: str
+
+
+class PriceQuery(BaseModel):
+    items: list[PriceItem]
+
+
+@app.post("/api/model_prices")
+def model_prices(q: PriceQuery):
+    """Giá đã biết của các model đang chọn: `price` = [USD/token vào, USD/token ra] hay None (server không cho biết),
+    `t` = lúc tải danh sách, `missing` = base là OpenRouter, đã có danh sách mà không thấy model (bị gỡ hay đổi tên)."""
+    out = []
+    for it in q.items[:12]:
+        base = it.base_url.strip().rstrip("/")
+        known = MODEL_META.get(base) or {}
+        m = known.get(it.model.strip())
+        out.append({"base_url": base, "model": it.model.strip(), "price": m.get("price") if m else None,
+                    "t": m.get("t") if m else None, "listed": m is not None, "extra": bool(m and m.get("extra")),
+                    "missing": bool(it.model.strip()) and m is None and base == OPENROUTER and bool(known)})
+    return {"items": out}
 
 
 # base_url → {model id → model_meta}: lần gần nhất tải danh sách model (để biết model nào đọc được ảnh, ngữ cảnh bao
 # nhiêu). Lưu ra đĩa: giao diện nhớ danh sách model 24 giờ nên sau khi khởi động lại app có thể chưa hỏi lại server
 MODEL_META_FILE = DATA / "model_meta.json"
 MODEL_META: dict[str, dict[str, dict]] = {}
+_meta_lock = threading.Lock()   # thread kiểm giá (price_loop) và request /api/models cùng ghi MODEL_META, model_meta.json
 
 
 def load_model_meta() -> None:
@@ -5792,9 +5871,12 @@ def load_model_meta() -> None:
 
 
 def save_model_meta() -> None:
-    """Chỉ giữ model có thông tin (ngữ cảnh / đọc ảnh): OpenRouter liệt kê vài trăm model."""
-    keep = {b: {k: {"id": k, "ctx": m.get("ctx"), "vision": m.get("vision")} for k, m in ms.items()
-                if m.get("ctx") or m.get("vision") is not None} for b, ms in MODEL_META.items()}
+    """Chỉ giữ model có thông tin (ngữ cảnh / đọc ảnh / giá): OpenRouter liệt kê vài trăm model. `price` = [USD mỗi
+    token vào, USD mỗi token ra], `t` = lúc tải danh sách (giây Unix)."""
+    keep = {b: {k: {"id": k, "ctx": m.get("ctx"), "vision": m.get("vision"), "price": m.get("price"), "t": m.get("t"),
+                    "extra": m.get("extra")}
+                for k, m in ms.items() if m.get("ctx") or m.get("vision") is not None or m.get("price")}
+            for b, ms in list(MODEL_META.items())}
     try:
         tmp = MODEL_META_FILE.with_name(MODEL_META_FILE.name + ".tmp")
         tmp.write_text(json.dumps({b: v for b, v in keep.items() if v}))
@@ -5809,16 +5891,26 @@ load_model_meta()
 def model_meta(m: dict) -> dict:
     """Thông tin một model trong /models để hiện nhãn ở ô chọn model: ngữ cảnh, có đọc ảnh không, có miễn phí không.
     Chỉ OpenRouter (và vài API khác) cho biết; không biết thì để None — không đoán."""
-    arch, price = m.get("architecture") or {}, m.get("pricing") or {}
+    arch = m.get("architecture") if isinstance(m.get("architecture"), dict) else {}
+    pricing = m.get("pricing") if isinstance(m.get("pricing"), dict) else {}
     mods = arch.get("input_modalities")
-    try:
-        free = float(price["prompt"]) == 0 and float(price["completion"]) == 0 if price else None
-    except (KeyError, TypeError, ValueError):
-        free = None
+    price = [usd_per_token(pricing.get("prompt")), usd_per_token(pricing.get("completion"))]
+    price = price if None not in price else None
     return {"id": m["id"], "name": m.get("name") or "",
             "ctx": m.get("context_length") or (m.get("top_provider") or {}).get("context_length"),
             "vision": ("image" in mods) if isinstance(mods, list) else None,
-            "free": True if m["id"].endswith(":free") else free}
+            "free": True if m["id"].endswith(":free") else (price == [0, 0] if price else None), "price": price,
+            # tính tiền theo ảnh hay theo request (model xem ảnh, OCR) dù giá token bằng 0
+            "extra": any((usd_per_token(pricing.get(k)) or 0) > 0 for k in ("image", "request"))}
+
+
+def usd_per_token(v) -> float | None:
+    """Giá trong `pricing` của OpenRouter (chuỗi, USD mỗi token): chỉ nhận số hữu hạn từ 0 tới dưới 1 USD/token."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return f if math.isfinite(f) and 0 <= f < 1 else None
 
 
 class NoCache(StaticFiles):
@@ -5839,4 +5931,5 @@ if __name__ == "__main__":
     # (HTTPS, cổng 8443, KHÔNG bật Funnel) — đặt ALLOWED_HOSTS=<tên máy>.ts.net để Host đó qua được, xem auth.py.
     if not auth.AUTH.has_password():
         print(f"[auth] {auth.NO_PASSWORD} — trước khi đặt, mọi request bị từ chối (503)")
+    threading.Thread(target=price_loop, daemon=True, name="prices").start()
     uvicorn.run(app, host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", "8000")))

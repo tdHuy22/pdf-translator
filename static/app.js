@@ -124,6 +124,7 @@ function loadSettings() {
   document.querySelectorAll("select.provider-sel").forEach(sel => { if (!sel.value) sel.value = "custom"; });
   fillKeys();
   toggleOpts();
+  schedulePrice();
   saveSettings();
 }
 function saveSettings() {
@@ -270,8 +271,91 @@ async function fetchModels(base, key) {
   MODELS[base] = models;
   try { localStorage.setItem("models:" + base, JSON.stringify({ t: Date.now(), models })); } catch {}
   loadKeys();
+  schedulePrice();
   return models;
 }
+
+// ---------------- Cảnh báo model có giá: model không có đuôi ":free" có thể bị OpenRouter đổi sang có giá mà request
+// vẫn chạy và tính tiền (ling-3.1-flash, 15/10/2026). Server tải giá lúc khởi động và mỗi 6 giờ (/api/model_prices
+// trong app.py); dải hiện tới khi bấm "Đã biết" cho đúng model và mức giá đó — giá đổi thì hiện lại.
+const OPENROUTER = "https://openrouter.ai/api/v1";
+// token mỗi trang khi dịch (cả prompt, thuật ngữ): ~0,005 USD cho 15 trang ở 0,075 / 0,225 USD mỗi triệu token
+const PRICE_PAGES = 15, PRICE_IN = 1200, PRICE_OUT = 1000, PRICE_STALE = 2 * 86400;
+function priceRoles() {
+  const c = cfg(), r = [["dịch", c.base_url, c.model], ["trò chuyện", c.chat_base_url || c.base_url, c.chat_model || c.model],
+    ["lập thuật ngữ", c.gloss_base_url || c.base_url, c.gloss_model || c.model]];
+  if (c.see_model) r.push(["xem ảnh", c.see_base_url, c.see_model]);
+  if (c.ocr_engine === "vlm") r.push(["OCR", c.ocr_vlm_base_url, c.ocr_vlm_model]);
+  // chép công thức thành LaTeX dùng model OCR (Vision LLM) dù engine OCR là RapidOCR
+  if (c.formula_ocr === "ocr" && c.ocr_engine !== "vlm") r.push(["chép công thức", c.ocr_vlm_base_url, c.ocr_vlm_model]);
+  if ($("align_llm").checked) r.push(["căn vệt tô", c.align_base_url || c.base_url, c.align_model || c.model]);
+  return r;
+}
+const priceAcks = () => { try { return JSON.parse(localStorage.getItem("price_ack") || "[]"); } catch { return []; } };
+const vnNum = (x, o) => x.toLocaleString("vi-VN", o);
+const fmtT = t => t ? new Date(t * 1000).toLocaleString("vi-VN", { dateStyle:"short", timeStyle:"short" }) : "chưa rõ";
+function schedulePrice() { clearTimeout(schedulePrice.t); schedulePrice.t = setTimeout(checkPrices, 300); }
+async function checkPrices() {
+  const groups = new Map();
+  for (const [role, b, m] of priceRoles()) {
+    const base = (b || "").trim().replace(/\/+$/, ""), model = (m || "").trim();
+    if (!base || !model) continue;
+    const k = base + "\n" + model;
+    if (!groups.has(k)) groups.set(k, { base, model, roles: [] });
+    groups.get(k).roles.push(role);
+  }
+  const gs = [...groups.values()], seq = checkPrices.seq = (checkPrices.seq || 0) + 1;
+  let res;
+  try {
+    const r = await fetch("/api/model_prices", { method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ items: gs.map(g => ({ base_url: g.base, model: g.model })) }) });
+    if (!r.ok) return;
+    res = (await r.json()).items || [];
+  } catch { return; }
+  if (seq !== checkPrices.seq) return;   // lượt kiểm mới hơn đã chạy (đổi model liền hai lần)
+  const acks = priceAcks(), box = $("priceWarn"), now = Date.now() / 1000;
+  box.replaceChildren();
+  gs.forEach((g, i) => {
+    const it = res[i] || {}, p = it.price, who = `${g.model} (${g.roles.join(", ")})`;
+    let msg, key;
+    if (p && (p[0] > 0 || p[1] > 0)) {
+      const cost = PRICE_PAGES * (PRICE_IN * p[0] + PRICE_OUT * p[1]);
+      key = `${g.model}|${p[0]}|${p[1]}`;
+      msg = `💰 Model ${who} có giá: ${vnNum(p[0] * 1e6, { maximumFractionDigits: 4 })} / ` +
+            `${vnNum(p[1] * 1e6, { maximumFractionDigits: 4 })} USD mỗi triệu token vào / ra — ước khoảng ` +
+            `${vnNum(cost, { maximumSignificantDigits: cost < 0.01 ? 1 : 2 })} USD mỗi bài ${PRICE_PAGES} trang. ` +
+            `Giá kiểm lúc ${fmtT(it.t)}.`;
+    } else if (it.extra && g.base === OPENROUTER) {
+      key = `${g.model}|extra`;
+      msg = `💰 Model ${who} tính tiền theo ảnh hay theo request (giá token bằng 0). Kiểm lúc ${fmtT(it.t)}.`;
+    } else if (it.listed && !p && g.base === OPENROUTER) {
+      key = `${g.model}|noprice`;
+      msg = `⚠️ Không đọc được giá model ${who} trong danh sách OpenRouter (tải lúc ${fmtT(it.t)}): kiểm giá trên openrouter.ai.`;
+    } else if (it.missing) {
+      key = `${g.model}|missing`;
+      msg = `⚠️ Không thấy model ${who} trong danh sách OpenRouter mới tải: có thể đã bị gỡ, đổi tên hay hết free.`;
+    } else if (p && g.base === OPENROUTER && it.t && now - it.t > PRICE_STALE) {
+      key = `${g.model}|stale|${it.t}`;
+      msg = `⚠️ Giá model ${who} chưa kiểm lại từ ${fmtT(it.t)} (server không tải được danh sách OpenRouter).`;
+    } else return;
+    if (acks.includes(key)) return;
+    const row = document.createElement("div"), span = document.createElement("span"), btn = document.createElement("button");
+    span.textContent = msg;
+    btn.textContent = "Đã biết";
+    btn.title = "Ẩn cảnh báo này cho tới khi giá model đổi";
+    btn.onclick = () => {
+      try { localStorage.setItem("price_ack", JSON.stringify([key, ...priceAcks().filter(x => x !== key)].slice(0, 50))); } catch {}
+      row.remove();
+      box.hidden = !box.children.length;
+    };
+    row.append(span, btn);
+    box.append(row);
+  });
+  box.hidden = !box.children.length;
+}
+FIELDS.concat(CHECKS).forEach(f => $(f).addEventListener("change", schedulePrice));
+setInterval(schedulePrice, 30 * 60 * 1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) schedulePrice(); });
 const recentModels = () => { try { return JSON.parse(localStorage.getItem("recent_models") || "[]"); } catch { return []; } };
 function useModel(id) {
   const r = [id, ...recentModels().filter(x => x !== id)].slice(0, 30);

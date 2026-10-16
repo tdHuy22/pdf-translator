@@ -45,6 +45,11 @@
   input.bad { border-color:#dc2626; background:var(--bad-bg); }
   .bar { height:3px; background:transparent; }
   .bar > div { height:100%; background:var(--accent); width:0; transition:width .3s; }
+  /* dải cảnh báo model có giá (checkPrices trong app.js) */
+  #priceWarn > div { display:flex; gap:10px; align-items:center; padding:6px 12px; background:var(--warn-bg);
+                     border-bottom:1px solid #f59e0b; font-size:13px; }
+  #priceWarn > div span { flex:1; min-width:0; overflow-wrap:anywhere; }
+  #priceWarn > div button { flex:none; }
   /* Hai khung xem độc lập (bản gốc | bản dịch): mỗi khung cuộn và thu phóng riêng, ở giữa là thanh kéo chia bề rộng.
      Cao = màn hình trừ thanh trên cùng (--paneh, view.js đặt); trang rộng hơn khung thì cuộn ngang trong khung. */
   .cols { position:relative; display:flex; height:var(--paneh, calc(100vh - 48px)); }
@@ -413,6 +418,7 @@
   <span id="status">Chưa mở file</span>
 </header>
 <div class="bar"><div id="bar"></div></div>
+<div id="priceWarn" hidden></div>
 <div id="settings">
   <h3 class="sec">1. Dịch</h3>
   <label>Cách dịch
