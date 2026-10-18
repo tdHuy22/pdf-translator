@@ -167,7 +167,7 @@ window.addEventListener("wheel", e => {
 // chỗ đọc (neo theo giữa khung mà giữa khung dời đi thì trang bị kéo giật theo)
 let lastW = innerWidth;
 window.addEventListener("resize", () => {
-  if (innerWidth !== lastW) { lastW = innerWidth; relayout(); return; }
+  if (innerWidth !== lastW) { lastW = innerWidth; relayout(fitChatW); return; }
   const top = document.querySelector("header").offsetHeight + (document.querySelector(".bar")?.offsetHeight || 0);
   $("cols").style.setProperty("--paneh", Math.max(200, innerHeight - top) + "px");
 });
@@ -325,10 +325,15 @@ window.addEventListener("blur", () => { lens.hidden = true; });
 document.addEventListener("scroll", () => { if (!lens.hidden && mouse) lensAt(mouse); }, { capture: true, passive: true });
 
 // ---------------- Kéo rộng / thu hẹp khung chat
+// Nhớ bề rộng người dùng chọn (kéo, ⤢, nhấp đúp) và chỉ kẹp theo cửa sổ lúc hiện: trang nạp khi cửa sổ rộng gần 0
+// (tab ẩn, khung trình duyệt chưa hiện) từng cho --chatw = 0px mãi mãi, khung chat mở ra chỉ rộng 1px.
+let chatWant = CHAT_W;
+const chatFit = w => Math.round(Math.min(innerWidth * 0.7, Math.max(300, w)));
+function fitChatW() { document.documentElement.style.setProperty("--chatw", chatFit(chatWant) + "px"); }
 function setChatW(w, keep = true) {
-  w = Math.round(Math.min(innerWidth * 0.7, Math.max(300, w)));
-  relayout(() => document.documentElement.style.setProperty("--chatw", w + "px"));
-  if (keep) save("chat_w", w);
+  chatWant = keep ? chatFit(w) : w;
+  relayout(fitChatW);
+  if (keep) save("chat_w", chatWant);
 }
 setChatW(+load("chat_w", CHAT_W) || CHAT_W, false);
 $("chatGrip").addEventListener("pointerdown", e => {
