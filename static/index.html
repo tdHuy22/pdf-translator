@@ -446,6 +446,7 @@
       <option value="3">Tối đa 3 trang</option>
     </select></label>
   <label style="flex-direction:row;align-items:center;gap:6px" title="Phần Tài liệu tham khảo (từ tiêu đề References tới Phụ lục) giữ nguyên chữ gốc: dịch danh mục trích dẫn vô ích mà tốn token, dễ vỡ định dạng"><input type="checkbox" id="skip_refs"> Không dịch phần Tài liệu tham khảo</label>
+  <label style="flex-direction:row;align-items:center;gap:6px" title="Khối tên tác giả, nơi làm việc, email giữa tên bài và Abstract ở trang đầu giữ nguyên chữ gốc: tên riêng không cần dịch"><input type="checkbox" id="skip_authors"> Không dịch tên tác giả đầu bài</label>
   <label class="tr-llm" style="flex-direction:row;align-items:center;gap:6px" title="Trước khi dịch trang đầu, app hỏi LLM một lượt để chốt cách dịch các thuật ngữ của bài, rồi dùng thống nhất cho mọi trang"><input type="checkbox" id="glossary_auto"> Tự lập bảng thuật ngữ cho mỗi tài liệu</label>
   <label style="grid-column:1/-1">Thuật ngữ dùng cho <b>MỌI tài liệu</b> (mỗi dòng: English = Tiếng Việt) — thuật ngữ riêng của từng bài thì sửa trong 📒 Thuật ngữ
     <textarea id="glossary" rows="3" style="font:inherit;font-size:13px;padding:5px;border:1px solid var(--line);border-radius:6px"></textarea></label>
@@ -654,7 +655,8 @@
   <button id="zoomFit" title="Vừa bề rộng khung">⤢</button>
   <button id="linkScroll" title="Cuộn cùng nhau: cuộn một bản thì bản kia theo tới cùng trang, và thu phóng cả hai bản (mặc định tắt — hai bản độc lập)">🔗</button>
   <span class="sep"></span>
-  <button id="skipMode" title="Bấm vào đoạn trên trang để đánh dấu / bỏ đánh dấu KHÔNG DỊCH (bản dịch giữ nguyên chữ gốc). Bấm lại nút này để thôi">⛔ Chọn đoạn</button>
+  <button id="skipMode" title="Bấm vào đoạn trên trang để đánh dấu / bỏ đánh dấu KHÔNG DỊCH (bản dịch giữ nguyên chữ gốc); bấm vào đoạn đang bỏ qua (⛔, tài liệu tham khảo, tên tác giả) thì dịch đoạn đó. Bấm lại nút này để thôi">⛔ Chọn đoạn</button>
+  <button id="skipRest" title="Dịch mọi đoạn đang bỏ qua ở trang đang xem: đoạn bạn chọn không dịch (⛔), tài liệu tham khảo, tên tác giả">↩ Dịch phần bỏ qua</button>
   <span class="sep desk"></span>
   <span class="hint desk" title="Giữ phím ⌥ Option / Alt và rê chuột trên trang để soi chữ nhỏ; ⌥ + lăn chuột: đổi độ phóng">⌥ kính lúp</span>
 </div>

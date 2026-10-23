@@ -138,7 +138,8 @@ def save_state(d: dict) -> None:
         if k in d:
             st[k] = list(d[k]) if isinstance(d[k], list) else d[k]
     # đoạn "không dịch" {trang: {đoạn: dấu}}, trang giữ bản gốc, yêu cầu dịch đã nhớ {"*" | trang: chữ}
-    st["skip"] = {str(p): {str(i): h for i, h in v.items()} for p, v in list(d.get("skip", {}).items()) if v}
+    for k in ("skip", "force"):   # force: đoạn mặc định không dịch (tài liệu tham khảo, tên tác giả) mà người dùng bảo dịch
+        st[k] = {str(p): {str(i): h for i, h in v.items()} for p, v in list(d.get(k, {}).items()) if v}
     st["keep_pages"] = sorted(p for p in d.get("keep_pages", ()) if p in done)
     st["instr"] = {str(k): v for k, v in list(d.get("instr", {}).items())}
     # công thức → LaTeX nhận dạng từ ảnh {trang: {dấu glyph: LaTeX}} (app.py: recognize_page)
@@ -173,7 +174,8 @@ def load(doc_id: str) -> dict | None:
     for k in ("title", "gloss", "gloss_extra", "num_ctx", "notes"):
         if k in st:
             d[k] = st[k]
-    d["skip"] = {int(p): {int(i): h for i, h in v.items()} for p, v in st.get("skip", {}).items()}
+    for k in ("skip", "force"):
+        d[k] = {int(p): {int(i): h for i, h in v.items()} for p, v in st.get(k, {}).items()}
     d["keep_pages"] = set(st.get("keep_pages", [])) & done
     d["instr"] = {(k if k == "*" else int(k)): v for k, v in st.get("instr", {}).items()}
     d["flatex"] = {int(p): v for p, v in st.get("flatex", {}).items()}

@@ -113,6 +113,7 @@ class Config(BaseModel):
     length_ratio: float = 1.3      # bản dịch tối đa ≈ ratio × độ dài bản gốc
     page_span: int = 0             # số trang gộp vào một lượt gọi LLM; 0 = tự động theo ngữ cảnh còn trống
     skip_refs: bool = True         # không dịch phần Tài liệu tham khảo (giữ nguyên chữ gốc, đỡ token)
+    skip_authors: bool = True      # không dịch khối tên tác giả, nơi làm việc, email ở đầu bài
     instruction: str = ""          # yêu cầu thêm của người đọc cho lượt dịch (lại) này, ghép vào CUỐI system prompt
     instruction_scope: str = "once"  # "once" | "page" (nhớ cho các trang này) | "doc" (nhớ cho cả bài)
     # OCR
@@ -3647,11 +3648,12 @@ def refs_share(bbox, boxes: list[pymupdf.Rect]) -> float:
     return covered / max(y1 - y0, 1e-6)
 
 
-def user_skips(d: dict, n: int, blocks: list[dict], heal: bool = True) -> set[int]:
-    """Đoạn của trang n người dùng đánh dấu "không dịch" (⛔). Trích lại khối (đổi OCR/layout) thì số hiệu đoạn có thể
+def user_skips(d: dict, n: int, blocks: list[dict], heal: bool = True, kind: str = "skip") -> set[int]:
+    """Đoạn của trang n người dùng đánh dấu "không dịch" (⛔; kind="force": đoạn mặc định không dịch mà người dùng bảo
+    dịch). Trích lại khối (đổi OCR/layout) thì số hiệu đoạn có thể
     đổi: tìm lại đoạn theo dấu chữ và ghi số hiệu mới; đoạn không còn (chữ trích khác đi) thì bỏ dấu. `heal=False`:
     `blocks` không phải khối dùng để dịch (lớp chữ tạm của trang chưa dịch) → chỉ tìm, không sửa dấu đã lưu."""
-    marks = d.get("skip", {}).get(n)
+    marks = d.get(kind, {}).get(n)
     if not marks or not blocks:
         return set()
     if any(i >= len(blocks) or block_hash(blocks[i]) != h for i, h in marks.items()):
@@ -3660,11 +3662,11 @@ def user_skips(d: dict, n: int, blocks: list[dict], heal: bool = True) -> set[in
         if not heal:
             return set(fixed)
         if len(fixed) < len(marks):
-            print(f"[skip] trang {n + 1}: {len(marks) - len(fixed)} đoạn ⛔ không còn sau khi trích lại → bỏ dấu")
+            print(f"[{kind}] trang {n + 1}: {len(marks) - len(fixed)} đoạn đánh dấu không còn sau khi trích lại → bỏ dấu")
         marks.clear()
         marks.update(fixed)
         if not marks:
-            d["skip"].pop(n, None)
+            d[kind].pop(n, None)
         store.save_state(d)
     return set(marks)
 
@@ -3697,15 +3699,54 @@ def ocr_refs(d: dict, n: int, blocks: list[dict]) -> set[int]:
     return out
 
 
-def skipped(d: dict, n: int, blocks: list[dict], cfg: Config) -> set[int]:
-    """Đoạn của trang n KHÔNG dịch (giữ nguyên chữ gốc): người dùng đánh dấu (⛔), và phần Tài liệu tham khảo — trang
-    có lớp chữ: đoạn có ít nhất nửa chiều cao nằm trên dòng thuộc refs_boxes (refs_share)."""
-    out = user_skips(d, n, blocks)
+AUTHORS_MAX = 400          # ký tự: khối dài hơn thì là văn xuôi, không phải dòng tên tác giả hay nơi làm việc…
+AUTHORS_LIST_MAX = 3000    # …trừ danh sách tên dài (Mixtral 448 ký tự): ≥ 60% từ viết hoa đầu, văn xuôi thì không
+_AUTHORS_END = {"abstract", "paragraph_title"}
+
+
+def _names_like(text: str) -> bool:
+    words = re.findall(r"[^\W\d_]{2,}", text)
+    return len(text) <= AUTHORS_MAX or (len(text) <= AUTHORS_LIST_MAX and words
+                                         and sum(w[0].isupper() for w in words) >= 0.6 * len(words))
+
+
+def author_blocks(n: int, blocks: list[dict]) -> set[int]:
+    """Khối tên tác giả, nơi làm việc, email ở đầu bài: trang đầu, ngay sau tên bài (nhãn doc_title) tới trước tóm tắt
+    hay tiêu đề mục đầu tiên ("Abstract"), chỉ khối chữ thường ngắn. Không thấy tên bài, hay dãy khối đó không dừng ở
+    tóm tắt hay tiêu đề mục (gặp văn xuôi dài, hình, bảng), thì không đoán: dịch cả."""
+    if n != 0:
+        return set()
+    t = next((i for i, b in enumerate(blocks) if b.get("label") == "doc_title"), None)
+    if t is None:
+        return set()
+    out = set()
+    for i in range(t + 1, len(blocks)):
+        b = blocks[i]
+        if b.get("label") in _AUTHORS_END or untag(b["text"]).lstrip().lower().startswith("abstract"):
+            return out
+        if b.get("label") not in ("text", None) or not _names_like(" ".join(untag(b["text"]).split())):
+            return set()
+        out.add(i)
+    return set()
+
+
+def auto_skips(d: dict, n: int, blocks: list[dict], cfg: Config) -> set[int]:
+    """Đoạn mặc định không dịch: phần Tài liệu tham khảo — trang có lớp chữ: đoạn có ít nhất nửa chiều cao nằm trên
+    dòng thuộc refs_boxes (refs_share) — và khối tên tác giả ở đầu bài (author_blocks)."""
+    out = set()
     if cfg.skip_refs and any(b.get("ocr") for b in blocks):
         out |= ocr_refs(d, n, blocks)
     elif cfg.skip_refs and (boxes := refs_boxes(d).get(n)):
         out |= {i for i, b in enumerate(blocks) if refs_share(b["bbox"], boxes) >= 0.5}
+    if cfg.skip_authors:
+        out |= author_blocks(n, blocks)
     return out
+
+
+def skipped(d: dict, n: int, blocks: list[dict], cfg: Config) -> set[int]:
+    """Đoạn của trang n KHÔNG dịch (giữ nguyên chữ gốc): người dùng đánh dấu (⛔), cộng đoạn mặc định không dịch
+    (auto_skips) trừ những đoạn người dùng đã bảo dịch (kind="force")."""
+    return user_skips(d, n, blocks) | (auto_skips(d, n, blocks, cfg) - user_skips(d, n, blocks, kind="force"))
 
 
 def instruction_text(cfg: Config, d: dict, n: int) -> str:
@@ -3832,15 +3873,22 @@ async def skip_blocks(doc_id: str, n: int, ask: SkipAsk):
     d, cfg = get_doc(doc_id), resolve_keys(ask.cfg)
     blocks, _ = await page_blocks(d, n, cfg)
     user_skips(d, n, blocks)
+    user_skips(d, n, blocks, kind="force")
+    auto = auto_skips(d, n, blocks, cfg)
     marks = d.setdefault("skip", {}).setdefault(n, {})
+    force = d.setdefault("force", {}).setdefault(n, {})
     for i in ask.blocks:
         if 0 <= i < len(blocks):
             if ask.skip:
                 marks[i] = block_hash(blocks[i])
+                force.pop(i, None)
             else:
                 marks.pop(i, None)
-    if not marks:
-        d["skip"].pop(n, None)
+                if i in auto:          # đoạn mặc định không dịch (tài liệu tham khảo, tên tác giả): nhớ là bạn bảo dịch
+                    force[i] = block_hash(blocks[i])
+    for k, v in (("skip", marks), ("force", force)):
+        if not v:
+            d[k].pop(n, None)
     missing = [i for i in ask.blocks if not ask.skip and 0 <= i < len(blocks) and i not in d["trans"].get(n, {})
                and i not in skipped(d, n, blocks, cfg)]
     rendered = False
@@ -3855,7 +3903,7 @@ async def skip_blocks(doc_id: str, n: int, ask: SkipAsk):
         rendered = True
     store.save_state(d)
     return {"page": n, "skip": sorted(skipped(d, n, blocks, cfg)), "user": sorted(d.get("skip", {}).get(n, {})),
-            "rendered": rendered}
+            "force": sorted(d.get("force", {}).get(n, {})), "rendered": rendered}
 
 
 @app.post("/api/{doc_id}/glossary")
@@ -4028,7 +4076,7 @@ def reading_order(lines: list[dict]) -> list[dict]:
 
 
 @app.get("/api/{doc_id}/page/{n}/layer")
-async def page_layer(doc_id: str, n: int, kind: str = "original", refs: bool = True):
+async def page_layer(doc_id: str, n: int, kind: str = "original", refs: bool = True, authors: bool = True):
     """Lớp chữ + khung từng đoạn của một trang. Số hiệu đoạn GIỐNG NHAU ở bản gốc và bản dịch, nên tô vàng một
     đoạn bên này là bên kia sáng đúng đoạn tương ứng."""
     d = get_doc(doc_id)
@@ -4057,13 +4105,18 @@ async def page_layer(doc_id: str, n: int, kind: str = "original", refs: bool = T
     for ln in lines:
         ln["b"] = line_owner(ln["bbox"], rects)
     lines = reading_order(lines)
-    # đoạn không dịch: người dùng đánh dấu (⛔) và phần tài liệu tham khảo (nếu đang bật `refs`)
+    # đoạn không dịch: người dùng đánh dấu (⛔), phần tài liệu tham khảo và tên tác giả (theo `refs`, `authors` của
+    # cấu hình), trừ đoạn mặc định không dịch mà người dùng đã bảo dịch
     src_blocks = (d["blocks"].get(n) or (None, d.get(("layer", n)) or []))[1]
-    user = sorted(user_skips(d, n, src_blocks, heal=bool(d["blocks"].get(n))))
-    auto = sorted(skipped(d, n, src_blocks, Config(skip_refs=True)) - set(user)) if refs else []
+    heal = bool(d["blocks"].get(n))
+    user = sorted(user_skips(d, n, src_blocks, heal=heal))
+    force = user_skips(d, n, src_blocks, heal=heal, kind="force")
+    names = author_blocks(n, src_blocks) if authors else set()
+    auto = auto_skips(d, n, src_blocks, Config(skip_refs=refs, skip_authors=authors)) - set(user) - force
     return {"w": round(page.rect.width, 1), "h": round(page.rect.height, 1), "ready": True,
             "lines": lines, "blocks": {str(i): [round(v, 1) for v in r] for i, r in rects.items()},
-            "skip": user, "refs": auto, "keep": n in d.get("keep_pages", ())}
+            "skip": user, "refs": sorted(auto - names), "authors": sorted(auto & names),
+            "keep": n in d.get("keep_pages", ())}
 
 
 @app.get("/api/{doc_id}/state")

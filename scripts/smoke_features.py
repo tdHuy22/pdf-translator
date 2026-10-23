@@ -358,7 +358,8 @@ with A.test_client() as c:
     before = dict(D["trans"][0])
     SYS.clear()
     r = c.post(f"/api/{bid}/page/0/skip", json={"cfg": c1, "blocks": [4, 5], "skip": True}).json()
-    ok(r["skip"] == [4, 5] and r["rendered"] and not SYS, "⛔ hai đoạn trên trang đã dịch → dựng lại ngay, không gọi LLM")
+    ok(r["user"] == [4, 5] and {4, 5} <= set(r["skip"]) and r["rendered"] and not SYS,
+       "⛔ hai đoạn trên trang đã dịch → dựng lại ngay, không gọi LLM")
     L = c.get(f"/api/{bid}/page/0/layer?kind=translated").json()
     txt = " ".join(l["text"] for l in L["lines"] if l["b"] == 4)
     ok(txt and "DỊCH" not in txt and "4" in L["blocks"], "đoạn không dịch: bản dịch giữ chữ gốc, lớp chữ vẫn có khung đoạn đó")
@@ -369,7 +370,8 @@ with A.test_client() as c:
        "dịch lại trang: đoạn ⛔ không gửi LLM")
     SYS.clear()
     r = c.post(f"/api/{bid}/page/0/skip", json={"cfg": c1, "blocks": [4], "skip": False}).json()
-    ok(r["skip"] == [5] and SYS and len(SYS[0][1]) == 1 and 4 in D["trans"][0], "bỏ ⛔ đoạn chưa từng dịch → dịch riêng đoạn đó")
+    ok(r["user"] == [5] and 4 not in r["skip"] and SYS and len(SYS[0][1]) == 1 and 4 in D["trans"][0],
+       "bỏ ⛔ đoạn chưa từng dịch → dịch riêng đoạn đó")
     SYS.clear()
     c.post(f"/api/{bid}/translate/0?blocks=2,3", json={**c1, "instruction": "Dịch sát nghĩa hơn"})
     ok(SYS and len(SYS[0][1]) == 2 and "Dịch sát nghĩa hơn" in SYS[0][0] and SYS[0][0].index("Glossary") < SYS[0][0].index("Dịch sát")
