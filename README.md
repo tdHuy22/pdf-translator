@@ -237,7 +237,8 @@ Khung bên phải có hai tab **💬 Trò chuyện | 📝 Ghi chú** (nút 📝 
 - **Gốc | Cả hai | Dịch**: xem một bản thì khung đó chiếm cả chỗ. Mỗi khung nhớ chỗ đang đọc, ẩn rồi hiện lại vẫn ở đúng chỗ.
 - **− % +** áp cho **khung đang chỉnh** (khung chuột vừa rê vào, tên hiện cạnh số %); ⌘/Ctrl + lăn chuột hoặc chụm hai ngón trên trackpad thì phóng khung dưới con trỏ, quanh đúng điểm con trỏ. Từ 40% tới 400%, mỗi khung nhớ mức riêng. Ảnh trang được vẽ lại nét hơn khi phóng (server vẽ PNG ở zoom 3–4 thay vì 2). Lớp chữ, tô vàng, ghi chú vẫn dùng được ở mọi mức phóng.
 - **🔗 Cuộn cùng nhau** (mặc định tắt): cuộn khung đang dùng thì khung kia theo tới cùng trang, cùng vị trí trên trang.
-- **Kính lúp**: giữ ⌥ Option / Alt khi rê chuột trên trang → khung soi chữ nhật 440×260 (đọc trọn một dòng), phóng ×1,8; ⌥ + lăn chuột đổi độ phóng trong khoảng ×1,4–×3 (nhớ lại, số hiện ở góc kính). Tải riêng ảnh ×4 của trang cho nét, trong lúc chờ soi tạm ảnh đang hiện.
+- **Kính lúp**: giữ ⌥ Option / Alt khi rê chuột trên trang → khung soi chữ nhật 440×260 (đọc trọn một dòng), phóng ×1,8; ⌥ + lăn chuột đổi độ phóng trong khoảng ×1,4–×3 (nhớ lại, số hiện ở góc kính). Tải riêng ảnh ×4 của trang cho nét, trong lúc chờ soi tạm ảnh đang hiện. **Màn hình cảm ứng** (iPhone, iPad — không có phím ⌥): nút **🔍 Kính lúp** ở thanh xem bật chế độ soi, chạm và kéo một ngón trên trang thì khung soi (rộng tối đa 440, cao 150) hiện phía trên ngón tay để ngón không che chữ, nhấc tay thì tắt; trong lúc soi trang không cuộn, không chọn chữ; hai ngón vẫn chụm thu phóng. Bấm lại nút để thôi.
+- **Thanh xem trên điện thoại** (bề rộng ≤ 700px): chỉ giữ ẩn/hiện thanh trên, Gốc · Cả hai · Dịch, − % +, và **⋯**; bấm ⋯ thì các nút còn lại (khung thu phóng, ⤢, 🔗, ⛔ Chọn đoạn, ↩ Dịch phần bỏ qua, 🔍 Kính lúp) xuống hàng dưới, khỏi phải cuộn ngang. Vừa iPhone 375px (SE, mini).
 - **Khung trò chuyện kéo rộng/hẹp** ở mép trái (nhớ lại bề rộng, bấm đúp về mặc định, nút ⤢ mở nửa màn hình).
 
 **Trò chuyện**:

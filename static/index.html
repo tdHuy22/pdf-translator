@@ -86,7 +86,11 @@
                       color:var(--muted); cursor:pointer; }
   #viewbar #zoomWho:hover { background:var(--hover); color:inherit; }
   #viewbar #zoomWho[hidden] { display:none; }
-  #linkScroll.on { border-color:var(--line); background:var(--tint); }
+  #linkScroll.on, #lensBtn.on { border-color:var(--line); background:var(--tint); }
+  #viewbar [hidden] { display:none !important; }
+  #viewMore { display:none; }
+  /* kính lúp cảm ứng: chạm-kéo trên trang không cuộn, không chọn chữ, không hiện menu chạm-giữ của iOS */
+  body.lensmode .page { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
   .page { position:relative; overflow:hidden; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.15); }
   /* tỉ lệ A4/Letter tạm cho tới khi ảnh nạp xong: không thì trang chưa nạp cao 0, cả chục ảnh "lazy" lọt vào khung cùng lúc */
   .page img { width:100%; display:block; aspect-ratio:auto 612 / 792; }
@@ -385,6 +389,20 @@
     #viewbar { left:8px; right:8px; bottom:calc(8px + env(safe-area-inset-bottom)); overflow-x:auto; scrollbar-width:none; justify-content:flex-start; }
     #viewbar::-webkit-scrollbar { display:none; }
     #viewbar > * { flex:none; }
+    /* chỉ giữ nút hay dùng; ⋯ mở các nút còn lại thành hàng thứ hai (cuộn ngang thì người dùng không biết còn nút) */
+    #viewbar .vmore { display:none; }
+    #viewMore { display:inline-block; margin-left:auto; }
+    #viewbar button { padding:6px 8px; }   /* vừa iPhone 375px (SE, mini) không phải cuộn */
+    #viewbar.more { flex-wrap:wrap; overflow-x:visible; row-gap:4px; }
+    #viewbar.more .vmore { display:inline-block; order:3; }   /* hàng đầu giữ nguyên, nút phụ xuống dưới ngắt dòng */
+    #viewbar.more #viewMore { order:1; }
+    #viewbar.more::after { content:""; order:2; flex-basis:100%; height:0; }
+    #viewbar.more .sep.vmore { display:none; }
+    #viewbar.more #viewMore { background:var(--tint); }
+    body.vbar2 #restMenu, body.vbar2 #dlMenu { bottom:calc(104px + env(safe-area-inset-bottom)); }
+    body.vbar2 #selbar { bottom:calc(100px + env(safe-area-inset-bottom)); }
+    body.vbar2 .stack { padding-bottom:116px; }
+    #lens { width:calc(100vw - 16px); max-width:440px; height:150px; }
     /* Thanh bôi đen: ghim ở đáy (trên thanh xem) — đặt cạnh chữ thì đè lên tay kéo chọn và menu Sao chép của hệ điều hành */
     #selbar { left:8px !important; right:8px; top:auto !important; bottom:calc(60px + env(safe-area-inset-bottom));
               overflow-x:auto; scrollbar-width:none; z-index:21; }
@@ -653,20 +671,22 @@
   <button data-mode="both" title="Xem song song hai bản">Cả hai</button>
   <button data-mode="translated" title="Chỉ xem bản dịch (trang to gấp đôi)">Dịch</button>
   <span class="sep"></span>
-  <select id="zoomWho" title="Thu phóng khung nào: cả hai bản, chỉ bản gốc hay chỉ bản dịch (bật 🔗 thì tự về Cả hai)" aria-label="Khung được thu phóng">
+  <select id="zoomWho" class="vmore" title="Thu phóng khung nào: cả hai bản, chỉ bản gốc hay chỉ bản dịch (bật 🔗 thì tự về Cả hai)" aria-label="Khung được thu phóng">
     <option value="both">Cả hai</option><option value="original">Gốc</option><option value="translated">Dịch</option>
   </select>
   <button id="zoomOut" title="Thu nhỏ khung chọn ở ô bên trái (⌘/Ctrl + lăn chuột trên khung)">−</button>
   <input id="zoomPct" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="100%" aria-label="Độ phóng (%)"
          title="Gõ số % rồi Enter (40–400%) · ↑ ↓: ±10% · Esc: huỷ. Nút ⤢ bên phải: vừa bề rộng khung">
   <button id="zoomIn" title="Phóng to khung chọn ở ô bên trái (⌘/Ctrl + lăn chuột trên khung)">+</button>
-  <button id="zoomFit" title="Vừa bề rộng khung">⤢</button>
-  <button id="linkScroll" title="Cuộn cùng nhau: cuộn một bản thì bản kia theo tới cùng trang, và thu phóng cả hai bản (mặc định tắt — hai bản độc lập)">🔗</button>
-  <span class="sep"></span>
-  <button id="skipMode" title="Bấm vào đoạn trên trang để đánh dấu / bỏ đánh dấu KHÔNG DỊCH (bản dịch giữ nguyên chữ gốc); bấm vào đoạn đang bỏ qua (⛔, tài liệu tham khảo, tên tác giả) thì dịch đoạn đó. Bấm lại nút này để thôi">⛔ Chọn đoạn</button>
-  <button id="skipRest" title="Dịch các đoạn đang bỏ qua ở trang đang xem: chọn phần nào (tên tác giả, tài liệu tham khảo, đoạn bạn chọn không dịch ⛔), tất cả, hay từng đoạn">↩ Dịch phần bỏ qua ▾</button>
+  <button id="zoomFit" class="vmore" title="Vừa bề rộng khung">⤢</button>
+  <button id="linkScroll" class="vmore" title="Cuộn cùng nhau: cuộn một bản thì bản kia theo tới cùng trang, và thu phóng cả hai bản (mặc định tắt — hai bản độc lập)">🔗</button>
+  <span class="sep vmore"></span>
+  <button id="skipMode" class="vmore" title="Bấm vào đoạn trên trang để đánh dấu / bỏ đánh dấu KHÔNG DỊCH (bản dịch giữ nguyên chữ gốc); bấm vào đoạn đang bỏ qua (⛔, tài liệu tham khảo, tên tác giả) thì dịch đoạn đó. Bấm lại nút này để thôi">⛔ Chọn đoạn</button>
+  <button id="skipRest" class="vmore" title="Dịch các đoạn đang bỏ qua ở trang đang xem: chọn phần nào (tên tác giả, tài liệu tham khảo, đoạn bạn chọn không dịch ⛔), tất cả, hay từng đoạn">↩ Dịch phần bỏ qua ▾</button>
+  <button id="lensBtn" class="vmore" hidden title="Kính lúp: bật rồi chạm và kéo ngón tay trên trang, khung soi hiện phía trên ngón tay; nhấc tay thì tắt. Bấm lại để thôi">🔍 Kính lúp</button>
   <span class="sep desk"></span>
   <span class="hint desk" title="Giữ phím ⌥ Option / Alt và rê chuột trên trang để soi chữ nhỏ; ⌥ + lăn chuột: đổi độ phóng">⌥ kính lúp</span>
+  <button id="viewMore" title="Thêm nút: chọn khung thu phóng, vừa bề rộng, cuộn cùng nhau, chọn đoạn không dịch, dịch phần bỏ qua, kính lúp" aria-expanded="false">⋯</button>
 </div>
 <div id="restMenu" hidden></div>  <!-- ngoài #viewbar: thanh đó cuộn ngang trên điện thoại, cắt mất menu thả lên -->
 <div id="lens" hidden></div>

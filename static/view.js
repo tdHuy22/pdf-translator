@@ -303,14 +303,15 @@ function hiRes(img) {
   pre.src = hi;
   return img.src;
 }
-function lensAt(ev) {
+/** Soi điểm (ev.clientX, ev.clientY); dy dời khung soi lên trên (cảm ứng: ngón tay không che chữ đang soi). */
+function lensAt(ev, dy = 0) {
   const img = ev && document.elementFromPoint(ev.clientX, ev.clientY)?.closest(".page")?.querySelector("img");
   if (!img || !img.naturalWidth) { lens.hidden = true; return; }
   lens.hidden = false;
   const r = img.getBoundingClientRect(), RX = lens.offsetWidth / 2, RY = lens.offsetHeight / 2;
   lens.dataset.k = "×" + lensK.toFixed(1).replace(".", ",");
-  lens.style.left = ev.clientX - RX + "px";
-  lens.style.top = ev.clientY - RY + "px";
+  lens.style.left = clamp(ev.clientX - RX, 4, innerWidth - 2 * RX - 4) + "px";
+  lens.style.top = Math.max(4, ev.clientY - RY - dy) + "px";
   lens.style.backgroundImage = `url("${hiRes(img)}")`;
   lens.style.backgroundSize = `${r.width * lensK}px ${r.height * lensK}px`;
   lens.style.backgroundPosition = `${RX - (ev.clientX - r.left) * lensK}px ${RY - (ev.clientY - r.top) * lensK}px`;
@@ -323,6 +324,33 @@ document.addEventListener("keydown", e => { if (e.key === "Alt" && mouse) lensAt
 document.addEventListener("keyup", e => { if (e.key === "Alt") lens.hidden = true; });
 window.addEventListener("blur", () => { lens.hidden = true; });
 document.addEventListener("scroll", () => { if (!lens.hidden && mouse) lensAt(mouse); }, { capture: true, passive: true });
+// Màn hình cảm ứng không có phím ⌥: nút 🔍 bật chế độ kính lúp, chạm và kéo một ngón trên trang thì soi (khung hiện phía
+// trên ngón tay), nhấc tay thì tắt; hai ngón vẫn để chụm thu phóng.
+const lensBtn = $("lensBtn"), LENS_UP = 130;
+lensBtn.hidden = !matchMedia("(pointer:coarse)").matches;
+lensBtn.onclick = () => {
+  const on = document.body.classList.toggle("lensmode");
+  lensBtn.classList.toggle("on", on);
+  if (!on) lens.hidden = true;
+};
+function touchLens(e) {
+  if (!document.body.classList.contains("lensmode")) return;
+  if (e.touches.length !== 1) { lens.hidden = true; return; }
+  const t = e.touches[0];
+  if (!e.target.closest?.(".page")) return;
+  e.preventDefault();                                  // không cuộn trang, không chọn chữ trong lúc soi
+  lensAt(t, LENS_UP);
+}
+document.addEventListener("touchstart", touchLens, { passive: false });
+document.addEventListener("touchmove", touchLens, { passive: false });
+document.addEventListener("touchend", e => { if (!e.touches.length) lens.hidden = true; });
+document.addEventListener("touchcancel", () => { lens.hidden = true; });
+// Thanh xem trên màn hình hẹp: ⋯ mở / đóng hàng nút thứ hai
+$("viewMore").onclick = () => {
+  const on = $("viewbar").classList.toggle("more");
+  document.body.classList.toggle("vbar2", on);
+  $("viewMore").setAttribute("aria-expanded", on);
+};
 
 // ---------------- Kéo rộng / thu hẹp khung chat
 // Nhớ bề rộng người dùng chọn (kéo, ⤢, nhấp đúp) và chỉ kẹp theo cửa sổ lúc hiện: trang nạp khi cửa sổ rộng gần 0
