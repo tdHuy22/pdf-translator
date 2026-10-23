@@ -17,6 +17,7 @@ import json
 import math
 import os
 import re
+import sys
 import threading
 import time
 import unicodedata
@@ -28,14 +29,15 @@ from typing import NamedTuple
 import httpx
 import pymupdf
 from pymupdf import mupdf
-from fastapi import FastAPI, HTTPException, UploadFile
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 import auth
 import chats as C
+import graphs as G
 import notes as N
 import store
 
@@ -3349,6 +3351,7 @@ def list_docs():
 def delete_doc(doc_id: str):
     """Xoá hẳn tài liệu: bản gốc, bản dịch, tô vàng, thuật ngữ. Không hoàn tác được."""
     d = DOCS.pop(doc_id, None)
+    G.forget(doc_id)
     if not store.delete(doc_id) and d is None:
         raise HTTPException(404, "Không tìm thấy tài liệu")
     return {"deleted": doc_id}
@@ -5971,6 +5974,138 @@ def usd_per_token(v) -> float | None:
     except (TypeError, ValueError, OverflowError):
         return None
     return f if math.isfinite(f) and 0 <= f < 1 else None
+
+
+# ================================================================ Sơ đồ bài báo (graphs.py, thư viện paper-graph)
+_graph_tasks: set[asyncio.Task] = set()   # giữ tham chiếu: task không ai giữ có thể bị dọn giữa chừng
+
+
+def graph_doc(doc_id: str) -> dict:
+    d = get_doc(doc_id)
+    if not G.AVAILABLE:
+        raise HTTPException(503, "Chưa cài paper-graph: chạy `.venv/bin/pip install -e ../paper-graph` rồi khởi động lại")
+    return d
+
+
+@app.get("/pg/{name}")
+def graph_asset(name: str):
+    """Script và CSS của trình xem sơ đồ: trang sơ đồ nạp chúng từ app (CSP `script-src 'self'`), không nội tuyến."""
+    if not G.AVAILABLE or name not in ("viewer.js", "viewer.css"):
+        raise HTTPException(404)
+    kind = "text/javascript" if name.endswith(".js") else "text/css"
+    return Response((G.pg_view.ASSETS / name).read_bytes(), media_type=f"{kind}; charset=utf-8",
+                    headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/api/{doc_id}/graph")
+def graph_status(doc_id: str):
+    d = get_doc(doc_id)
+    return G.status(doc_id, d)
+
+
+@app.get("/api/{doc_id}/graph/view")
+def graph_view(doc_id: str):
+    """HTML trình xem, giao diện đặt vào `<iframe srcdoc>` (cùng CSP với app, TM-14)."""
+    d = graph_doc(doc_id)
+    if not G.paths(doc_id).graph.exists():
+        raise HTTPException(404, "Bài này chưa có sơ đồ")
+    try:
+        return HTMLResponse(G.page_html(doc_id, d), headers={"Cache-Control": "no-store"})
+    except (G.InputError, OSError) as e:
+        raise HTTPException(409, f"Không mở được sơ đồ: {str(e)[:500]}") from None
+
+
+async def graph_change(doc_id: str, what: str, request: Request):
+    d = graph_doc(doc_id)
+    if request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json":
+        return JSONResponse({"error": "cần application/json"}, 415)
+    raw = await request.body()
+    if not 0 < len(raw) <= G.MAX_BODY:
+        return JSONResponse({"error": "thân request rỗng hay quá lớn"}, 413)
+    try:
+        body = json.loads(raw)
+    except (ValueError, RecursionError):
+        return JSONResponse({"error": "JSON hỏng"}, 400)
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "cần object JSON"}, 400)
+    try:
+        return await asyncio.to_thread(G.change, doc_id, d, what, body, request.headers.get("x-pg-token", ""))
+    except PermissionError as e:
+        return JSONResponse({"error": str(e)}, 403)
+    except G.pg_serve.Conflict:
+        return JSONResponse({"error": "Sơ đồ đã đổi từ lúc mở (vừa dựng lại hay sửa ở tab khác): tải lại tab Sơ đồ"}, 409)
+    except G.pg_edits.EditError as e:
+        return JSONResponse({"error": str(e)[:500], "diags": [str(x)[:500] for x in e.diags]}, 422)
+    except (G.InputError, OSError) as e:
+        return JSONResponse({"error": str(e)[:500]}, 500)
+
+
+@app.post("/api/{doc_id}/graph/edit")
+async def graph_edit(doc_id: str, request: Request):
+    """Sửa nhãn, thuật ngữ, giải thích, khoá ô (paper_graph.edits kiểm, `version` chống ghi đè, TM-17)."""
+    return await graph_change(doc_id, "edit", request)
+
+
+@app.post("/api/{doc_id}/graph/move")
+async def graph_move(doc_id: str, request: Request):
+    """Kéo ô, dàn lại tầng: toạ độ ghi paper.layout.json."""
+    return await graph_change(doc_id, "move", request)
+
+
+class GraphBuild(BaseModel):
+    cfg: Config
+    model: str = ""
+    allow_training: bool = False
+
+
+async def graph_job(doc_id: str, d: dict, cfg: Config, model: str, key: str) -> None:
+    """Trích đoạn mọi trang (dùng lại khối đã trích, trang scan thì OCR theo cấu hình), xuất paper.blocks.json, rồi
+    dựng sơ đồ bằng paper-graph trong thread."""
+    p, ok, done = G.paths(doc_id), False, {}
+    try:
+        total = d["out"].page_count
+        given = {}
+        for n in range(total):
+            G.say(f"Trích đoạn trang {n + 1}/{total}")
+            given[n] = await page_blocks(d, n, cfg) or ([], False)
+        store.save_state(d)        # khối của mọi trang lưu lại: lớp chữ và bản dịch về sau dùng đúng các khối này
+        G.say("Tìm hình, bảng của bài…")
+        G.keep_old(p)              # dựng lại không đạt thì sơ đồ cũ vẫn đi với đúng các đoạn cũ
+        await asyncio.to_thread(G.export_blocks, sys.modules[__name__], Path(d["src"]), given, p)
+        ok, name = await asyncio.to_thread(G.run_build, doc_id, model, key)
+        done = {"ok": ok, "out": name}
+    except Exception as e:  # noqa: BLE001 - mọi lỗi về giao diện qua log, không làm chết vòng sự kiện
+        G.say(f"Lỗi: {type(e).__name__}: {e}", key)
+        done = {"ok": False, "error": G.pg_build.redact(f"{type(e).__name__}: {e}", key)[:500]}
+    finally:
+        try:
+            G.restore(p, ok)
+        except OSError as e:       # bài bị xoá giữa lúc dựng
+            G.say(f"Không đặt lại được các đoạn cũ: {e}")
+        G.finish(**({"ok": False} | done))   # sau khi đặt lại: giao diện thấy "xong" thì các file đã ổn định
+
+
+@app.post("/api/{doc_id}/graph/build")
+async def graph_build(doc_id: str, req: GraphBuild):
+    """Dựng (hay dựng lại) sơ đồ ở nền bằng model :free của OpenRouter. Chữ bài gửi tới nhà cung cấp có thể huấn
+    luyện trên đó: chỉ chạy khi người dùng đã xác nhận (`allow_training`, TM-16); một lần dựng mỗi lúc (TM-15)."""
+    d = graph_doc(doc_id)
+    model = req.model.strip() or G.pg_build.DEFAULT_MODEL
+    if not G.FREE_MODEL.fullmatch(model):
+        raise HTTPException(400, "Chỉ dựng bằng model miễn phí của OpenRouter (tên kết thúc bằng :free)")
+    if not req.allow_training:
+        raise HTTPException(400, "Cần xác nhận cho gửi chữ bài tới nhà cung cấp model miễn phí (có thể huấn luyện)")
+    if d["out"].page_count > G.pg_extract.MAX_PAGES:
+        raise HTTPException(400, f"Bài quá {G.pg_extract.MAX_PAGES} trang")
+    key = remember(G.OPENROUTER, "")
+    if not key:
+        raise HTTPException(400, "Chưa có key OpenRouter: nhập key cho https://openrouter.ai/api/v1 trong ⚙️ Cấu hình")
+    if not G.claim(doc_id, model):
+        raise HTTPException(409, "Đang dựng một sơ đồ khác: chờ xong rồi thử lại")
+    task = asyncio.create_task(graph_job(doc_id, d, resolve_keys(req.cfg), model, key))
+    _graph_tasks.add(task)
+    task.add_done_callback(_graph_tasks.discard)
+    return G.status(doc_id, d)
 
 
 class NoCache(StaticFiles):

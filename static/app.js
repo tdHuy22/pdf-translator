@@ -519,13 +519,14 @@ $("file").onchange = async e => {
 };
 function resetDocView() {
   window.notesReset?.();                      // ghi chú chung đang chờ lưu được gửi ngay, về đúng bài đã gõ
+  window.graphReset?.();                      // sơ đồ của bài cũ không được ở lại trong tab
   MARKS = {}; newSession(); chatSessions = []; GLOSS = []; EXTRA = []; SAVED = new Set();
   $("gloss").classList.remove("open"); $("gtab").innerHTML = ""; $("gextra").innerHTML = ""; $("gcount").textContent = "";
 }
 
 function openDoc() {
   buildPages();
-  ["btnAll","btnDl","btnGloss","btnChat","btnNotes","range"].forEach(b => $(b).disabled = false);
+  ["btnAll","btnDl","btnGloss","btnChat","btnNotes","btnGraph","range"].forEach(b => $(b).disabled = false);
   setStatus(`${doc.name} – ${doc.pages} trang` + (doc.scanned_pages ? ` (${doc.scanned_pages} trang scan → OCR)` : "") +
             (doc.done.size ? ` · đã dịch ${doc.done.size}` : ""));
 }
@@ -584,7 +585,7 @@ $("dtab").onclick = async e => {
     await fetch(`/api/docs/${id}`, { method:"DELETE" });
     if (doc?.id === id) {                     // xoá đúng bài đang mở → về màn hình trống
       doc = null; resetDocView(); $("stackO").innerHTML = $("stackT").innerHTML = ""; setStatus("Chưa mở file");
-      ["btnAll","btnDl","btnGloss","btnChat","btnNotes","range"].forEach(b => $(b).disabled = true);
+      ["btnAll","btnDl","btnGloss","btnChat","btnNotes","btnGraph","range"].forEach(b => $(b).disabled = true);
       try { localStorage.removeItem("last_doc"); } catch {}
     }
     loadDocs();

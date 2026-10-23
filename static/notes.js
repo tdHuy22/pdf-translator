@@ -20,18 +20,22 @@ const markOf = n => n.mark_id && (MARKS[n.page] || []).find(m => m.id === n.mark
 const where = n => n.id === GEN ? "Ghi chú chung" : n.page == null ? "Cả bài" : `Trang ${n.page + 1}`;
 
 // ---------------- Tab trò chuyện / ghi chú
+const TABS = { chat: ["tabChat", "chatPane"], notes: ["tabNotes", "notesPane"], graph: ["tabGraph", "graphPane"] };
 function showTab(which) {
   document.body.classList.add("chat");
-  $("tabChat").classList.toggle("on", which === "chat");
-  $("tabNotes").classList.toggle("on", which === "notes");
-  $("chatPane").hidden = which !== "chat";
-  $("notesPane").hidden = which !== "notes";
+  for (const [k, [tab, pane]] of Object.entries(TABS)) {
+    $(tab).classList.toggle("on", which === k);
+    $(pane).hidden = which !== k;
+  }
+  if (which === "graph") window.graphShown?.();
 }
-const tabOpen = which => document.body.classList.contains("chat") && !$(which === "chat" ? "chatPane" : "notesPane").hidden;
+const tabOpen = which => document.body.classList.contains("chat") && !$(TABS[which][1]).hidden;
 $("tabChat").onclick = () => showTab("chat");
 $("tabNotes").onclick = () => showTab("notes");
 $("btnChat").onclick = () => tabOpen("chat") ? document.body.classList.remove("chat") : showTab("chat");
 $("btnNotes").onclick = () => tabOpen("notes") ? document.body.classList.remove("chat") : showTab("notes");
+$("tabGraph").onclick = () => showTab("graph");
+$("btnGraph").onclick = () => tabOpen("graph") ? document.body.classList.remove("chat") : showTab("graph");
 
 // ---------------- Nạp / vẽ
 function notesLoad(list) {

@@ -115,6 +115,7 @@
   .blk { position:absolute; border-radius:2px; pointer-events:none; }
   /* Rê chuột lên một đoạn → viền xanh quanh ĐOẠN TƯƠNG ỨNG ở bản kia (chỉ để đối chiếu, không phải tô vàng) */
   .blk.peer { outline:2px solid rgba(37,99,235,.4); outline-offset:1px; border-radius:3px; }
+  .blk.goto { outline:3px solid rgba(234,179,8,.9); outline-offset:2px; background:rgba(250,204,21,.15); border-radius:3px; }
   /* Vệt tô vàng: đúng phần chữ đã bôi đen. multiply để chữ bên dưới vẫn đọc được */
   .hl { position:absolute; pointer-events:none; background:rgba(250,204,21,.55); mix-blend-mode:multiply; border-radius:2px; }
   /* Cả câu tương ứng, đang chờ LLM tìm đúng cụm: nhạt hơn, viền đứt */
@@ -306,6 +307,11 @@
   .pane { flex:1; min-height:0; display:flex; flex-direction:column; }
   .pane[hidden] { display:none; }
   #notesPane { overflow:auto; padding:8px 10px; gap:10px; }
+  .ghead { display:flex; gap:8px; align-items:center; justify-content:space-between; padding:6px 10px; }
+  #graphBuild[hidden], #graphLog[hidden], #graphFrame[hidden] { display:none; }
+  #graphLog { margin:0 10px 8px; padding:6px 8px; max-height:45vh; overflow:auto; font-size:11px; white-space:pre-wrap;
+              background:var(--hover); border-radius:6px; }
+  #graphFrame { flex:1; min-height:0; width:100%; border:0; border-top:1px solid var(--line); background:#fff; }
   .nhead { display:flex; justify-content:space-between; align-items:center; font-size:12px; }
   .nhead a { color:var(--accent); text-decoration:none; }
   .hint { font-size:12px; color:var(--muted); }
@@ -439,6 +445,7 @@
   <button id="btnGloss" disabled>📒 Thuật ngữ</button>
   <button id="btnChat" disabled>💬 Hỏi về tài liệu</button>
   <button id="btnNotes" disabled>📝 Ghi chú</button>
+  <button id="btnGraph" disabled title="Sơ đồ nhiều tầng của bài: mỗi ô neo về đúng câu trong bài, bấm ô thì cuộn hai bản tới đoạn đó">🗺 Sơ đồ</button>
   <button id="btnSet">⚙️ Cấu hình</button>
   </div>
   <span id="status">Chưa mở file</span>
@@ -628,7 +635,8 @@
   <div id="chatGrip" title="Kéo để đổi bề rộng khung · bấm đúp: về mặc định"></div>
   <div class="chead">
     <div class="tabs"><button id="tabChat" class="on" type="button">💬 Trò chuyện</button>
-      <button id="tabNotes" type="button">📝 Ghi chú <span id="noteCount"></span></button></div>
+      <button id="tabNotes" type="button">📝 Ghi chú <span id="noteCount"></span></button>
+      <button id="tabGraph" type="button">🗺 Sơ đồ</button></div>
     <button id="chatWide" title="Mở rộng khung ra nửa màn hình / thu về">⤢</button>
     <button id="chatClose">✕</button></div>
   <div id="chatPane" class="pane">
@@ -661,6 +669,12 @@
         <button id="draftCancel" type="button">Huỷ</button></div>
     </div>
     <div id="noteList"></div>
+  </div>
+  <div id="graphPane" class="pane" hidden>
+    <div class="ghead"><span id="graphState" class="hint"></span>
+      <button id="graphBuild" type="button" hidden title="Dựng sơ đồ bằng model miễn phí của OpenRouter (vài phút đến nửa giờ). Dựng lại: ô bạn đã khoá giữ nguyên">Dựng sơ đồ</button></div>
+    <pre id="graphLog" hidden></pre>
+    <iframe id="graphFrame" title="Sơ đồ bài báo" hidden></iframe>
   </div>
 </aside>
 
@@ -706,6 +720,7 @@
 <script src="/render.js"></script>
 <script src="/app.js"></script>
 <script src="/notes.js"></script>
+<script src="/graph.js"></script>  <!-- tab Sơ đồ (paper-graph): dùng biến của app.js và view.js lúc chạy -->
 <script src="/view.js"></script>  <!-- chế độ xem, thu phóng, kính lúp, bề rộng khung chat -->  <!-- ghi chú: dùng chung biến của app.js (doc, MARKS, $…), phải nạp sau -->
 <script src="/theme.js"></script>
 </body>

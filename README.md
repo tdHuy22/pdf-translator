@@ -16,7 +16,7 @@ Chạy nền và bật/tắt bằng `restart.sh` (log ghi vào `app.log`):
 ```
 Thử nhanh: 10 bài bench trong `data/` (PDF có lớp chữ) và bản scan của chúng trong `samples/<tên>-scan.pdf` (không nằm trong git, tạo bằng `.venv/bin/python scripts/make_scans.py`: 200 dpi, ảnh xám, lệch trang ±0,6°, nhiễu hạt, JPEG q=60, seed cố định).
 
-Mã nguồn: `app.py` (toàn bộ phía server), `auth.py` (đăng nhập, chặn request lạ, header bảo mật), `store.py` (lưu tài liệu xuống đĩa), `notes.py` (ghi chú), `chats.py` (phiên trò chuyện), `static/index.html` (bố cục + CSS), `static/app.js` (giao diện), `static/render.js` (Markdown + công thức + code cho câu trả lời LLM và ghi chú), `static/notes.js` (ghi chú), `static/view.js` (hai khung xem, thu phóng, chế độ xem, kính lúp, bề rộng khung chat), `static/login.html` + `login.js` (trang đăng nhập), `static/theme.js` (nút sáng/tối). Không có script nội tuyến hay `onclick="…"` trong HTML: CSP của app chặn chúng. File tĩnh được trả kèm `Cache-Control: no-cache` nên sửa xong tải lại trang là thấy ngay.
+Mã nguồn: `app.py` (toàn bộ phía server), `auth.py` (đăng nhập, chặn request lạ, header bảo mật), `store.py` (lưu tài liệu xuống đĩa), `notes.py` (ghi chú), `chats.py` (phiên trò chuyện), `graphs.py` (sơ đồ bài báo, dùng paper-graph), `static/index.html` (bố cục + CSS), `static/app.js` (giao diện), `static/render.js` (Markdown + công thức + code cho câu trả lời LLM và ghi chú), `static/notes.js` (ghi chú), `static/graph.js` (tab Sơ đồ), `static/view.js` (hai khung xem, thu phóng, chế độ xem, kính lúp, bề rộng khung chat), `static/login.html` + `login.js` (trang đăng nhập), `static/theme.js` (nút sáng/tối). Không có script nội tuyến hay `onclick="…"` trong HTML: CSP của app chặn chúng. File tĩnh được trả kèm `Cache-Control: no-cache` nên sửa xong tải lại trang là thấy ngay.
 
 ## LLM hỗ trợ (mọi API tương thích OpenAI)
 Có sẵn (API cloud, cần API key; không sửa/xoá được):
@@ -231,6 +231,35 @@ Khung bên phải có hai tab **💬 Trò chuyện | 📝 Ghi chú** (nút 📝 
 - **Xuất**: **⬇ Xuất .md** (`GET /api/<id>/notes.md`: ghi chú chung, rồi theo trang, kèm đoạn trích và câu hỏi LLM). **PDF tải về** có ghi chú: ghi chú của vệt tô là nội dung popup của highlight đó; ghi chú của trang / vệt đã bỏ / cả bài là biểu tượng ghi chú ở lề trên trang.
 - API: `GET/POST /api/<id>/notes` (POST không có id = thêm, có id = sửa chữ; id `general` = ghi chú chung), `DELETE /api/<id>/notes/<note_id>`. `/state` và `📚 Tài liệu` có số ghi chú.
 
+## Sơ đồ bài báo (23/10/2026)
+
+Tab **🗺 Sơ đồ** (nút trên thanh trên cùng, hay tab thứ ba của khung bên phải) hiện sơ đồ nhiều tầng của bài, dựng bằng
+[paper-graph](../paper-graph): tầng đầu 5–7 ô (vấn đề, ý then chốt, phương pháp, kết quả, giới hạn), bấm ô có ▸ để mở
+tầng dưới. Mỗi ô neo về đúng câu trong bài:
+
+- **Bấm một ô** thì hai bản cuộn tới đoạn của câu trích đầu tiên và đoạn đó sáng viền vàng; thẻ của ô có từng câu trích
+  nguyên văn, **bản dịch** của câu đó (câu cùng vị trí trong bản dịch của đoạn; hai bản khác số câu thì cả đoạn, ghi
+  "Bản dịch cả đoạn") và nút **Xem trong bài**. Trên điện thoại khung sơ đồ che cả bài: nút Xem trong bài đóng khung lại.
+- **Dựng sơ đồ / Dựng lại**: gửi toàn văn bài tới model miễn phí của OpenRouter (mặc định của paper-graph, có model dự
+  phòng), dùng key OpenRouter đã nhớ trong ⚙️ Cấu hình. Nhà cung cấp model miễn phí có thể huấn luyện trên chữ gửi đi
+  (cần bật "Free model training" trên OpenRouter), nên app hỏi lại trước khi gửi: chỉ dựng cho bài đã công khai. Mất 5–30
+  phút, tối đa 32 lượt gọi (hạn mức free: 50 lượt mỗi ngày khi tổng nạp dưới 9 USD); cả app chỉ dựng một bài mỗi lúc. Chỉ
+  nhận model tên kết thúc bằng `:free`, trần tiền 0,001 USD: model đổi sang có giá thì lượt dựng dừng. Trước khi dựng, app
+  trích đoạn mọi trang bằng đúng bộ trích của bản dịch (trang scan thì OCR theo cấu hình), nên đoạn trong sơ đồ trùng số
+  hiệu đoạn của VietPaper. Dựng lại giữ nguyên ô đã khoá, bản cũ chép sang `paper.graph.old.json`.
+- **Sửa**: sửa nhãn, thuật ngữ, giải thích, khoá ô trong thẻ; kéo ô (Alt + mũi tên), "Dàn lại tầng này". Sửa đổi qua bộ
+  kiểm của paper-graph (không thêm được số không có trong bài) và bị từ chối nếu sơ đồ đã đổi từ lúc mở (tải lại tab).
+- **Tự đoán trước**: mở ô có tầng dưới thì trang hỏi bạn nghĩ tầng dưới có gì trước, rồi đặt dự đoán cạnh các ô thật.
+
+File của mỗi bài trong `data/docs/<id>/`: `paper.blocks.json` (các đoạn), `paper.ids.json` (dấu từng đoạn lúc xuất: trang
+trích lại về sau thì tắt bản dịch và cuộn tới đoạn ở trang đó, giao diện báo), `paper.graph.json`, `paper.layout.json`.
+Trình xem nằm trong `<iframe srcdoc>` cùng origin, script và CSS nạp từ `/pg/` (file của paper-graph), không script nội
+tuyến, nên CSP của app vẫn chặn chữ độc trong sơ đồ.
+
+Cài: `.venv/bin/pip install -e ../paper-graph` (paper-graph là repo cạnh bên, `../paper-graph`). Chưa cài thì app vẫn
+chạy, tab Sơ đồ báo thiếu thư viện. API: `GET /api/<id>/graph` (trạng thái, log lượt dựng), `GET /api/<id>/graph/view`,
+`POST /api/<id>/graph/build` (`{cfg, allow_training: true, model?}`), `POST /api/<id>/graph/edit|move`.
+
 ## Đọc, trò chuyện, kiểm soát bản dịch (25/09/2026)
 
 **Khung đọc** — bản gốc và bản dịch nằm trong **hai khung xem độc lập**: mỗi khung tự cuộn (dọc lẫn ngang) và tự thu phóng, không còn kéo nhau lên xuống. Thanh ở giữa kéo để chia bề rộng hai khung (nhớ lại; bấm đúp: chia đôi). Thanh ở góc dưới trái:
@@ -309,6 +338,7 @@ Bản dịch tự dùng font **cùng loại với chữ gốc** (có chân / kh�
 .venv/bin/python scripts/smoke_features.py    # ~3 phút, KHÔNG cần server LLM
 .venv/bin/python scripts/test_security.py     # ~3 giây: đăng nhập, chặn route, Origin, Host, header, giới hạn
 .venv/bin/python scripts/test_skip.py         # ~1 phút: không dịch tên tác giả, tài liệu tham khảo; dịch lại phần bỏ qua
+.venv/bin/python scripts/test_graph.py        # ~1 phút: tab Sơ đồ (cần ../paper-graph), không gọi OpenRouter
 ```
 Script chạy app trong cùng tiến trình dùng `A.test_client()` / `A.test_async_client()` (Host localhost, phiên chỉ sống trong bộ nhớ, không cần mật khẩu); `TestClient(A.app)` trơn bị chặn như mọi request chưa đăng nhập.
 Thay hàm gọi LLM bằng hàm giả rồi chạy thật cả luồng trên `data/bert.pdf`: gộp trang, bảng thuật ngữ (lập → sửa → lưu → vào đúng prompt), lớp chữ hai bản khớp số hiệu đoạn, tô vàng → annotation trong PDF tải về, ngữ cảnh gửi cho phần trò chuyện, nhớ API key, khôi phục sau khi tải lại trang, và lưu xuống đĩa rồi mở lại như sau khi khởi động lại app (xoá bộ nhớ → state, ảnh trang dịch, số hiệu đoạn, thuật ngữ, trò chuyện giống hệt; tải lên lại cùng file ra cùng id; xoá tài liệu). Dùng thư mục lưu tạm, không đụng `data/docs/`. In ✓/✗ từng mục và trả mã lỗi ≠ 0 nếu có mục sai.
