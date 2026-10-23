@@ -633,6 +633,7 @@ async function layerFetch(el, p, kind) {
     const data = await (await fetch(`/api/${doc.id}/page/${p}/layer?kind=${kind}&refs=${$("skip_refs").checked}&authors=${$("skip_authors").checked}`)).json();
     if (!data.ready || !data.lines.length) { el.dataset.loaded = ""; return; }
     buildLayer(el, data);
+    if (kind === "translated" && data.stale?.length) fixStale(p, data.stale);
   } catch { el.dataset.loaded = ""; }
 }
 function buildLayer(el, data) {
@@ -644,7 +645,8 @@ function buildLayer(el, data) {
   for (const [i, r] of Object.entries(data.blocks)) {
     const b = document.createElement("div");
     const auto = data.refs?.includes(+i) || data.authors?.includes(+i);
-    b.className = "blk" + (data.skip?.includes(+i) ? " skip" : auto ? " refskip" : "");
+    b.className = "blk" + (data.skip?.includes(+i) ? " skip" : auto ? " refskip" : "") +
+                  (data.authors?.includes(+i) ? " authskip" : "");
     b.dataset.b = i;
     if (data.skip?.includes(+i)) b.title = "Đoạn không dịch (⛔) — bản dịch giữ chữ gốc";
     else if (data.refs?.includes(+i)) b.title = "Tài liệu tham khảo — không dịch (bôi đen → ↩ Dịch đoạn này; tắt hẳn trong ⚙️ Cấu hình)";
@@ -1151,15 +1153,57 @@ $("cols").addEventListener("click", e => {
   e.preventDefault();
   setSkip(+pg.dataset.p, [+b.dataset.b], !b.matches(".skip, .refskip"));
 });
-$("skipRest").onclick = async () => {
+/** Trang đã dịch còn hiện bản dịch cũ của khối tên tác giả (dịch trước khi có luật này): dựng lại trang từ bản dịch đã
+ *  lưu bằng đúng cấu hình đang dùng, không gọi LLM. Mỗi trang một lần nếu thành công; mở bài khác giữa chừng thì thôi. */
+const STALE_FIXED = new Set();
+async function fixStale(p, blocks) {
+  const mine = doc, key = `${mine.id}:${p}`;
+  if (STALE_FIXED.has(key)) return;
+  STALE_FIXED.add(key);
+  try {
+    await reanchorMarks(p, blocks);                  // chữ bản dịch của các đoạn đó sắp về chữ gốc: dời vệt tô trước
+    if (doc !== mine) { STALE_FIXED.delete(key); return; }
+    const r = await fetch(`/api/${mine.id}/page/${p}/skip`, { method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ cfg: cfg(), blocks: [], skip: true }) });
+    if (!r.ok) throw new Error(r.statusText);
+    const j = await r.json();
+    if (doc === mine && j.rendered) showTranslated({ page: p, cached: true }, {});
+  } catch (err) {
+    STALE_FIXED.delete(key);                         // lần nạp lớp chữ sau thử lại
+    console.warn("dựng lại trang", p + 1, err);
+  }
+}
+// Menu "↩ Dịch phần bỏ qua": dịch từng phần đang bỏ qua của trang đang xem (tên tác giả, tài liệu tham khảo, ⛔), tất cả, hay từng đoạn
+$("skipRest").onclick = async () => {               // không chặn click: để menu Tải PDF, danh sách phiên tự đóng
+  const menu = $("restMenu");
+  if (!menu.hidden) { menu.hidden = true; return; }
   const p = visiblePage();
   if (!doc || p == null) return;
   const el = pageOf(p, "original");
   await loadLayer(el);
-  const blocks = [...el.querySelectorAll(".blk.skip, .blk.refskip")].map(b => +b.dataset.b);
-  if (!blocks.length) { setStatus(`Trang ${p + 1} không có đoạn nào đang bỏ qua.`); return; }
-  setSkip(p, blocks, false);
+  const ids = sel => [...el.querySelectorAll(sel)].map(b => +b.dataset.b);
+  const parts = [["Tên tác giả", "khối tên, nơi làm việc, email đầu bài", ids(".blk.authskip")],
+                 ["Tài liệu tham khảo", "các mục trong danh mục trích dẫn", ids(".blk.refskip:not(.authskip)")],
+                 ["Đoạn bạn chọn không dịch (⛔)", "", ids(".blk.skip")]].filter(x => x[2].length);
+  const all = parts.flatMap(x => x[2]);
+  if (!all.length) { setStatus(`Trang ${p + 1} không có đoạn nào đang bỏ qua.`); return; }
+  menu.innerHTML = "";
+  const add = (label, hint, run) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    if (hint) { const s = document.createElement("small"); s.textContent = hint; b.appendChild(s); }
+    b.onclick = () => { menu.hidden = true; run(); };
+    menu.appendChild(b);
+  };
+  for (const [label, hint, blocks] of parts) add(`${label} (${blocks.length} đoạn)`, hint, () => setSkip(p, blocks, false));
+  if (parts.length > 1) add(`Tất cả (${all.length} đoạn)`, `trang ${p + 1}`, () => setSkip(p, all, false));
+  add("Chọn từng đoạn…", "bật ⛔ Chọn đoạn: bấm vào đoạn gạch chéo để dịch đoạn đó", () => {
+    if (!document.body.classList.contains("skipmode")) $("skipMode").click();
+  });
+  menu.hidden = false;
 };
+document.addEventListener("click", e => { if (!e.target.closest?.("#restMenu, #skipRest")) $("restMenu").hidden = true; });
 $("selSkip").onclick = () => {
   const info = sel;
   $("selbar").classList.remove("on");
@@ -1278,7 +1322,7 @@ $("btnAll").onclick = async () => {
   $("btnAll").disabled = false; $("btnStop").disabled = true;
 };
 $("btnStop").onclick = () => { stopFlag = true; setStatus("Đang dừng sau trang hiện tại…"); };
-$("btnDl").onclick = e => { e.stopPropagation(); $("dlMenu").hidden = !$("dlMenu").hidden; };
+$("btnDl").onclick = e => { e.stopPropagation(); $("restMenu").hidden = true; $("dlMenu").hidden = !$("dlMenu").hidden; };
 $("dlMenu").onclick = e => {
   const b = e.target.closest("button[data-q]");
   if (!b || !doc) return;

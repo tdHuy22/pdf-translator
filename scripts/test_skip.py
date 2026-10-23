@@ -111,12 +111,28 @@ with A.test_client() as c:
        and not any(i in D2["trans"][10] for i in refs[2:]),
        "bảo dịch hai mục tài liệu tham khảo → chỉ hai mục đó được dịch")
 
+    print("3b. Trang dịch trước khi có luật tên tác giả: tự dựng lại, không gọi LLM")
+    c.post(f"/api/{b2}/page/0/skip", json={"cfg": cfg, "blocks": [1], "skip": True})
+    c.post(f"/api/{b2}/page/0/skip", json={"cfg": cfg, "blocks": [1], "skip": False})   # bỏ ⛔ đoạn mặc định → bảo dịch
+    D2["force"].pop(0, None)              # giả lập bản cũ: khối tác giả đã dịch, chưa có dấu bảo dịch
+    L = c.get(f"/api/{b2}/page/0/layer?kind=translated").json()
+    ok(L["stale"] == [1], "lớp chữ bản dịch báo khối tác giả còn hiện bản dịch cũ")
+    SENT.clear()
+    r = c.post(f"/api/{b2}/page/0/skip", json={"cfg": cfg, "blocks": [], "skip": True}).json()
+    L = c.get(f"/api/{b2}/page/0/layer?kind=translated").json()
+    ok(r["rendered"] and not SENT and L["stale"] == [] and 1 in D2["trans"][0],
+       "gọi /skip với danh sách rỗng → dựng lại trang, không gọi LLM, bản dịch cũ vẫn lưu (bảo dịch thì có lại ngay)")
+    ok(c.get(f"/api/{b2}/page/0/layer?kind=original").json()["stale"] == [], "lớp chữ bản gốc không báo")
+    c.post(f"/api/{b2}/translate/11?span=1&force=true", json={**cfg, "skip_refs": False})
+    ok(c.get(f"/api/{b2}/page/11/layer?kind=translated&refs=true").json()["stale"] == [],
+       "trang tài liệu tham khảo dịch lúc ô cấu hình tắt: không tự dựng lại theo ô của trình duyệt đang xem")
+
     print("4. Lưu xuống đĩa: dấu bảo dịch còn sau khi khởi động lại")
     A.store.save_state(D2)
     A.DOCS.pop(b2)
     L = c.get(f"/api/{b2}/page/0/layer?kind=original").json()
-    ok(L["authors"] == [] and A.DOCS[b2]["force"].get(10) and sorted(A.DOCS[b2]["force"][10]) == refs[:2],
-       "nạp lại tài liệu: dấu bảo dịch (force) của trang 1 và 11 còn nguyên")
+    ok(A.DOCS[b2]["force"].get(10) and sorted(A.DOCS[b2]["force"][10]) == refs[:2],
+       "nạp lại tài liệu: dấu bảo dịch (force) của trang 11 còn nguyên")
 
     print("5. Bản scan (OCR): khối tác giả cũng giữ chữ gốc")
     with open(ROOT / "samples/gqa-scan.pdf", "rb") as f:

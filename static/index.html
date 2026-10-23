@@ -266,6 +266,12 @@
   #dlMenu button { display:block; width:100%; text-align:left; border:none; background:transparent; padding:6px 8px; cursor:pointer; }
   #dlMenu button:hover { background:var(--hover); }
   #dlMenu small { display:block; opacity:.65; font-size:11.5px; margin-top:1px; }
+  #restMenu { position:fixed; left:12px; bottom:58px; z-index:12; width:320px; background:var(--panel);
+              border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.18); padding:4px; }
+  #restMenu[hidden] { display:none; }
+  #restMenu button { display:block; width:100%; text-align:left; border:none; background:transparent; padding:6px 8px; cursor:pointer; }
+  #restMenu button:hover { background:var(--hover); }
+  #restMenu small { display:block; opacity:.65; font-size:11.5px; margin-top:1px; }
   .ses { display:flex; gap:4px; align-items:center; padding:6px 8px; border-bottom:1px solid #ebe8dd; cursor:pointer; font-size:13px; }
   .ses:hover { background:var(--hover); } .ses.cur { background:var(--tint); }
   .ses .st { flex:1; min-width:0; } .ses .st b { display:block; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -366,6 +372,8 @@
     /* menu tải PDF: ra khỏi hàng cuộn (overflow cắt mất menu thả xuống) thành tấm ở cuối màn hình */
     #dlMenu { position:fixed; top:auto; left:8px; right:8px; bottom:calc(64px + env(safe-area-inset-bottom)); width:auto; }
     #dlMenu button { padding:10px; }
+    #restMenu { left:8px; right:8px; bottom:calc(64px + env(safe-area-inset-bottom)); width:auto; }
+    #restMenu button { padding:10px; }
     #settings { grid-template-columns:minmax(0,1fr); padding:10px 8px; }
     #pvtab { display:block; overflow-x:auto; }
     #settings select, #settings input:not([type=checkbox]), #settings textarea { min-width:0; max-width:100%; }
@@ -656,10 +664,11 @@
   <button id="linkScroll" title="Cuộn cùng nhau: cuộn một bản thì bản kia theo tới cùng trang, và thu phóng cả hai bản (mặc định tắt — hai bản độc lập)">🔗</button>
   <span class="sep"></span>
   <button id="skipMode" title="Bấm vào đoạn trên trang để đánh dấu / bỏ đánh dấu KHÔNG DỊCH (bản dịch giữ nguyên chữ gốc); bấm vào đoạn đang bỏ qua (⛔, tài liệu tham khảo, tên tác giả) thì dịch đoạn đó. Bấm lại nút này để thôi">⛔ Chọn đoạn</button>
-  <button id="skipRest" title="Dịch mọi đoạn đang bỏ qua ở trang đang xem: đoạn bạn chọn không dịch (⛔), tài liệu tham khảo, tên tác giả">↩ Dịch phần bỏ qua</button>
+  <button id="skipRest" title="Dịch các đoạn đang bỏ qua ở trang đang xem: chọn phần nào (tên tác giả, tài liệu tham khảo, đoạn bạn chọn không dịch ⛔), tất cả, hay từng đoạn">↩ Dịch phần bỏ qua ▾</button>
   <span class="sep desk"></span>
   <span class="hint desk" title="Giữ phím ⌥ Option / Alt và rê chuột trên trang để soi chữ nhỏ; ⌥ + lăn chuột: đổi độ phóng">⌥ kính lúp</span>
 </div>
+<div id="restMenu" hidden></div>  <!-- ngoài #viewbar: thanh đó cuộn ngang trên điện thoại, cắt mất menu thả lên -->
 <div id="lens" hidden></div>
 
 <div class="cols" id="cols">

@@ -4113,9 +4113,13 @@ async def page_layer(doc_id: str, n: int, kind: str = "original", refs: bool = T
     force = user_skips(d, n, src_blocks, heal=heal, kind="force")
     names = author_blocks(n, src_blocks) if authors else set()
     auto = auto_skips(d, n, src_blocks, Config(skip_refs=refs, skip_authors=authors)) - set(user) - force
+    # bản dịch còn đặt bản dịch cũ của khối tên tác giả (trang dịch trước khi có luật này): giao diện gọi /skip với danh
+    # sách rỗng để dựng lại trang bằng đúng cấu hình của nó (không gọi LLM). Chỉ tên tác giả: tài liệu tham khảo theo ô
+    # cấu hình từ trước, tự dựng lại theo ô của trình duyệt đang xem sẽ ghi đè lựa chọn lúc dịch ở máy khác
+    stale = sorted(auto & names & set(d["placed"].get(n, {}))) if kind == "translated" else []
     return {"w": round(page.rect.width, 1), "h": round(page.rect.height, 1), "ready": True,
             "lines": lines, "blocks": {str(i): [round(v, 1) for v in r] for i, r in rects.items()},
-            "skip": user, "refs": sorted(auto - names), "authors": sorted(auto & names),
+            "skip": user, "refs": sorted(auto - names), "authors": sorted(auto & names), "stale": stale,
             "keep": n in d.get("keep_pages", ())}
 
 
