@@ -10,6 +10,17 @@
 let ST = null, loadedFor = null, doneAt = -1, timer = null, flashTimer = null;   // doneAt: số trang đã dịch lúc nạp khung
 const frame = $("graphFrame"), state = $("graphState"), log = $("graphLog"), btn = $("graphBuild");
 const shown = () => document.body.classList.contains("chat") && !$("graphPane").hidden;
+// Dựng bằng ✳️ Claude (agent Claude Code chạy skill dung-so-do trên máy chạy app) hay 🌐 API (OpenRouter :free); nhớ trong
+// trình duyệt, mặc định Claude (sơ đồ tốt nhất đã đo)
+let gsrc = "claude";
+try { gsrc = localStorage.getItem("graph_source") === "api" ? "api" : "claude"; } catch {}
+function drawSrc() { document.querySelectorAll("#graphPane [data-gsrc]").forEach(b => b.classList.toggle("on", b.dataset.gsrc === gsrc)); }
+document.querySelectorAll("#graphPane [data-gsrc]").forEach(b => b.onclick = () => {
+  gsrc = b.dataset.gsrc;
+  try { localStorage.setItem("graph_source", gsrc); } catch {}
+  drawSrc();
+});
+drawSrc();
 
 function graphReset() {
   clearTimeout(timer);
@@ -78,14 +89,18 @@ async function loadFrame(id) {
 
 btn.onclick = async () => {
   if (!doc) return;
-  const model = ST?.model || "model miễn phí";
-  if (!confirm(`Dựng sơ đồ gửi toàn văn bài tới ${model} qua OpenRouter. Nhà cung cấp model miễn phí có thể dùng chữ ` +
-               `gửi đi để huấn luyện: chỉ dựng cho bài đã công khai.\n\nMất 5–30 phút, tối đa 32 lượt gọi trong hạn mức ` +
-               `miễn phí mỗi ngày.` + (ST?.graph ? " Ô bạn đã khoá giữ nguyên, bản cũ được giữ lại." : "") + "\n\nTiếp tục?")) return;
+  const model = ST?.model || "model miễn phí", keep = ST?.graph ? " Ô bạn đã khoá giữ nguyên, bản cũ được giữ lại." : "";
+  const ask = gsrc === "claude"
+    ? `Dựng sơ đồ bằng Claude Code (Opus 5.5) trên máy chạy app, dùng gói Claude đã đăng nhập ở đó. Agent đọc bài, viết ` +
+      `sơ đồ, tự kiểm và sửa; mất khoảng 10–30 phút.` + keep + "\n\nTiếp tục?"
+    : `Dựng sơ đồ gửi toàn văn bài tới ${model} qua OpenRouter. Nhà cung cấp model miễn phí có thể dùng chữ ` +
+      `gửi đi để huấn luyện: chỉ dựng cho bài đã công khai.\n\nMất 5–30 phút, tối đa 32 lượt gọi trong hạn mức ` +
+      `miễn phí mỗi ngày.` + keep + "\n\nTiếp tục?";
+  if (!confirm(ask)) return;
   btn.disabled = true;
   try {
     const r = await fetch(`/api/${doc.id}/graph/build`, { method: "POST", headers: { "Content-Type": "application/json" },
-                                                          body: JSON.stringify({ cfg: cfg(), allow_training: true }) });
+                                                          body: JSON.stringify({ cfg: cfg(), source: gsrc, allow_training: gsrc === "api" }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { state.textContent = j.detail || `Lỗi ${r.status}`; return; }
     loadedFor = null;

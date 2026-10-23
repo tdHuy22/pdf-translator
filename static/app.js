@@ -20,7 +20,7 @@ const FIELDS = ["preset","ocr_preset","chat_preset","base_url","model","temperat
   "translator","length_ratio","page_span","ocr_mode","ocr_engine","ocr_lang","ocr_vlm_base_url","ocr_vlm_model",
   "ocr_vlm_concurrency","ocr_custom_url","chat_base_url","chat_model","gloss_preset","gloss_base_url","gloss_model",
   "align_preset","align_base_url","align_model","see_preset","see_base_url","see_model","formula_ocr",
-  "font_serif","font_sans","font_mono"];
+  "font_serif","font_sans","font_mono","model_source","cc_model","cc_model2"];
 const CHECKS = ["glossary_auto","google_fallback","disable_thinking","chat_same","gloss_same","align_llm","align_same","sync_marks","see_on","skip_refs","skip_authors"];
 // Ô API key → ô Base URL của server dùng key đó ("ocrspace" là dịch vụ cố định, không có base URL)
 const KEY_OF = { api_key:"base_url", ocr_vlm_api_key:"ocr_vlm_base_url", chat_api_key:"chat_base_url", gloss_api_key:"gloss_base_url",
@@ -79,11 +79,15 @@ function loadSettings() {
         chat_model:"", gloss_preset:"openrouter", gloss_same:true, gloss_base_url:P("openrouter").base_url,
         gloss_model:P("openrouter").gloss, align_llm:true, align_same:false, align_preset:"chatgpt",
         align_base_url:P("chatgpt").base_url, align_model:P("chatgpt").model, sync_marks:false, see_on:true, see_preset:"openrouter",
-        see_base_url:P("openrouter").base_url, see_model:SEE_MODEL, formula_ocr:"ocr", font_serif:"auto", font_sans:"auto", font_mono:"auto", ...s };
+        see_base_url:P("openrouter").base_url, see_model:SEE_MODEL, formula_ocr:"ocr", font_serif:"auto", font_sans:"auto", font_mono:"auto",
+        model_source:"api", cc_model:"claude-sonnet-5-5", cc_model2:"claude-sonnet-5-5", ...s };
   const ver = s.settings_v || 1;
   // v2: model OCR mặc định đổi từ qwen3.5 sang PaddleOCR-VL — cập nhật cài đặt cũ còn để mặc định cũ
   if (ver < 2 && s.ocr_vlm_model === "qwen3.5:latest") s.ocr_vlm_model = PADDLE_OCR;
   FIELDS.forEach(f => $(f).value = s[f] ?? "");
+  if (!$("cc_model").value) $("cc_model").value = "claude-sonnet-5-5";   // giá trị đã lưu không còn trong danh sách
+  if (!$("cc_model2").value) $("cc_model2").value = "claude-sonnet-5-5";
+  drawSource();
   // v3: key chuyển sang lưu theo từng server; ô đánh dấu trước đây lưu nhầm vào .value nên glossary_auto
   // không bao giờ được tích lại → đọc lại theo kiểu boolean
   if (ver < 3) {
@@ -162,7 +166,7 @@ $("sync_marks").addEventListener("change", () => {
 
 function cfg() {
   const same = $("chat_same").checked, gsame = $("gloss_same").checked, asame = $("align_same").checked;
-  return { base_url:$("base_url").value, api_key:$("api_key").value, model:$("model").value,
+  return claudeCfg({ base_url:$("base_url").value, api_key:$("api_key").value, model:$("model").value,
            temperature: parseFloat($("temperature").value) || 0.2, glossary:$("glossary").value,
            glossary_auto: $("glossary_auto").checked, skip_refs: $("skip_refs").checked, skip_authors: $("skip_authors").checked,
            translator:$("translator").value, google_fallback:$("google_fallback").checked,
@@ -190,8 +194,47 @@ function cfg() {
            see_model: $("see_on").checked ? $("see_model").value : "",
            formula_ocr: $("formula_ocr").value || "ocr",
            font_serif:$("font_serif").value || "auto", font_sans:$("font_sans").value || "auto",
-           font_mono:$("font_mono").value || "auto" };
+           font_mono:$("font_mono").value || "auto" });
 }
+
+// ---------------- Nguồn model: 🌐 API (nhà cung cấp ở từng mục) hay ✳️ Claude Code (claude_code.py: gói Claude trên
+// máy chạy app). Claude Code thì mọi vai (dịch, thuật ngữ, trò chuyện, căn vệt tô, xem ảnh, OCR bằng VLM, chép công thức)
+// trỏ tới địa chỉ giả của Claude Code, key rỗng; các ô nhà cung cấp giữ nguyên để bật API là dùng lại.
+const CLAUDE_BASE = "http://claude-code.local/v1";
+function claudeCfg(c) {
+  if ($("model_source").value !== "claude") return c;
+  const B = CLAUDE_BASE, m = $("cc_model").value, m2 = $("cc_model2").value;
+  return { ...c, base_url:B, api_key:"", model:m, translator:"llm",
+           chat_base_url:B, chat_api_key:"", chat_model:m2, gloss_base_url:B, gloss_api_key:"", gloss_model:m2,
+           align_base_url:B, align_api_key:"", align_model:m2, see_base_url:B, see_api_key:"", see_model:m2,
+           ocr_vlm_base_url:B, ocr_vlm_api_key:"", ocr_vlm_model:m2, ocr_vlm_concurrency:Math.min(c.ocr_vlm_concurrency, 4) };
+}
+function drawSource() {
+  const src = $("model_source").value === "claude" ? "claude" : "api";
+  $("settings").classList.toggle("cc", src === "claude");
+  document.querySelectorAll("#settings .seg [data-src]").forEach(b => b.classList.toggle("on", b.dataset.src === src));
+  if (src === "claude") ccStatus();
+}
+async function ccStatus() {
+  const el = $("ccState");
+  try {
+    const s = await (await fetch("/api/claude/status")).json();
+    el.textContent = !s.installed ? "⚠️ Máy chạy app chưa cài Claude Code"
+      : s.logged_in ? `Claude Code ${s.version} · đã đăng nhập (${s.detail})`
+      : "⚠️ Claude Code trên máy chạy app chưa đăng nhập: chạy `claude` rồi /login trên máy đó";
+  } catch { el.textContent = "Không hỏi được trạng thái Claude Code"; }
+}
+document.querySelectorAll("#settings .seg [data-src]").forEach(b => b.onclick = () => {
+  $("model_source").value = b.dataset.src;
+  drawSource(); saveSettings(); schedulePrice();
+});
+$("ccClean").onclick = async () => {
+  $("ccCleanMsg").textContent = "Đang dọn…";
+  try {
+    const r = await (await fetch("/api/claude/cleanup", { method:"POST" })).json();
+    $("ccCleanMsg").textContent = `Đã xoá ${r.work_dirs} thư mục làm việc, ${r.session_dirs} thư mục phiên`;
+  } catch { $("ccCleanMsg").textContent = "Dọn lỗi"; }
+};
 FIELDS.concat(CHECKS).forEach(f => $(f).addEventListener("change", saveSettings));
 Object.keys(KEY_OF).forEach(f => $(f).addEventListener("change", () => rememberKey(f)));
 // Đổi base URL bằng tay → lấy lại key đã lưu cho server đó

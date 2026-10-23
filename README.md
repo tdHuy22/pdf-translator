@@ -16,7 +16,7 @@ Chạy nền và bật/tắt bằng `restart.sh` (log ghi vào `app.log`):
 ```
 Thử nhanh: 10 bài bench trong `data/` (PDF có lớp chữ) và bản scan của chúng trong `samples/<tên>-scan.pdf` (không nằm trong git, tạo bằng `.venv/bin/python scripts/make_scans.py`: 200 dpi, ảnh xám, lệch trang ±0,6°, nhiễu hạt, JPEG q=60, seed cố định).
 
-Mã nguồn: `app.py` (toàn bộ phía server), `auth.py` (đăng nhập, chặn request lạ, header bảo mật), `store.py` (lưu tài liệu xuống đĩa), `notes.py` (ghi chú), `chats.py` (phiên trò chuyện), `graphs.py` (sơ đồ bài báo, dùng paper-graph), `static/index.html` (bố cục + CSS), `static/app.js` (giao diện), `static/render.js` (Markdown + công thức + code cho câu trả lời LLM và ghi chú), `static/notes.js` (ghi chú), `static/graph.js` (tab Sơ đồ), `static/view.js` (hai khung xem, thu phóng, chế độ xem, kính lúp, bề rộng khung chat), `static/login.html` + `login.js` (trang đăng nhập), `static/theme.js` (nút sáng/tối). Không có script nội tuyến hay `onclick="…"` trong HTML: CSP của app chặn chúng. File tĩnh được trả kèm `Cache-Control: no-cache` nên sửa xong tải lại trang là thấy ngay.
+Mã nguồn: `app.py` (toàn bộ phía server), `auth.py` (đăng nhập, chặn request lạ, header bảo mật), `store.py` (lưu tài liệu xuống đĩa), `notes.py` (ghi chú), `chats.py` (phiên trò chuyện), `graphs.py` (sơ đồ bài báo, dùng paper-graph), `claude_code.py` (Claude Code làm nhà cung cấp model), `static/index.html` (bố cục + CSS), `static/app.js` (giao diện), `static/render.js` (Markdown + công thức + code cho câu trả lời LLM và ghi chú), `static/notes.js` (ghi chú), `static/graph.js` (tab Sơ đồ), `static/view.js` (hai khung xem, thu phóng, chế độ xem, kính lúp, bề rộng khung chat), `static/login.html` + `login.js` (trang đăng nhập), `static/theme.js` (nút sáng/tối). Không có script nội tuyến hay `onclick="…"` trong HTML: CSP của app chặn chúng. File tĩnh được trả kèm `Cache-Control: no-cache` nên sửa xong tải lại trang là thấy ngay.
 
 ## LLM hỗ trợ (mọi API tương thích OpenAI)
 Có sẵn (API cloud, cần API key; không sửa/xoá được):
@@ -231,6 +231,30 @@ Khung bên phải có hai tab **💬 Trò chuyện | 📝 Ghi chú** (nút 📝 
 - **Xuất**: **⬇ Xuất .md** (`GET /api/<id>/notes.md`: ghi chú chung, rồi theo trang, kèm đoạn trích và câu hỏi LLM). **PDF tải về** có ghi chú: ghi chú của vệt tô là nội dung popup của highlight đó; ghi chú của trang / vệt đã bỏ / cả bài là biểu tượng ghi chú ở lề trên trang.
 - API: `GET/POST /api/<id>/notes` (POST không có id = thêm, có id = sửa chữ; id `general` = ghi chú chung), `DELETE /api/<id>/notes/<note_id>`. `/state` và `📚 Tài liệu` có số ghi chú.
 
+## Claude Code làm nhà cung cấp model (23/10/2026)
+
+Nút **Nguồn model: 🌐 API | ✳️ Claude Code** ở đầu ⚙️ Cấu hình. Chọn Claude Code thì mọi việc cần model (dịch, lập
+thuật ngữ, trò chuyện, xem ảnh trang, "Nguyên PDF", OCR bằng VLM, chép công thức, căn vệt tô) chạy bằng `claude -p`
+trên **máy chạy app**, dùng gói Claude đã đăng nhập ở đó; chọn model Claude cho dịch và cho các việc còn lại (mặc định
+Sonnet 5.5). Các ô nhà cung cấp, Base URL, model giữ nguyên để bật lại 🌐 API. Cũng có nhà cung cấp có sẵn "Claude Code"
+để dùng riêng cho một vai. Đo 23/10/2026 (Haiku 5.5): dịch một trang BERT 28 giây, lập 32 thuật ngữ GQA 16 giây, hỏi
+về Hình 1 kèm ảnh trang 10 giây, OCR trang scan bằng VLM rồi dịch 63 giây.
+
+- Cài trên máy chạy app: `curl -fsSL https://claude.ai/install.sh | bash` (vào `~/.local/bin/claude`; app tự tìm ở
+  đó, hay đặt `CLAUDE_BIN`), rồi đăng nhập một lần: `claude` → `/login`, hoặc `claude setup-token` và đặt
+  `CLAUDE_CODE_OAUTH_TOKEN` cho service. ⚙️ Cấu hình hiện "đã đăng nhập" hay cách sửa (`GET /api/claude/status`).
+- Cách gọi (`claude_code.py`): request kiểu OpenAI tới địa chỉ giả `http://claude-code.local/v1` đi qua một transport
+  của httpx, thành `claude -p --safe-mode --restricted --tools "" --no-session-persistence --input-format stream-json` (ảnh, PDF thành
+  khối `image`, `document`; JSON có khuôn bằng `--json-schema`; stream thành SSE). Không công cụ nào, bỏ CLAUDE.md, hook,
+  plugin, MCP của người dùng; system prompt qua file tạm, chữ qua stdin; bỏ `ANTHROPIC_API_KEY` khỏi môi trường (không
+  lỡ tính tiền API). Tối đa `CLAUDE_CODE_SLOTS` (4) tiến trình, mỗi lượt tối đa `CLAUDE_CODE_TIMEOUT` (1.200) giây.
+- **Rác**: `--no-session-persistence` nên không lưu phiên vào `~/.claude/projects/`; mỗi lượt có thư mục tạm trong
+  `data/claude-work/`, xoá ngay khi xong; thư mục tạm của chính Claude Code (mặc định `/tmp/claude-<uid>/`, mỗi lượt để
+  lại một cây thư mục rỗng) đặt vào `data/claude-work/.cctmp` bằng `CLAUDE_CODE_TMPDIR`. Phần còn sót (app tắt giữa
+  chừng, bản cũ) được dọn lúc khởi động và bằng nút **🧹 Dọn rác Claude Code** (`POST /api/claude/cleanup`): chỉ thư mục
+  và phiên thuộc các thư mục của app; phiên Claude Code khác không bị đụng.
+- Mọi lượt gọi tính vào hạn mức gói Claude của chủ máy, chung với các phiên Claude Code khác. Chỉ dùng cho chính bạn.
+
 ## Sơ đồ bài báo (23/10/2026)
 
 Tab **🗺 Sơ đồ** (nút trên thanh trên cùng, hay tab thứ ba của khung bên phải) hiện sơ đồ nhiều tầng của bài, dựng bằng
@@ -240,7 +264,15 @@ tầng dưới. Mỗi ô neo về đúng câu trong bài:
 - **Bấm một ô** thì hai bản cuộn tới đoạn của câu trích đầu tiên và đoạn đó sáng viền vàng; thẻ của ô có từng câu trích
   nguyên văn, **bản dịch** của câu đó (câu cùng vị trí trong bản dịch của đoạn; hai bản khác số câu thì cả đoạn, ghi
   "Bản dịch cả đoạn") và nút **Xem trong bài**. Trên điện thoại khung sơ đồ che cả bài: nút Xem trong bài đóng khung lại.
-- **Dựng sơ đồ / Dựng lại**: gửi toàn văn bài tới model miễn phí của OpenRouter (mặc định của paper-graph, có model dự
+- **Dựng bằng ✳️ Claude | 🌐 API** (nút chuyển cạnh nút dựng, nhớ trong trình duyệt, mặc định Claude). ✳️ Claude: agent
+  Claude Code (Opus 5.5) chạy skill dung-so-do của paper-graph trên máy chạy app, trong thư mục làm việc tạm (bản sao
+  các đoạn, PDF, skill, sơ đồ cũ): đọc bài bằng `paper_graph read`, cắt hình xem bằng mắt, viết sơ đồ, `check` và sửa
+  tới khi đạt; app kiểm lại (0 lỗi, không PG220, ô khoá giữ nguyên) rồi mới chép vào bài. Agent bị khoá: `--safe-mode
+  --restricted`, `dontAsk`, công cụ file chỉ trong thư mục làm việc, shell chỉ một lệnh: cổng `pg_gate.py` chạy bằng
+  `python -I` (không nạp module từ thư mục làm việc), nhận `read|check|figure|fmt` và chỉ các file của thư mục đó; bước
+  kiểm cuối dùng bản gốc (các đoạn, PDF, bản chụp sơ đồ cũ), không dùng bản sao agent sửa được. Đo 23/10/2026 bài GQA
+  (7 trang): khoảng 5 phút, 31–33 ô, 6 tầng, 0 lỗi (hai lần, lần hai qua cổng). 🌐 API: như dưới.
+- **Dựng sơ đồ / Dựng lại bằng 🌐 API**: gửi toàn văn bài tới model miễn phí của OpenRouter (mặc định của paper-graph, có model dự
   phòng), dùng key OpenRouter đã nhớ trong ⚙️ Cấu hình. Nhà cung cấp model miễn phí có thể huấn luyện trên chữ gửi đi
   (cần bật "Free model training" trên OpenRouter), nên app hỏi lại trước khi gửi: chỉ dựng cho bài đã công khai. Mất 5–30
   phút, tối đa 32 lượt gọi (hạn mức free: 50 lượt mỗi ngày khi tổng nạp dưới 9 USD); cả app chỉ dựng một bài mỗi lúc. Chỉ
@@ -339,6 +371,7 @@ Bản dịch tự dùng font **cùng loại với chữ gốc** (có chân / kh�
 .venv/bin/python scripts/test_security.py     # ~3 giây: đăng nhập, chặn route, Origin, Host, header, giới hạn
 .venv/bin/python scripts/test_skip.py         # ~1 phút: không dịch tên tác giả, tài liệu tham khảo; dịch lại phần bỏ qua
 .venv/bin/python scripts/test_graph.py        # ~1 phút: tab Sơ đồ (cần ../paper-graph), không gọi OpenRouter
+.venv/bin/python scripts/test_claude.py       # ~20 giây: lớp Claude Code với `claude` giả (không cần đăng nhập)
 ```
 Script chạy app trong cùng tiến trình dùng `A.test_client()` / `A.test_async_client()` (Host localhost, phiên chỉ sống trong bộ nhớ, không cần mật khẩu); `TestClient(A.app)` trơn bị chặn như mọi request chưa đăng nhập.
 Thay hàm gọi LLM bằng hàm giả rồi chạy thật cả luồng trên `data/bert.pdf`: gộp trang, bảng thuật ngữ (lập → sửa → lưu → vào đúng prompt), lớp chữ hai bản khớp số hiệu đoạn, tô vàng → annotation trong PDF tải về, ngữ cảnh gửi cho phần trò chuyện, nhớ API key, khôi phục sau khi tải lại trang, và lưu xuống đĩa rồi mở lại như sau khi khởi động lại app (xoá bộ nhớ → state, ảnh trang dịch, số hiệu đoạn, thuật ngữ, trò chuyện giống hệt; tải lên lại cùng file ra cùng id; xoá tài liệu). Dùng thư mục lưu tạm, không đụng `data/docs/`. In ✓/✗ từng mục và trả mã lỗi ≠ 0 nếu có mục sai.

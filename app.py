@@ -37,6 +37,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 import auth
 import chats as C
+import claude_code as CC
 import graphs as G
 import notes as N
 import store
@@ -56,6 +57,12 @@ app = FastAPI(title="VietPaper")
 app.add_middleware(auth.Guard, auth=auth.AUTH, body_limits=BODY_LIMITS)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=auth.allowed_hosts(), www_redirect=False)
 app.include_router(auth.router)
+
+
+def llm_client(**kw) -> httpx.AsyncClient:
+    """httpx client cho lượt gọi LLM: request tới Claude Code (`claude_code.BASE`, địa chỉ giả) đi qua transport chạy
+    `claude -p` trên máy này thay vì ra mạng; mọi URL khác như cũ."""
+    return httpx.AsyncClient(mounts={f"http://{CC.HOST}": CC.Transport()}, **kw)
 
 
 def test_client(**kw):
@@ -505,6 +512,9 @@ BUILTIN_PROVIDERS = [
     # Lớp tương thích OpenAI của Anthropic: nhận ảnh (image_url), bỏ qua response_format và kiểu nội dung "file"
     {"id": "claude", "name": "Claude (Anthropic)", "base_url": "https://api.anthropic.com/v1", "model": "claude-opus-5",
      "vision": "claude-opus-5", "parallel": 4},
+    # Claude Code trên máy chạy app (claude_code.py): gói Claude của chủ máy, đọc được ảnh và PDF, JSON có khuôn
+    {"id": "claude-code", "name": "Claude Code (gói Claude trên máy chạy app)", "base_url": CC.BASE,
+     "model": "claude-sonnet-5-5", "vision": "claude-sonnet-5-5", "parallel": CC.SLOTS},
     # deepseek-flash đọc được ảnh, deepseek-v4-pro thì không (api-docs.deepseek.com, 25/09/2026)
     {"id": "deepseek", "name": "DeepSeek", "base_url": "https://api.deepseek.com/v1", "model": "deepseek-flash",
      "vision": "deepseek-flash", "parallel": 4},
@@ -1683,7 +1693,7 @@ async def ocr_vlm(page: pymupdf.Page, cfg: Config) -> list[dict]:
         headers["Authorization"] = f"Bearer {cfg.ocr_vlm_api_key}"
     url = cfg.ocr_vlm_base_url.rstrip("/") + "/chat/completions"
     if is_fullpage_ocr(cfg.ocr_vlm_model):
-        async with httpx.AsyncClient(timeout=600) as client:  # lần đầu gọi còn phải nạp model
+        async with llm_client(timeout=600) as client:  # lần đầu gọi còn phải nạp model
             return await ocr_vlm_fullpage(page, cfg, client, url, headers)
     blocks = await asyncio.to_thread(ocr_rapid, page, cfg.ocr_lang)
     # Chỉ đọc lại vùng layout và đoạn đủ dài; ô bảng/mẩu chữ ngắn giữ RapidOCR (model OCR hay bịa với ảnh quá nhỏ)
@@ -1728,7 +1738,7 @@ async def ocr_vlm(page: pymupdf.Page, cfg: Config) -> list[dict]:
         if text:  # VLM trả rỗng thì giữ kết quả RapidOCR
             b["text"] = text
 
-    async with httpx.AsyncClient(timeout=600) as client:  # lần đầu gọi còn phải nạp model
+    async with llm_client(timeout=600) as client:  # lần đầu gọi còn phải nạp model
         await asyncio.gather(*(read(client, b) for b in todo))
     return blocks
 
@@ -2342,7 +2352,7 @@ async def server_info(base_url: str, model: str = "") -> tuple[str, int, int]:
     if key not in _servers:
         root = re.sub(r"/v1/?$", "", base_url.rstrip("/"))
         info = ("other", CLOUD_CTX, CLOUD_SLOTS)
-        async with httpx.AsyncClient(timeout=8) as client:
+        async with llm_client(timeout=8) as client:
             async def models() -> list[dict]:
                 r = await client.get(f"{base_url.rstrip('/')}/models", headers=(
                     {"Authorization": f"Bearer {cfg_key}"} if (cfg_key := _keys.get(base_url.rstrip("/"))) else {}))
@@ -2447,7 +2457,7 @@ async def chat_json(cfg: Config, system: str, payload: dict, schema: dict, max_o
             body["response_format"] = {"type": "json_schema",
                                        "json_schema": {"name": "items", "strict": True, "schema": schema}}
     try:
-        async with httpx.AsyncClient(timeout=wait_for(cfg, max_out)) as client, llm_sem(cfg.base_url, slots):
+        async with llm_client(timeout=wait_for(cfg, max_out)) as client, llm_sem(cfg.base_url, slots):
             r = await client.post(url, headers=headers, json=body)
             for _ in range(2):        # model không nhận tham số này → nới rồi hỏi lại (reasoning: tắt → thấp nhất → bỏ)
                 if r.status_code < 400 or kind == "ollama" or not (k := refused_param(body, r.status_code, r.text)):
@@ -3192,7 +3202,7 @@ async def mt_translate(cfg: "Config", items: list[dict]) -> dict[int, str]:
         text = re.sub(r"<think>.*?</think>", "", r.json()["choices"][0]["message"]["content"] or "", flags=re.S)
         return it["id"], text.strip()
 
-    async with httpx.AsyncClient(timeout=600) as client:
+    async with llm_client(timeout=600) as client:
         res = await asyncio.gather(*(one(client, it) for it in items))
     return keep_formulas(items, {i: t for i, t in res if t})
 
@@ -4625,7 +4635,7 @@ async def recognize_page(d: dict, n: int, fc: Config) -> int:
             print(f"[công thức] trang {n + 1}: bỏ kết quả nhận dạng {latex[:80]!r} (glyph {glyph[:60]!r})")
         lat.setdefault(n, {})[key] = latex if ok else ""
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(10, read=180)) as client:
+    async with llm_client(timeout=httpx.Timeout(10, read=180)) as client:
         res = await asyncio.gather(*(one(client, *j) for j in jobs), return_exceptions=True)
     errs = [e for e in res if isinstance(e, BaseException)]
     if errs:
@@ -5100,7 +5110,7 @@ def pdf_input(c: Config) -> str:
     if "openrouter.ai" in url:
         return "native" if re.match(r"(anthropic/|google/gemini|openai/(gpt-4o|gpt-4\.1|gpt-5|o\d))", c.model) \
             else "pdf-text"
-    if "api.openai.com" in url:
+    if "api.openai.com" in url or CC.is_claude(url):   # Claude Code: khối `document` của Anthropic (claude_code.py)
         return "native"
     return ""
 
@@ -5385,7 +5395,7 @@ async def chat_stream(cfg: Config, system: str, messages: list[dict], num_ctx: i
     dropped = []          # tham số đã nới / bỏ để hỏi lại; hỏi lại được thì nhớ cho lần sau
     for attempt in range(3):
         try:
-            async with httpx.AsyncClient(timeout=wait_for(cfg, 4096)) as client, llm_sem(cfg.base_url, slots):
+            async with llm_client(timeout=wait_for(cfg, 4096)) as client, llm_sem(cfg.base_url, slots):
                 async with client.stream("POST", url, headers=headers, json=body) as r:
                     if r.status_code >= 400:
                         text = (await r.aread()).decode(errors="replace")
@@ -5825,7 +5835,7 @@ async def list_models(cfg: Config):
     cfg.api_key = remember(cfg.base_url, cfg.api_key)
     headers = {"Authorization": f"Bearer {cfg.api_key}"} if cfg.api_key else {}
     try:
-        async with httpx.AsyncClient(timeout=20) as client:
+        async with llm_client(timeout=20) as client:
             r = await client.get(cfg.base_url.rstrip("/") + "/models", headers=headers)
     except httpx.HTTPError as e:
         raise HTTPException(502, repr(e))
@@ -6056,11 +6066,13 @@ class GraphBuild(BaseModel):
     cfg: Config
     model: str = ""
     allow_training: bool = False
+    source: str = "api"        # "api" (OpenRouter :free) | "claude" (Claude Code trên máy chạy app)
 
 
-async def graph_job(doc_id: str, d: dict, cfg: Config, model: str, key: str) -> None:
+async def graph_job(doc_id: str, d: dict, cfg: Config, model: str, key: str, source: str = "api") -> None:
     """Trích đoạn mọi trang (dùng lại khối đã trích, trang scan thì OCR theo cấu hình), xuất paper.blocks.json, rồi
-    dựng sơ đồ bằng paper-graph trong thread."""
+    dựng sơ đồ: `api` bằng `paper_graph.build` (OpenRouter) trong thread, `claude` bằng agent Claude Code chạy skill
+    dung-so-do (graphs.run_claude)."""
     p, ok, done = G.paths(doc_id), False, {}
     try:
         total = d["out"].page_count
@@ -6072,7 +6084,11 @@ async def graph_job(doc_id: str, d: dict, cfg: Config, model: str, key: str) -> 
         G.say("Tìm hình, bảng của bài…")
         G.keep_old(p)              # dựng lại không đạt thì sơ đồ cũ vẫn đi với đúng các đoạn cũ
         await asyncio.to_thread(G.export_blocks, sys.modules[__name__], Path(d["src"]), given, p)
-        ok, name = await asyncio.to_thread(G.run_build, doc_id, model, key)
+        if source == "claude":
+            G.say(f"Dựng bằng Claude Code ({G.CLAUDE_MODEL}, skill dung-so-do): thường 10–30 phút")
+            ok, name = await G.run_claude(doc_id, Path(d["src"]))
+        else:
+            ok, name = await asyncio.to_thread(G.run_build, doc_id, model, key)
         done = {"ok": ok, "out": name}
     except Exception as e:  # noqa: BLE001 - mọi lỗi về giao diện qua log, không làm chết vòng sự kiện
         G.say(f"Lỗi: {type(e).__name__}: {e}", key)
@@ -6090,13 +6106,24 @@ async def graph_build(doc_id: str, req: GraphBuild):
     """Dựng (hay dựng lại) sơ đồ ở nền bằng model :free của OpenRouter. Chữ bài gửi tới nhà cung cấp có thể huấn
     luyện trên đó: chỉ chạy khi người dùng đã xác nhận (`allow_training`, TM-16); một lần dựng mỗi lúc (TM-15)."""
     d = graph_doc(doc_id)
+    if d["out"].page_count > G.pg_extract.MAX_PAGES:
+        raise HTTPException(400, f"Bài quá {G.pg_extract.MAX_PAGES} trang")
+    if req.source == "claude":   # gói Claude của chủ máy, chữ bài không qua nhà cung cấp free (TM-19 … TM-23)
+        if not CC.binary():
+            raise HTTPException(400, "Chưa cài Claude Code trên máy chạy app")
+        if not G.claim(doc_id, G.CLAUDE_MODEL):
+            raise HTTPException(409, "Đang dựng một sơ đồ khác: chờ xong rồi thử lại")
+        task = asyncio.create_task(graph_job(doc_id, d, resolve_keys(req.cfg), G.CLAUDE_MODEL, "", "claude"))
+        _graph_tasks.add(task)
+        task.add_done_callback(_graph_tasks.discard)
+        return G.status(doc_id, d)
+    if req.source != "api":
+        raise HTTPException(400, "Nguồn dựng phải là api hay claude")
     model = req.model.strip() or G.pg_build.DEFAULT_MODEL
     if not G.FREE_MODEL.fullmatch(model):
         raise HTTPException(400, "Chỉ dựng bằng model miễn phí của OpenRouter (tên kết thúc bằng :free)")
     if not req.allow_training:
         raise HTTPException(400, "Cần xác nhận cho gửi chữ bài tới nhà cung cấp model miễn phí (có thể huấn luyện)")
-    if d["out"].page_count > G.pg_extract.MAX_PAGES:
-        raise HTTPException(400, f"Bài quá {G.pg_extract.MAX_PAGES} trang")
     key = remember(G.OPENROUTER, "")
     if not key:
         raise HTTPException(400, "Chưa có key OpenRouter: nhập key cho https://openrouter.ai/api/v1 trong ⚙️ Cấu hình")
@@ -6106,6 +6133,19 @@ async def graph_build(doc_id: str, req: GraphBuild):
     _graph_tasks.add(task)
     task.add_done_callback(_graph_tasks.discard)
     return G.status(doc_id, d)
+
+
+# ================================================================ Claude Code làm nhà cung cấp model (claude_code.py)
+@app.get("/api/claude/status")
+async def claude_status():
+    """Đã cài Claude Code trên máy chạy app chưa, đã đăng nhập chưa (không tốn lượt gọi model)."""
+    return {**await CC.status(), "base_url": CC.BASE, "models": CC.MODELS, "graph_model": G.CLAUDE_MODEL}
+
+
+@app.post("/api/claude/cleanup")
+async def claude_cleanup():   # async: chạy trong vòng sự kiện như các lượt gọi sửa CC.busy, không đua (F5)
+    """Dọn rác: thư mục làm việc tạm không còn dùng, phiên Claude Code của thư mục làm việc của app (TM-23)."""
+    return CC.cleanup(max_age=0)
 
 
 class NoCache(StaticFiles):
@@ -6127,4 +6167,5 @@ if __name__ == "__main__":
     if not auth.AUTH.has_password():
         print(f"[auth] {auth.NO_PASSWORD} — trước khi đặt, mọi request bị từ chối (503)")
     threading.Thread(target=price_loop, daemon=True, name="prices").start()
+    print(f"[claude] dọn rác lúc khởi động: {CC.cleanup()}")   # thư mục làm việc, phiên Claude Code còn sót (TM-23)
     uvicorn.run(app, host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", "8000")))

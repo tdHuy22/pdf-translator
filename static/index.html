@@ -39,6 +39,13 @@
   #settings { display:none; background:var(--panel); border-bottom:1px solid var(--line); padding:10px 12px;
               grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px; }
   #settings.open { display:grid; }
+  .srcbar { grid-column:1/-1; display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:13px; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .seg button { font:inherit; font-size:13px; padding:5px 12px; border:0; background:transparent; cursor:pointer; color:var(--muted); }
+  .seg button + button { border-left:1px solid var(--line); }
+  .seg button.on { background:var(--tint); color:inherit; font-weight:600; }
+  #settings:not(.cc) .cc-only, #graphPane:not(.cc) .cc-only { display:none; }
+  .ccbar { display:flex; gap:8px; align-items:center; align-self:end; }
   #settings h3.sec { grid-column:1/-1; margin:8px 0 0; font-size:13px; border-bottom:1px solid var(--line); padding-bottom:3px; }
   #settings label { font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:3px; }
   #status { font-size:13px; color:var(--muted); margin-left:auto; }
@@ -307,7 +314,9 @@
   .pane { flex:1; min-height:0; display:flex; flex-direction:column; }
   .pane[hidden] { display:none; }
   #notesPane { overflow:auto; padding:8px 10px; gap:10px; }
-  .ghead { display:flex; gap:8px; align-items:center; justify-content:space-between; padding:6px 10px; }
+  .ghead { display:flex; gap:8px; align-items:center; justify-content:space-between; padding:6px 10px; flex-wrap:wrap; }
+  .gtools { display:flex; gap:6px; align-items:center; margin-left:auto; }
+  .gtools .seg button { font-size:12px; padding:3px 8px; }
   #graphBuild[hidden], #graphLog[hidden], #graphFrame[hidden] { display:none; }
   #graphLog { margin:0 10px 8px; padding:6px 8px; max-height:45vh; overflow:auto; font-size:11px; white-space:pre-wrap;
               background:var(--hover); border-radius:6px; }
@@ -453,6 +462,18 @@
 <div class="bar"><div id="bar"></div></div>
 <div id="priceWarn" hidden></div>
 <div id="settings">
+  <div class="srcbar">
+    <span>Nguồn model</span>
+    <span class="seg" role="group" aria-label="Nguồn model">
+      <button type="button" data-src="api" title="Dùng nhà cung cấp API chọn ở từng mục bên dưới (OpenRouter, server riêng…)">🌐 API</button>
+      <button type="button" data-src="claude" title="Mọi việc cần model (dịch, thuật ngữ, trò chuyện, xem ảnh, OCR bằng VLM, chép công thức, căn vệt tô) chạy bằng Claude Code trên máy chạy app, dùng gói Claude đã đăng nhập ở đó">✳️ Claude Code</button></span>
+    <input type="hidden" id="model_source" value="api">
+    <span id="ccState" class="hint"></span>
+  </div>
+  <label class="cc-only">Model Claude để dịch <select id="cc_model"><option value="claude-sonnet-5-5">Sonnet 5.5</option><option value="claude-opus-5-5">Opus 5.5</option><option value="claude-fable-5-1">Fable 5.1</option><option value="claude-haiku-5-5">Haiku 5.5</option></select></label>
+  <label class="cc-only">Model Claude cho thuật ngữ, trò chuyện, xem ảnh, OCR, công thức, căn vệt tô <select id="cc_model2"><option value="claude-sonnet-5-5">Sonnet 5.5</option><option value="claude-opus-5-5">Opus 5.5</option><option value="claude-fable-5-1">Fable 5.1</option><option value="claude-haiku-5-5">Haiku 5.5</option></select></label>
+  <div class="cc-only ccbar"><button type="button" id="ccClean" title="Xoá thư mục làm việc tạm và phiên Claude Code còn sót lại của app trên máy chạy app (mỗi lượt gọi đã tự dọn; app cũng dọn lúc khởi động)">🧹 Dọn rác Claude Code</button><span id="ccCleanMsg" class="hint"></span></div>
+  <p class="cc-only hint" style="grid-column:1/-1;margin:0">Đang dùng Claude Code: các ô nhà cung cấp, Base URL, model ở dưới tạm không dùng (bật 🌐 API để dùng lại). Cách dịch luôn là LLM.</p>
   <h3 class="sec">1. Dịch</h3>
   <label>Cách dịch
     <select id="translator">
@@ -672,7 +693,10 @@
   </div>
   <div id="graphPane" class="pane" hidden>
     <div class="ghead"><span id="graphState" class="hint"></span>
-      <button id="graphBuild" type="button" hidden title="Dựng sơ đồ bằng model miễn phí của OpenRouter (vài phút đến nửa giờ). Dựng lại: ô bạn đã khoá giữ nguyên">Dựng sơ đồ</button></div>
+      <span class="gtools"><span class="seg" role="group" aria-label="Dựng sơ đồ bằng">
+        <button type="button" data-gsrc="claude" title="Agent Claude Code (Opus) chạy skill dựng sơ đồ trên máy chạy app: sơ đồ tốt nhất, 10–30 phút, dùng gói Claude">✳️ Claude</button>
+        <button type="button" data-gsrc="api" title="Model miễn phí của OpenRouter: chữ bài gửi tới nhà cung cấp có thể huấn luyện trên đó">🌐 API</button></span>
+      <button id="graphBuild" type="button" hidden title="Dựng sơ đồ (vài phút đến nửa giờ). Dựng lại: ô bạn đã khoá giữ nguyên">Dựng sơ đồ</button></span></div>
     <pre id="graphLog" hidden></pre>
     <iframe id="graphFrame" title="Sơ đồ bài báo" hidden></iframe>
   </div>
