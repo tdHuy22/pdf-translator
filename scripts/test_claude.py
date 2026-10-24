@@ -13,6 +13,7 @@ import os
 import pathlib
 import shutil
 import stat
+import subprocess
 import sys
 import tempfile
 import time
@@ -59,6 +60,16 @@ if mode == "spawn":   # tiến trình con (như lệnh shell của agent) rồi 
     child = subprocess.Popen(["sleep", "60"])
     open({str(TMP / "child.pid")!r}, "w").write(str(child.pid))
     time.sleep(60)
+if mode == "flood":   # agent dựng sơ đồ in sự kiện dồn dập 30 giây, có tiến trình con: hạn chót vẫn phải dừng nó
+    import subprocess
+    child = subprocess.Popen(["sleep", "60"])
+    open({str(TMP / "child.pid")!r}, "w").write(str(child.pid))
+    ev = json.dumps({{"type": "assistant", "message": {{"content": [{{"type": "tool_use", "name": "Read", "input": {{"file_path": "paper.blocks.json"}}}}]}}}})
+    end = time.time() + 30
+    while time.time() < end:
+        print(ev, flush=True)
+        time.sleep(0.01)
+    sys.exit()
 if mode == "nologin":
     print(json.dumps({{"type": "result", "subtype": "success", "is_error": True, "result": "Not logged in · Please run /login"}}))
     sys.exit(1)
@@ -115,6 +126,17 @@ def calls_dirs() -> list:   # thư mục làm việc của lượt gọi còn s�
 
 def mode(m: str) -> None:   # chế độ của claude giả qua file: môi trường tiến trình con chỉ theo danh sách cho phép
     (TMP / "mode").write_text(m)
+
+
+def alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    # còn là zombie chưa ai thu thì coi như đã chết
+    return "Z" not in subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout
 
 
 def reset():
@@ -202,18 +224,18 @@ CC.TIMEOUT = 2
 st, r = asyncio.run(post({"model": "claude-haiku-5-5", "messages": [{"role": "user", "content": "x"}]}))
 CC.TIMEOUT = old
 time.sleep(0.5)
-pid = int((TMP / "child.pid").read_text())
-try:
-    os.kill(pid, 0)
-    alive = True
-except ProcessLookupError:
-    alive = False
-except PermissionError:
-    alive = True
-if alive:   # còn là zombie chưa ai thu thì coi như đã chết
-    import subprocess as _sp
-    alive = "Z" not in _sp.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout
-ok(st == 504 and not alive, "quá giờ → giết cả tiến trình con của claude (F4)")
+ok(st == 504 and not alive(int((TMP / "child.pid").read_text())), "quá giờ → giết cả tiến trình con của claude (F4)")
+mode("flood")
+(TMP / "child.pid").unlink(missing_ok=True)
+CC.TIMEOUT = 2
+t = time.time()
+st, r = asyncio.run(post({"model": "claude-haiku-5-5", "messages": [{"role": "user", "content": "x"}]}))
+took = time.time() - t
+CC.TIMEOUT = old
+time.sleep(0.5)
+pid = int((TMP / "child.pid").read_text()) if (TMP / "child.pid").exists() else 0
+ok(st == 504 and took < 10 and pid and not alive(pid) and not calls_dirs(),
+   f"claude in sự kiện dồn dập vẫn dừng đúng hạn chót cứng ({took:.1f} s với hạn 2 s), giết cả tiến trình con (TM-22, F4)")
 reset()
 
 print("3. Tính năng của app chạy bằng Claude Code (claude giả)")
@@ -248,7 +270,6 @@ ok(all(not x.startswith("Bash") or x.startswith(gate) for x in allowed) and sum(
    "shell chỉ cho lệnh paper_graph, không mạng")
 
 import pg_gate
-import subprocess
 for bad in (["read", "/etc/passwd"], ["read", "../paper.blocks.json"], ["check", "paper.graph.json", "--base", "git"],
             ["check", "paper.graph.json", "--blocks", "/x.json"], ["fmt", "/Users/x/data/keys.json"],
             ["figure", "paper.blocks.json", "../../etc"], ["view", "paper.graph.json"], ["read", "paper.blocks.json", "--pages", "1;ls"]):
@@ -302,6 +323,25 @@ okk, name = asyncio.run(A.G.run_claude(gid, ROOT / "data" / "rag.pdf"))
 ok(okk and name == gp.graph.name and gp.graph.with_name("paper.graph.old.json").exists()
    and not [d for d in CC.WORK.iterdir() if d.name.startswith("graph-")],
    "sơ đồ giữ ô khoá → đạt, bản cũ sang paper.graph.old.json, thư mục làm việc đã xoá")
+mode("flood")
+(TMP / "child.pid").unlink(missing_ok=True)
+old, A.G.CLAUDE_TIMEOUT = A.G.CLAUDE_TIMEOUT, 2
+before, n0 = gp.graph.read_bytes(), len(A.G.JOB.get("log", []))
+A.G.JOB.setdefault("log", [])
+t = time.time()
+try:
+    asyncio.run(A.G.run_claude(gid, ROOT / "data" / "rag.pdf"))
+    err = ""
+except RuntimeError as e:
+    err = str(e)
+took = time.time() - t
+A.G.CLAUDE_TIMEOUT = old
+time.sleep(0.5)
+pid = int((TMP / "child.pid").read_text()) if (TMP / "child.pid").exists() else 0
+ok("chưa dựng xong" in err and 2 <= took < 10 and len(A.G.JOB["log"]) > n0 and pid and not alive(pid)
+   and not [d for d in CC.WORK.iterdir() if d.name.startswith("graph-")] and gp.graph.read_bytes() == before,
+   f"agent in sự kiện dồn dập vẫn dừng đúng hạn chót cứng ({took:.1f} s với hạn 2 s), tiến trình con bị giết, thư mục "
+   "làm việc xoá, sơ đồ của bài không đổi (TM-22, F4)")
 reset()
 
 print("5. Dọn rác (TM-23)")

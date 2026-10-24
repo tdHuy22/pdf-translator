@@ -313,7 +313,10 @@ tầng dưới. Mỗi ô neo về đúng câu trong bài:
   phút, tối đa 32 lượt gọi (hạn mức free: 50 lượt mỗi ngày khi tổng nạp dưới 9 USD); cả app chỉ dựng một bài mỗi lúc. Chỉ
   nhận model tên kết thúc bằng `:free`, trần tiền 0,001 USD: model đổi sang có giá thì lượt dựng dừng. Trước khi dựng, app
   trích đoạn mọi trang bằng đúng bộ trích của bản dịch (trang scan thì OCR theo cấu hình), nên đoạn trong sơ đồ trùng số
-  hiệu đoạn của VietPaper. Dựng lại giữ nguyên ô đã khoá, bản cũ chép sang `paper.graph.old.json`.
+  hiệu đoạn của VietPaper. Dựng lại giữ nguyên ô đã khoá, bản cũ chép sang `paper.graph.old.json`. Đo 24/10/2026 bài GQA
+  (7 trang, `scripts/live_graph_api.py`, model mặc định `dots-studio/dots-3-note-preview:free`): 17 phút, 21 lượt gọi
+  free, 0 USD, 36 ô (6 ở tầng đầu, mỗi ô mở một tầng dưới 4–8 ô), 51 neo, `check` 0 lỗi, 2 cảnh báo (PG304, PG306:
+  một cạnh `supports` đi từ ô không phải bằng chứng); không gặp 429/502 lần nào.
 - **Sửa**: sửa nhãn, thuật ngữ, giải thích, khoá ô trong thẻ; kéo ô (Alt + mũi tên), "Dàn lại tầng này". Sửa đổi qua bộ
   kiểm của paper-graph (không thêm được số không có trong bài) và bị từ chối nếu sơ đồ đã đổi từ lúc mở (tải lại tab).
 - **Tự đoán trước**: mở ô có tầng dưới thì trang hỏi bạn nghĩ tầng dưới có gì trước, rồi đặt dự đoán cạnh các ô thật.
@@ -326,6 +329,11 @@ tuyến, nên CSP của app vẫn chặn chữ độc trong sơ đồ.
 Cài: `.venv/bin/pip install -e ../paper-graph` (paper-graph là repo cạnh bên, `../paper-graph`). Chưa cài thì app vẫn
 chạy, tab Sơ đồ báo thiếu thư viện. API: `GET /api/<id>/graph` (trạng thái, log lượt dựng), `GET /api/<id>/graph/view`,
 `POST /api/<id>/graph/build` (`{cfg, allow_training: true, model?}`), `POST /api/<id>/graph/edit|move`.
+
+Kiểm: `scripts/test_graph.py` (lượt dựng thay bằng hàm giả; mục 8 chạy `node scripts/test_graph_js.mjs`, kiểm listener
+`message` của `static/graph.js` trong DOM giả, bỏ qua nếu máy không có node), `scripts/test_claude.py` (claude giả,
+cả hạn chót cứng khi agent in sự kiện dồn dập). Thử thật: `scripts/live_claude.py --graph` (✳️ Claude),
+`scripts/live_graph_api.py` (🌐 API, tốn hạn mức free trong ngày; dữ liệu tạm, chỉ đọc key OpenRouter đã nhớ).
 
 ## Đọc, trò chuyện, kiểm soát bản dịch (25/09/2026)
 

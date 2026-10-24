@@ -3,12 +3,15 @@
 
     .venv/bin/python scripts/test_graph.py      # ~1 phút (model bố cục chạy trên 20 trang)
 
+Mục 8 (listener postMessage của static/graph.js) chạy scripts/test_graph_js.mjs bằng node, bỏ qua nếu máy không có node.
+
 In ✓/✗ cho từng mục, mã thoát 1 nếu có mục trượt."""
 import atexit
 import json
 import pathlib
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -201,6 +204,18 @@ with A.test_client() as c:
     c.delete(f"/api/docs/{did}")
     ok(not p.graph.exists() and did not in G._apps, "xoá bài xoá luôn sơ đồ và trạng thái trình xem")
     G.run_build = real_build
+
+print("8. Bấm ô → cuộn tới đoạn: listener postMessage của static/graph.js (TM-18), chạy bằng node")
+node = shutil.which("node")
+if node:
+    try:
+        r = subprocess.run([node, str(ROOT / "scripts" / "test_graph_js.mjs")], capture_output=True, text=True, timeout=60)
+        print("\n".join("  " + x for x in r.stdout.rstrip().splitlines()[:-1] if x.strip()))
+        ok(r.returncode == 0, f"scripts/test_graph_js.mjs mã {r.returncode} {r.stderr.strip()[-300:]}")
+    except subprocess.TimeoutExpired:
+        ok(False, "scripts/test_graph_js.mjs treo quá 60 giây")
+else:   # máy chạy app (TUF) không có node: chạy mục này trên máy phát triển
+    print("  - bỏ qua: máy này không có node (chạy `node scripts/test_graph_js.mjs` trên máy có node)")
 
 print("\n" + ("TẤT CẢ ĐẠT" if not FAIL else f"{len(FAIL)} MỤC TRƯỢT"))
 sys.exit(1 if FAIL else 0)
