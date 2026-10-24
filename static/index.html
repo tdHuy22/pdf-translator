@@ -45,6 +45,7 @@
   .seg button + button { border-left:1px solid var(--line); }
   .seg button.on { background:var(--tint); color:inherit; font-weight:600; }
   #settings:not(.cc) .cc-only, #graphPane:not(.cc) .cc-only { display:none; }
+  #settings.cc .api-only { display:none !important; }   /* toggleOpts đặt style.display thẳng vào phần tử */
   .ccbar { display:flex; gap:8px; align-items:center; align-self:end; }
   #settings h3.sec { grid-column:1/-1; margin:8px 0 0; font-size:13px; border-bottom:1px solid var(--line); padding-bottom:3px; }
   #settings label { font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:3px; }
@@ -473,7 +474,7 @@
   <label class="cc-only">Model Claude để dịch <select id="cc_model"><option value="claude-sonnet-5-5">Sonnet 5.5</option><option value="claude-opus-5-5">Opus 5.5</option><option value="claude-fable-5-1">Fable 5.1</option><option value="claude-haiku-5-5">Haiku 5.5</option></select></label>
   <label class="cc-only">Model Claude cho thuật ngữ, trò chuyện, xem ảnh, OCR, công thức, căn vệt tô <select id="cc_model2"><option value="claude-sonnet-5-5">Sonnet 5.5</option><option value="claude-opus-5-5">Opus 5.5</option><option value="claude-fable-5-1">Fable 5.1</option><option value="claude-haiku-5-5">Haiku 5.5</option></select></label>
   <div class="cc-only ccbar"><button type="button" id="ccClean" title="Xoá thư mục làm việc tạm và phiên Claude Code còn sót lại của app trên máy chạy app (mỗi lượt gọi đã tự dọn; app cũng dọn lúc khởi động)">🧹 Dọn rác Claude Code</button><span id="ccCleanMsg" class="hint"></span></div>
-  <p class="cc-only hint" style="grid-column:1/-1;margin:0">Đang dùng Claude Code: các ô nhà cung cấp, Base URL, model ở dưới tạm không dùng (bật 🌐 API để dùng lại). Cách dịch luôn là LLM.</p>
+  <p class="cc-only hint" style="grid-column:1/-1;margin:0">Đang dùng Claude Code: các ô nhà cung cấp, Base URL, API key, model đã ẩn (bật 🌐 API để dùng lại, giá trị cũ vẫn giữ). Dịch, thuật ngữ, trò chuyện, xem ảnh, căn vệt tô, chép công thức, và OCR khi chọn “Vision LLM” đều chạy bằng Claude.</p>
   <h3 class="sec">1. Dịch</h3>
   <label>Cách dịch
     <select id="translator">
@@ -534,7 +535,7 @@
   <label class="ocr-opt" data-engine="custom">API key <input id="ocr_custom_api_key" type="password" placeholder="(tuỳ chọn)"></label>
 
   <h3 class="sec">3. Trò chuyện về tài liệu</h3>
-  <div style="grid-column:1/-1" class="hint">Ba model, ba việc, <b>mỗi câu hỏi chỉ một model trả lời</b>:<br>
+  <div style="grid-column:1/-1" class="hint api-only">Ba model, ba việc, <b>mỗi câu hỏi chỉ một model trả lời</b>:<br>
     • <b>Model dịch</b> (mục 1): chỉ dịch. Không tự tham gia trò chuyện, trừ khi bật “Dùng đúng server/model đang dịch” ngay dưới (khi đó nó cũng là model trò chuyện).<br>
     • <b>Model trò chuyện</b>: trả lời các câu hỏi thường, đọc chữ trích từ PDF + bản dịch.<br>
     • <b>Model xem ảnh</b> (ô bên dưới): chỉ vào việc khi chữ không đủ — câu hỏi về <b>hình, biểu đồ, sơ đồ</b> (chữ trích từ PDF chỉ có chú thích của hình), bảng không đọc được thành chữ (trang scan), công thức chưa có LaTeX — hoặc khi bạn chọn “🖼 Ảnh trang” ở ô ngữ cảnh. Nó nhận ảnh 1–2 trang kèm chữ và <b>trả lời thay</b> model trò chuyện. Bảng thường được gửi dạng lưới chữ đủ số liệu, công thức đã chép sang LaTeX thì model trò chuyện tự đọc được. Model trò chuyện tự đọc được ảnh (OpenRouter báo 👁) thì dùng luôn nó. Model xem ảnh lỗi thì app tự quay về model trò chuyện, chỉ gửi chữ.<br>
@@ -558,7 +559,7 @@
     <select id="formula_ocr"><option value="ocr">Model OCR ở mục 2 (mặc định PaddleOCR-VL, chạy local)</option>
       <option value="see">Model xem ảnh ở trên</option><option value="off">Tắt — chỉ chép chữ từ PDF</option></select></label>
 
-  <h3 class="sec">4. Lập bảng thuật ngữ</h3>
+  <h3 class="sec api-only">4. Lập bảng thuật ngữ</h3>
   <label style="flex-direction:row;align-items:center;gap:6px" title="Bảng thuật ngữ chỉ tốn một lượt gọi cho mỗi tài liệu, nên đáng dùng model mạnh hơn model dịch (vd. Nemotron Ultra free trên OpenRouter, ~15 giây)"><input type="checkbox" id="gloss_same"> Dùng đúng server/model đang dịch</label>
   <label class="gloss-opt">Nhà cung cấp
     <span class="prow"><select id="gloss_preset" class="provider-sel"></select><button type="button" class="psave" data-for="gloss_preset" title="Lưu Base URL + model đang nhập thành nhà cung cấp của bạn (hoặc cập nhật nhà cung cấp đang chọn)">💾</button></span></label>
@@ -578,9 +579,9 @@
   <label class="align-opt">Model
     <div class="mpick"><input id="align_model" autocomplete="off" spellcheck="false" placeholder="gõ để tìm model…"><button id="btnAlignModels" type="button" title="Tải lại danh sách model của server này">↻</button><div class="mlist" hidden></div></div></label>
 
-  <h3 class="sec">7. Nhà cung cấp của bạn</h3>
-  <div style="grid-column:1/-1" class="hint">Server OpenAI-compatible bạn hay dùng: lưu một lần, sau đó chọn được ở mọi ô “Nhà cung cấp” (dịch, OCR, trò chuyện, thuật ngữ, căn vệt tô, xem ảnh trang). Lưu trên server (<code>data/providers.json</code>); API key vẫn lưu riêng theo Base URL. Nút 💾 cạnh mỗi ô “Nhà cung cấp” lưu nhanh Base URL + model đang nhập.</div>
-  <div style="grid-column:1/-1"><table id="pvtab"></table></div>
+  <h3 class="sec api-only">7. Nhà cung cấp của bạn</h3>
+  <div style="grid-column:1/-1" class="hint api-only">Server OpenAI-compatible bạn hay dùng: lưu một lần, sau đó chọn được ở mọi ô “Nhà cung cấp” (dịch, OCR, trò chuyện, thuật ngữ, căn vệt tô, xem ảnh trang). Lưu trên server (<code>data/providers.json</code>); API key vẫn lưu riêng theo Base URL. Nút 💾 cạnh mỗi ô “Nhà cung cấp” lưu nhanh Base URL + model đang nhập.</div>
+  <div style="grid-column:1/-1" class="api-only"><table id="pvtab"></table></div>
   <label>Tên <input id="pv_name" placeholder="vd. vLLM ở phòng lab"></label>
   <label>Base URL <input id="pv_base" placeholder="http://host:8000/v1"></label>
   <label>API key <input id="pv_key" type="password" placeholder="(tuỳ chọn)"></label>

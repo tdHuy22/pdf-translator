@@ -236,9 +236,14 @@ Khung bên phải có hai tab **💬 Trò chuyện | 📝 Ghi chú** (nút 📝 
 Nút **Nguồn model: 🌐 API | ✳️ Claude Code** ở đầu ⚙️ Cấu hình. Chọn Claude Code thì mọi việc cần model (dịch, lập
 thuật ngữ, trò chuyện, xem ảnh trang, "Nguyên PDF", OCR bằng VLM, chép công thức, căn vệt tô) chạy bằng `claude -p`
 trên **máy chạy app**, dùng gói Claude đã đăng nhập ở đó; chọn model Claude cho dịch và cho các việc còn lại (mặc định
-Sonnet 5.5). Các ô nhà cung cấp, Base URL, model giữ nguyên để bật lại 🌐 API. Cũng có nhà cung cấp có sẵn "Claude Code"
-để dùng riêng cho một vai. Đo 23/10/2026 (Haiku 5.5): dịch một trang BERT 28 giây, lập 32 thuật ngữ GQA 16 giây, hỏi
-về Hình 1 kèm ảnh trang 10 giây, OCR trang scan bằng VLM rồi dịch 63 giây.
+Sonnet 5.5). Bật Claude Code thì các ô chỉ dành cho API (nhà cung cấp, Base URL, API key, model, temperature của
+mọi vai, "dùng đúng server đang dịch", bảng "Nhà cung cấp của bạn") ẩn đi, giá trị vẫn giữ để bật lại 🌐 API; lựa chọn
+OCR "Vision LLM" và chép công thức đổi chữ thành Claude Code. Cũng có nhà cung cấp có sẵn "Claude Code"
+để dùng riêng cho một vai. Thử thật trên TUF 24/10/2026 (`scripts/live_claude.py`, Haiku 5.5, bài Attention): bảng thuật ngữ 17 giây,
+dịch trang 1 (bỏ qua 8 khối tác giả) 14 giây, gộp trang 3–4 một lượt 14 giây, dịch lại hai đoạn 4 giây, trò chuyện
+với 7 nguồn ngữ cảnh (tự động, gốc + dịch, chữ gốc, bản dịch, ảnh trang, cả bài, nguyên PDF) 4–26 giây, tổng hợp phiên
+7 giây, chép công thức thành LaTeX (4/4), căn vệt tô 3 giây, OCR trang scan bằng VLM rồi dịch 66 giây; dựng sơ đồ
+bằng agent Opus 6,5 phút (44 ô, đạt).
 
 - Cài trên máy chạy app: `curl -fsSL https://claude.ai/install.sh | bash` (vào `~/.local/bin/claude`; app tự tìm ở
   đó, hay đặt `CLAUDE_BIN`), rồi đăng nhập một lần: `claude` → `/login`, hoặc `claude setup-token` và đặt
@@ -372,6 +377,7 @@ Bản dịch tự dùng font **cùng loại với chữ gốc** (có chân / kh�
 .venv/bin/python scripts/test_skip.py         # ~1 phút: không dịch tên tác giả, tài liệu tham khảo; dịch lại phần bỏ qua
 .venv/bin/python scripts/test_graph.py        # ~1 phút: tab Sơ đồ (cần ../paper-graph), không gọi OpenRouter
 .venv/bin/python scripts/test_claude.py       # ~20 giây: lớp Claude Code với `claude` giả (không cần đăng nhập)
+.venv/bin/python scripts/live_claude.py       # ~5 phút, gọi Claude THẬT (tốn lượt gói): mọi tính năng; --graph thêm dựng sơ đồ
 ```
 Script chạy app trong cùng tiến trình dùng `A.test_client()` / `A.test_async_client()` (Host localhost, phiên chỉ sống trong bộ nhớ, không cần mật khẩu); `TestClient(A.app)` trơn bị chặn như mọi request chưa đăng nhập.
 Thay hàm gọi LLM bằng hàm giả rồi chạy thật cả luồng trên `data/bert.pdf`: gộp trang, bảng thuật ngữ (lập → sửa → lưu → vào đúng prompt), lớp chữ hai bản khớp số hiệu đoạn, tô vàng → annotation trong PDF tải về, ngữ cảnh gửi cho phần trò chuyện, nhớ API key, khôi phục sau khi tải lại trang, và lưu xuống đĩa rồi mở lại như sau khi khởi động lại app (xoá bộ nhớ → state, ảnh trang dịch, số hiệu đoạn, thuật ngữ, trò chuyện giống hệt; tải lên lại cùng file ra cùng id; xoá tài liệu). Dùng thư mục lưu tạm, không đụng `data/docs/`. In ✓/✗ từng mục và trả mã lỗi ≠ 0 nếu có mục sai.

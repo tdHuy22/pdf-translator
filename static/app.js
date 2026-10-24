@@ -143,7 +143,8 @@ function saveSettings() {
   try { localStorage.setItem("llm", JSON.stringify(s)); } catch {}
 }
 function toggleOpts() {
-  const eng = $("ocr_engine").value, useLlm = $("translator").value !== "google";
+  // Claude Code luôn dịch bằng LLM (claudeCfg) dù ô "Cách dịch" (đã ẩn) còn giữ Google: vẫn hiện các ô của cách LLM
+  const eng = $("ocr_engine").value, useLlm = $("model_source").value === "claude" || $("translator").value !== "google";
   document.querySelectorAll(".ocr-opt").forEach(el => el.style.display = el.dataset.engine.split(" ").includes(eng) ? "" : "none");
   document.querySelectorAll(".tr-llm").forEach(el => el.style.display = useLlm ? "" : "none");
   document.querySelectorAll(".chat-opt").forEach(el => el.style.display = $("chat_same").checked ? "none" : "");
@@ -209,10 +210,31 @@ function claudeCfg(c) {
            align_base_url:B, align_api_key:"", align_model:m2, see_base_url:B, see_api_key:"", see_model:m2,
            ocr_vlm_base_url:B, ocr_vlm_api_key:"", ocr_vlm_model:m2, ocr_vlm_concurrency:Math.min(c.ocr_vlm_concurrency, 4) };
 }
+// Ô chỉ dùng cho 🌐 API: nhà cung cấp, Base URL, API key, model, temperature của mọi vai, các ô "dùng đúng server
+// đang dịch", bảng "Nhà cung cấp của bạn". Bật ✳️ Claude Code thì ẩn (CSS `#settings.cc .api-only`), giá trị vẫn giữ.
+const API_ONLY = ["translator", "preset", "base_url", "api_key", "model", "temperature", "disable_thinking",
+  "ocr_preset", "ocr_vlm_base_url", "ocr_vlm_api_key", "ocr_vlm_model",
+  "chat_same", "chat_preset", "chat_base_url", "chat_api_key", "chat_model",
+  "see_on", "see_preset", "see_base_url", "see_api_key", "see_model",
+  "gloss_same", "gloss_preset", "gloss_base_url", "gloss_api_key", "gloss_model",
+  "align_same", "align_preset", "align_base_url", "align_api_key", "align_model",
+  "pv_name", "pv_base", "pv_key", "pv_model", "pv_vision", "pv_gloss", "pv_parallel", "pvSave"];
+API_ONLY.forEach(id => $(id)?.closest("label")?.classList.add("api-only"));
+// Chữ của vài lựa chọn đổi theo nguồn: ở Claude Code, OCR "Vision LLM" và chép công thức đều do Claude làm
+const CC_TEXT = [['#ocr_engine option[value="vlm"]', "Claude Code đọc ảnh từng vùng (chính xác với scan xấu, chậm hơn)"],
+                 ['#formula_ocr option[value="ocr"]', "Claude Code (model Claude cho thuật ngữ, trò chuyện…)"],
+                 ['#formula_ocr option[value="see"]', "Claude Code (như trên)"]];
 function drawSource() {
   const src = $("model_source").value === "claude" ? "claude" : "api";
   $("settings").classList.toggle("cc", src === "claude");
+  for (const [sel, text] of CC_TEXT) {
+    const o = document.querySelector(sel);
+    if (!o) continue;
+    o.dataset.api ??= o.textContent;
+    o.textContent = src === "claude" ? text : o.dataset.api;
+  }
   document.querySelectorAll("#settings .seg [data-src]").forEach(b => b.classList.toggle("on", b.dataset.src === src));
+  toggleOpts();
   if (src === "claude") ccStatus();
 }
 async function ccStatus() {
