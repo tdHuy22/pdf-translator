@@ -145,6 +145,36 @@ OCR trang scan xấu — đo lại 20/09/2026 bằng `scripts/bench_ocr.py`, đ�
 → PDF có lớp chữ: chọn preset **TUF**, model **`4b`** (xem mục dưới). PDF scan: `paddleocr-vl`, đọc từng vùng.
 Chi tiết cách quét tham số và báo cáo đầy đủ: [docs/ocr-tuf.md](docs/ocr-tuf.md), kết quả nằm ở `~/vietpaper-ocr-bench/REPORT.md` trên TUF.
 
+## Bench chất lượng dịch: Claude Code vs model free vs Google – 24/10/2026
+```
+.venv/bin/python scripts/bench_quality.py --systems haiku=claude-haiku-5-5,sonnet=claude-sonnet-5-5 --base-url http://claude-code.local/v1
+.venv/bin/python scripts/bench_quality.py --systems nemotron=nvidia/nemotron-3.5-super-vl:free --base-url https://openrouter.ai/api/v1
+.venv/bin/python scripts/judge_quality.py --systems google,nemotron,haiku,sonnet --model claude-opus-5-5 --base-url http://claude-code.local/v1 --out judge-opus.json
+.venv/bin/python scripts/judge_quality.py --systems google,nemotron,haiku,sonnet --model gpt-6-luna --base-url http://100.64.0.1:10531/v1 --no-temperature --out judge-luna.json
+```
+Cùng 5 trang, cùng bảng thuật ngữ đóng băng và điều kiện như mục dưới (`tên=model` để tên file không có `/`). Hai trọng
+tài khác họ chấm mù 24 đoạn mà cả 4 hệ thống đều dịch: Claude Opus 5.5 (cùng họ với Haiku, Sonnet nên có thể thiên vị) và
+gpt-6-luna (OpenAI, qua proxy ChatGPT trên TUF). Kết quả từng đoạn: `bench/quality/judge-opus.json`, `judge-luna.json`.
+
+| Hệ thống | Giây/trang | Bỏ sót | Mất công thức | Đúng thuật ngữ | Điểm (Opus) | Điểm (luna) |
+|---|---:|---:|---:|---:|---:|---:|
+| Google Translate | 2,8 | 0 | 0 | 318/424 | 2,93 | 2,89 |
+| Nemotron 3.5 Super free (mặc định 🌐 API) | 15–90 | 0* | 0* | 382/424 | 3,76 | 3,53 |
+| **Claude Haiku 5.5** | 16,6 | 0 | 0 | 385/424 | 4,69 | 4,31 |
+| **Claude Sonnet 5.5** ✅ | 13,7 | 0 | 0 | 391/424 | 4,74 | 4,47 |
+
+\* Nemotron: lượt đầu 2/5 trang lỗi 502 phía nhà cung cấp, chạy lại lần một còn bỏ sót 11 đoạn, mất 8 công thức; số
+trong bảng là lần chạy lại thứ hai (đủ trang). Thời gian dao động theo tải của nhà cung cấp free.
+
+- **Claude hơn hẳn model free, cả hai trọng tài đồng ý**: so từng đoạn Haiku thắng Nemotron 23/24 (Opus) và 20/24
+  (luna), Sonnet thắng 23/24 và 22/24, kiểm định dấu p < 0,003 ở cả bốn. Nemotron hơn Google (17–14 thắng, p = 0,007 và
+  0,064).
+- **Haiku và Sonnet không phân biệt được**: Sonnet thắng 9, hoà 9, thua 6 (Opus, p = 0,61) và 10–6–8 (luna, p = 0,82);
+  khoảng cách nhỏ hơn nhiễu vị trí của trọng tài (0,21–0,26 điểm). Sonnet nhỉnh hơn một chút ở trọng tài khác họ và ở
+  thuật ngữ (391 so với 385), nhanh ngang Haiku.
+- → **Giữ Sonnet 5.5 làm model dịch mặc định của ✳️ Claude Code**; Haiku là lựa chọn ngang chất lượng nếu cần tiết kiệm
+  hạn mức gói. Trọng tài LLM chỉ là một nguồn: muốn chắc thì chấm tay (`quality_report.py`).
+
 ## Bench chất lượng dịch: Google Translate vs 2b / 4b / 9b (TUF) – 21/09/2026
 ```
 .venv/bin/python scripts/bench_quality.py --systems google,2b,4b,9b   # dịch 5 trang bằng cả 4 hệ thống

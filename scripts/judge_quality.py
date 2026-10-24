@@ -54,12 +54,14 @@ async def judge_one(cfg: app.Config, item: dict, rng: random.Random, args) -> di
     user = f"[Bản gốc]\n{item['src']}\n\n[Các bản dịch]\n{body_txt}"
     body = {"model": cfg.model, "temperature": 0.0, "max_tokens": args.max_tokens,
             "messages": [{"role": "system", "content": JUDGE_PROMPT}, {"role": "user", "content": user}]}
+    if args.no_temperature:
+        body.pop("temperature")
     headers = {"Authorization": f"Bearer {cfg.api_key}"} if cfg.api_key else {}
     content = ""
     for attempt in range(2):                                  # trọng tài nghĩ quá dài → nới trần rồi hỏi lại
         body["max_tokens"] = args.max_tokens * (attempt + 2)
         try:
-            async with httpx.AsyncClient(timeout=900) as c:
+            async with app.llm_client(timeout=900) as c:   # cả trọng tài Claude Code (claude_code.py)
                 r = await c.post(cfg.base_url.rstrip("/") + "/chat/completions", headers=headers, json=body)
             content = (r.json()["choices"][0]["message"].get("content") or "").strip()
         except Exception as e:  # noqa: BLE001
@@ -109,12 +111,15 @@ async def main():
     ap.add_argument("--min-chars", type=int, default=120)
     ap.add_argument("--max-tokens", type=int, default=800)
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--out", default="judge.json", help="tên file kết quả trong bench/quality (một file mỗi trọng tài)")
+    ap.add_argument("--no-temperature", action="store_true", help="trọng tài không nhận temperature (gpt-6-luna qua proxy ChatGPT)")
     args = ap.parse_args()
 
     systems = [s.strip() for s in args.systems.split(",") if s.strip()]
     if args.model in systems:
         sys.exit(f"Trọng tài '{args.model}' đang nằm trong danh sách ứng viên — chọn model khác")
-    cfg = app.Config(base_url=args.base_url, api_key=args.api_key, model=args.model, temperature=0.0)
+    cfg = app.Config(base_url=args.base_url, api_key=args.api_key or app.remember(args.base_url, ""), model=args.model,
+                     temperature=0.0)
     items = pick(load_runs(), systems, args.per_page, args.min_chars)
     if not items:
         sys.exit("Không có đoạn nào mọi hệ thống đều dịch — chạy bench_quality.py trước")
@@ -128,7 +133,7 @@ async def main():
         mark = "⚠️ " + r["error"] if r.get("error") else " ".join(
             f"{s}:{sum(r['scores'][s][a] for a in AXES) / 3:.1f}" for s in systems if s in r.get("scores", {}))
         print(f"  [{k:>3}/{len(items)}] {r['key'][0]} tr.{r['key'][1]} đoạn {r['key'][2]:>3}  {mark}", flush=True)
-    (OUT / "judge.json").write_text(json.dumps(
+    (OUT / args.out).write_text(json.dumps(
         {"judge": args.model, "seed": args.seed, "rows": [{**r, "key": list(r["key"])} for r in rows]},
         ensure_ascii=False, indent=1))
 

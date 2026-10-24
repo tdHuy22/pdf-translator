@@ -1,0 +1,101 @@
+{
+ "system": "haiku",
+ "paper": "roformer-rope",
+ "page": 4,
+ "seconds": 8.4,
+ "thinks": false,
+ "think_scale": 1.0,
+ "blocks": 12,
+ "translated": 12,
+ "missing": 0,
+ "formula_blocks": 6,
+ "formula_lost": 0,
+ "styled_blocks": 3,
+ "styled_kept": 3,
+ "over_max_len": 0,
+ "len_ratio": 0.95,
+ "glossary_ok": "53/58",
+ "tokens": {
+  "calls": 1,
+  "prompt": 2911,
+  "completion": 1732,
+  "max_call": 4643
+ },
+ "tok_per_s": 206.2,
+ "errors": [],
+ "error": "",
+ "items": [
+  {
+   "id": 0,
+   "src": "RoFormer",
+   "vi": "RoFormer",
+   "table": false
+  },
+  {
+   "id": 1,
+   "src": "The authors of He et al. [2020] argued that the relative positions of two tokens could only be fully modeled using the middle two terms of Equation (6). As a consequence, the absolute position embeddings {v1} and {v2} were simply replaced with the relative position embeddings {v3}:",
+   "vi": "Các tác giả của He et al. [2020] cho rằng vị trí tương đối của hai token chỉ có thể được mô hình hóa đầy đủ bằng hai số hạng ở giữa của Phương trình (6). Do đó, các nhúng vị trí tuyệt đối {v1} và {v2} được thay thế đơn giản bằng các nhúng vị trí tương đối {v3}:",
+   "table": false
+  },
+  {
+   "id": 2,
+   "src": "A comparison of the four variants of the relative position embeddings Radford and Narasimhan [2018] has shown that the variant similar to Equation (10) is the most efficient among the other three. Generally speaking, all these approaches attempt to modify Equation (6) based on the decomposition of Equation (3) under the self-attention settings in Equation (2), which was originally proposed in Vaswani et al. [2017]. They commonly introduced to directly add the position information to the context representations. Unlikely, our approach aims to derive the relative position encoding from Equation (1) under some constraints. Next, we show that the derived approach is more interpretable by incorporating relative position information with the rotation of context representations.",
+   "vi": "So sánh bốn biến thể của nhúng vị trí tương đối trong Radford and Narasimhan [2018] cho thấy biến thể tương tự Phương trình (10) là hiệu quả nhất trong ba biến thể còn lại. Nói chung, tất cả các cách tiếp cận này đều cố gắng sửa đổi Phương trình (6) dựa trên sự phân rã của Phương trình (3) trong cài đặt tự chú ý ở Phương trình (2), được đề xuất ban đầu trong Vaswani et al. [2017]. Chúng thường đưa thông tin vị trí trực tiếp vào biểu diễn ngữ cảnh bằng cách cộng trực tiếp. Ngược lại, cách tiếp cận của chúng tôi nhằm suy ra mã hóa vị trí tương đối từ Phương trình (1) dưới một số ràng buộc. Tiếp theo, chúng tôi chỉ ra rằng cách tiếp cận được suy ra này dễ diễn giải hơn khi kết hợp thông tin vị trí tương đối với phép xoay các biểu diễn ngữ cảnh.",
+   "table": false
+  },
+  {
+   "id": 3,
+   "src": "3 Proposed approach",
+   "vi": "3 Phương pháp đề xuất",
+   "table": false
+  },
+  {
+   "id": 4,
+   "src": "In this section, we discuss the proposed rotary position embedding (RoPE). We first formulate the relative position encoding problem in Section <b>(3.1)</b>, we then derive the RoPE in Section <b>(3.2)</b> and investigate its properties in Section <b>(3.3)</b>.",
+   "vi": "Trong phần này, chúng tôi thảo luận về Rotary Position Embedding (RoPE) được đề xuất. Trước hết, chúng tôi trình bày bài toán mã hóa vị trí tương đối ở Mục <b>(3.1)</b>, sau đó suy ra RoPE ở Mục <b>(3.2)</b> và khảo sát các tính chất của nó ở Mục <b>(3.3)</b>.",
+   "table": false
+  },
+  {
+   "id": 5,
+   "src": "3.1 Formulation",
+   "vi": "3.1 Hình thức hóa",
+   "table": false
+  },
+  {
+   "id": 6,
+   "src": "Transformer-based language modeling usually leverages the position information of individual tokens through a self-attention mechanism. As can be observed in Equation (2), {v1} typically enables knowledge conveyance between tokens at different positions. In order to incorporate relative position information, we require the inner product of query {v2} and key {v3} to be formulated by a function {v4}, which takes only the word embeddings {v5}, and their relative position {v6} as input variables. In other words, we hope that the inner product encodes position information only in the relative form:",
+   "vi": "Mô hình ngôn ngữ dựa trên Transformer thường khai thác thông tin vị trí của từng token thông qua cơ chế tự chú ý. Như có thể quan sát ở Phương trình (2), {v1} thường cho phép truyền tải tri thức giữa các token ở các vị trí khác nhau. Để kết hợp thông tin vị trí tương đối, chúng tôi yêu cầu tích vô hướng của truy vấn {v2} và khóa {v3} được biểu diễn bằng một hàm {v4}, chỉ nhận đầu vào là các nhúng từ {v5} và vị trí tương đối {v6}. Nói cách khác, chúng tôi mong muốn tích vô hướng chỉ mã hóa thông tin vị trí dưới dạng tương đối:",
+   "table": false
+  },
+  {
+   "id": 7,
+   "src": "The ultimate goal is to find an equivalent encoding mechanism to solve the functions {v1}) and {v2}) to conform the aforementioned relation.",
+   "vi": "Mục tiêu cuối cùng là tìm một cơ chế mã hóa tương đương để giải các hàm {v1}) và {v2}) sao cho thỏa mãn quan hệ nêu trên.",
+   "table": false
+  },
+  {
+   "id": 8,
+   "src": "3.2 Rotary position embedding",
+   "vi": "3.2 Rotary position embedding",
+   "table": false
+  },
+  {
+   "id": 9,
+   "src": "We begin with a simple case with a dimension {v1} = 2. Under these settings, we make use of the geometric property of vectors on a 2D plane and its complex form to prove (refer Section <b>(3.4.1)</b> for more details) that a solution to our formulation Equation (11) is:",
+   "vi": "Chúng tôi bắt đầu với trường hợp đơn giản có số chiều {v1} = 2. Trong cài đặt này, chúng tôi sử dụng tính chất hình học của vector trên mặt phẳng 2D và dạng số phức của nó để chứng minh (xem Mục <b>(3.4.1)</b> để biết chi tiết) rằng một nghiệm của bài toán của chúng tôi, Phương trình (11), là:",
+   "table": false
+  },
+  {
+   "id": 10,
+   "src": "where Re[{v1}] is the real part of a complex number and ({v2} represents the conjugate complex number of ({v3}). {v4} is a preset non-zero constant. We can further write {v5} in a multiplication matrix:",
+   "vi": "trong đó Re[{v1}] là phần thực của một số phức và ({v2} biểu diễn số phức liên hợp của ({v3}). {v4} là một hằng số khác không được thiết lập sẵn. Chúng tôi có thể viết thêm {v5} dưới dạng một ma trận nhân:",
+   "table": false
+  },
+  {
+   "id": 11,
+   "src": "where ({v1}) is {v2} expressed in the 2D coordinates. Similarly, {v3} can be viewed as a matrix and thus enables the solution of formulation in Section <b>(3.1)</b> under the 2D case. Specifically, incorporating the relative position embedding is straightforward: simply rotate the affine-transformed word embedding vector by amount of angle multiples of its position index and thus interprets the intuition behind <i>Rotary Position Embedding</i>.",
+   "vi": "trong đó ({v1}) là {v2} được biểu diễn trong tọa độ 2D. Tương tự, {v3} có thể được xem như một ma trận và do đó cho phép giải bài toán ở Mục <b>(3.1)</b> trong trường hợp 2D. Cụ thể, việc kết hợp nhúng vị trí tương đối là đơn giản: chỉ cần xoay vector nhúng từ đã biến đổi affine một góc bằng bội số của chỉ số vị trí của nó, qua đó diễn giải trực giác đằng sau <i>Rotary Position Embedding</i>.",
+   "table": false
+  }
+ ]
+}

@@ -41,13 +41,21 @@ PAGES = [("attention-is-all-you-need", 3), ("bert", 2), ("roformer-rope", 3),
          ("datasentinel", 8), ("datasentinel", 17)]
 
 
+def split_system(system: str) -> tuple[str, str]:
+    """`tên=model` (tên dùng cho file kết quả, khi model có "/" hay ":" như nvidia/…:free) hay chỉ `model`."""
+    name, _, model = system.partition("=")
+    return (name, model) if model else (system, system)
+
+
 def make_cfg(system: str, args) -> app.Config:
-    """Cấu hình của một hệ thống. Mọi thứ ngoài (translator, model) đều giống nhau giữa các hệ thống."""
+    """Cấu hình của một hệ thống. Mọi thứ ngoài (translator, model) đều giống nhau giữa các hệ thống. Key: --api-key,
+    không có thì key đã nhớ của app cho đúng server đó (data/keys.json)."""
     common = dict(temperature=0.0, google_fallback=False, disable_thinking=True,
                   length_ratio=args.length_ratio, page_span=1, ocr_mode="off")
     if system == "google":
         return app.Config(translator="google", **common)
-    return app.Config(translator="llm", base_url=args.base_url, api_key=args.api_key, model=system, **common)
+    return app.Config(translator="llm", base_url=args.base_url, api_key=args.api_key or app.remember(args.base_url, ""),
+                      model=split_system(system)[1], **common)
 
 
 _orig_chat = app.chat
@@ -57,6 +65,8 @@ async def probe_thinking(cfg: app.Config) -> bool:
     """Model có suy nghĩ không, dù đã bảo tắt: một lượt gọi nhỏ, xem server có trả `reasoning_content` không.
     llama.cpp tách phần suy nghĩ ra khỏi `content`, nên model vẫn nghĩ thì trần token đầu ra của app
     (≈1,6× độ dài bản dịch) bị phần suy nghĩ ăn sạch trước khi model kịp viết chữ nào."""
+    if app.CC.is_claude(cfg.base_url):   # Claude Code: không có reasoning_content, --effort do app đặt
+        return False
     import httpx
 
     body = app.no_think(cfg, cfg.base_url, {"model": cfg.model, "temperature": 0.0, "messages": [
@@ -161,11 +171,11 @@ async def run_one(system: str, paper: str, pno: int, info: dict, args, think: di
         app._run.reset(token)
     secs = round(time.time() - t0, 1)
     tok = dict(run["tokens"])
-    res = {"system": system, "paper": paper, "page": pno + 1, "seconds": secs, **think,
+    res = {"system": split_system(system)[0], "paper": paper, "page": pno + 1, "seconds": secs, **think,
            **metrics(cfg, blocks, out), "glossary_ok": glossary_score(info["glossary"], blocks, out),
            "tokens": tok, "tok_per_s": round(tok.get("completion", 0) / max(secs, 0.1), 1),
            "errors": stats["errors"][:2], "error": err}
-    (OUT / f"{system}--{paper}-p{pno + 1}.json").write_text(json.dumps(
+    (OUT / f"{split_system(system)[0]}--{paper}-p{pno + 1}.json").write_text(json.dumps(
         {**res, "items": [{"id": i, "src": b["text"], "vi": out.get(i), "table": b.get("label") == "table"}
                           for i, b in enumerate(blocks)]}, ensure_ascii=False, indent=1))
     return res
@@ -211,7 +221,7 @@ async def main():
         note = f"   (không tắt được thinking → nới trần đầu ra ×{think['think_scale']:g})" if think["thinks"] else ""
         print(f"\n=== {system} ==={note}\n{HEAD}")
         for paper, pno in PAGES:
-            f = OUT / f"{system}--{paper}-p{pno + 1}.json"
+            f = OUT / f"{split_system(system)[0]}--{paper}-p{pno + 1}.json"
             if f.exists() and not args.force:
                 r = json.loads(f.read_text())
                 r.pop("items", None)
@@ -225,7 +235,7 @@ async def main():
     print("\n=== Tổng theo hệ thống ===")
     print(f"{'hệ thống':10} {'giây/trang':>10} {'tok/s':>6} {'sót':>5} {'mất CT':>7} {'tràn':>5} {'dài':>5} {'thuật ngữ':>10}")
     for system in systems:
-        rs = [r for r in rows if r["system"] == system]
+        rs = [r for r in rows if r["system"] == split_system(system)[0]]
         hit = sum(int(r["glossary_ok"].split("/")[0]) for r in rs)
         tot = sum(int(r["glossary_ok"].split("/")[1]) for r in rs)
         n = max(len(rs), 1)

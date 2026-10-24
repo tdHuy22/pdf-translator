@@ -1,0 +1,966 @@
+{
+ "judge": "claude-opus-5-5",
+ "seed": 7,
+ "rows": [
+  {
+   "key": [
+    "attention-is-all-you-need",
+    4,
+    3
+   ],
+   "mapping": {
+    "A": "sonnet",
+    "B": "nemotron",
+    "C": "google",
+    "D": "haiku"
+   },
+   "scores": {
+    "sonnet": {
+     "adequacy": 4,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Đúng nghĩa, thuật ngữ chuẩn; bỏ sắc thái 'particular'."
+    },
+    "nemotron": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Bỏ 'particular'; 'chia mỗi giá trị' dễ nhầm với 'values' (V)."
+    },
+    "google": {
+     "adequacy": 2,
+     "terminology": 1,
+     "fluency": 2,
+     "note": "Dịch máy móc: 'sản phẩm chấm', 'thứ nguyên', 'tích số chấm... bằng'; 'chia từng khóa' sai nghĩa."
+    },
+    "haiku": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Đầy đủ, giữ 'particular' (đặc thù), 'chia mỗi tích' chính xác."
+    }
+   },
+   "best": "haiku"
+  },
+  {
+   "key": [
+    "attention-is-all-you-need",
+    4,
+    4
+   ],
+   "mapping": {
+    "A": "nemotron",
+    "B": "haiku",
+    "C": "sonnet",
+    "D": "google"
+   },
+   "scores": {
+    "nemotron": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 4,
+     "note": "Đúng nghĩa, giữ 'attention' hợp lý; 'đóng gói vào' hơi cứng"
+    },
+    "haiku": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Đúng nghĩa, 'gom lại thành' tự nhiên, thuật ngữ chuẩn"
+    },
+    "sonnet": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Đúng nghĩa, 'cùng lúc', 'gộp thành' tự nhiên"
+    },
+    "google": {
+     "adequacy": 5,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Đúng nghĩa; 'hàm chú ý' kém thông dụng hơn 'attention'; 'đóng gói cùng nhau' hơi máy móc"
+    }
+   },
+   "best": "sonnet"
+  },
+  {
+   "key": [
+    "attention-is-all-you-need",
+    4,
+    5
+   ],
+   "mapping": {
+    "A": "nemotron",
+    "B": "google",
+    "C": "sonnet",
+    "D": "haiku"
+   },
+   "scores": {
+    "nemotron": {
+     "adequacy": 3,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Bỏ 'much' (nhanh hơn nhiều), bỏ 'single', 'identical' thành 'giống'; 'hệ số chia' chấp nhận được; thuật ngữ ổn nhưng 'feed-forward' lẫn Anh-Việt"
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 1,
+     "fluency": 2,
+     "note": "Dịch máy: 'sự chú ý của sản phẩm chấm', 'chú ý bổ sung', 'mạng chuyển tiếp nguồn cấp dữ liệu', 'chức năng tương thích' sai thuật ngữ; bỏ 'much'"
+    },
+    "sonnet": {
+     "adequacy": 5,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Đầy đủ ý, giữ 'much'; trộn additive attention (Anh) với 'attention tích vô hướng' (Việt) hơi thiếu nhất quán"
+    },
+    "haiku": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Đầy đủ, chính xác; giữ thuật ngữ tiếng Anh nhất quán theo thói quen học thuật, câu văn tự nhiên"
+    }
+   },
+   "best": "haiku"
+  },
+  {
+   "key": [
+    "attention-is-all-you-need",
+    4,
+    6
+   ],
+   "mapping": {
+    "A": "sonnet",
+    "B": "haiku",
+    "C": "google",
+    "D": "nemotron"
+   },
+   "scores": {
+    "sonnet": {
+     "adequacy": 5,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Đúng nghĩa và giữ chuẩn các placeholder. Tuy nhiên 'không có tỉ lệ' dịch 'without scaling' chưa sát; 'không chia tỉ lệ' sẽ chính xác hơn."
+    },
+    "haiku": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 4,
+     "note": "Đầy đủ ý, thuật ngữ hợp lý (giữ additive/dot product attention, dùng 'chia tỷ lệ'). Chỉ có 'độ lớn rất lớn' hơi lặp từ."
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 1,
+     "fluency": 2,
+     "note": "Dịch máy rõ rệt: 'sự chú ý bổ sung', 'sản phẩm chấm', 'tích số chấm', 'độ dốc' cho gradient. 'Mà không cần điều chỉnh tỷ lệ' làm lệch nghĩa."
+    },
+    "nemotron": {
+     "adequacy": 3,
+     "terminology": 4,
+     "fluency": 3,
+     "note": "'Không chia cho các giá trị lớn của {v2}' gây hiểu sai cấu trúc câu. 'Chia cho {v5}' có thể ngược nghĩa nếu {v5} là hệ số 1/√dk. 'Tăng lớn về độ lớn' lủng củng."
+    }
+   },
+   "best": "haiku"
+  },
+  {
+   "key": [
+    "attention-is-all-you-need",
+    4,
+    8
+   ],
+   "mapping": {
+    "A": "haiku",
+    "B": "google",
+    "C": "nemotron",
+    "D": "sonnet"
+   },
+   "scores": {
+    "haiku": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 4,
+     "note": "Đúng nghĩa, đủ ý, thuật ngữ chuẩn; cách viết '{v5}-chiều' có gạch nối hơi gượng."
+    },
+    "google": {
+     "adequacy": 2,
+     "terminology": 2,
+     "fluency": 2,
+     "note": "Bỏ mất 'có lợi' nên câu bị cụt; 'projected' dịch sai thành 'dự kiến'; 'chức năng chú ý' là thuật ngữ sai; văn có dấu hiệu dịch máy, lẫn ký tự ẩn."
+    },
+    "nemotron": {
+     "adequacy": 4,
+     "terminology": 5,
+     "fluency": 4,
+     "note": "Đúng nghĩa; thêm 'đầu ra' ngoài phần bản gốc bị cắt; cụm 'khác nhau, được học,' hơi cứng."
+    },
+    "sonnet": {
+     "adequacy": 4,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Tự nhiên, thuật ngữ chuẩn, 'lần lượt' đặt đúng chỗ; thêm 'đầu ra' ngoài phần bản gốc bị cắt."
+    }
+   },
+   "best": "haiku"
+  },
+  {
+   "key": [
+    "attention-is-all-you-need",
+    4,
+    9
+   ],
+   "mapping": {
+    "A": "haiku",
+    "B": "sonnet",
+    "C": "google",
+    "D": "nemotron"
+   },
+   "scores": {
+    "haiku": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Đầy đủ và chính xác. 'trở nên lớn' giữ được nghĩa 'get large'. 'kỳ vọng' và 'phương sai' chuẩn. Giữ 'Khi đó'."
+    },
+    "sonnet": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Chính xác, tự nhiên. Chỉ khác A ở việc lược 'các' trước 'tích vô hướng', không ảnh hưởng nghĩa."
+    },
+    "google": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "'tích vô hướng lớn' làm mất sắc thái 'get large'. 'lý do tại sao' hơi thừa. 'trung bình' chấp nhận được nhưng kém chuẩn hơn 'kỳ vọng'."
+    },
+    "nemotron": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Bỏ 'Then' (Khi đó) nên mất quan hệ suy luận. Mất sắc thái 'get large'. 'trung bình' kém chuẩn hơn 'kỳ vọng'."
+    }
+   },
+   "best": "haiku"
+  },
+  {
+   "key": [
+    "bert",
+    3,
+    0
+   ],
+   "mapping": {
+    "A": "nemotron",
+    "B": "sonnet",
+    "C": "haiku",
+    "D": "google"
+   },
+   "scores": {
+    "nemotron": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "Bỏ 'Overall'→'chung' tạm được nhưng bỏ ý 'same' ở câu tham số; 'nhiệm vụ xuống dòng' là dịch sai downstream; 'ký hiệu phân tách' cho token chấp nhận được"
+    },
+    "sonnet": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 4,
+     "note": "Đủ ý, 'hạ nguồn', 'token' đúng; 'mẫu đầu vào' hợp lý; câu 'Cùng các tham số...' hơi cứng"
+    },
+    "haiku": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Đủ ý, thuật ngữ chuẩn, văn phong tự nhiên; bỏ 'mô hình' trong 'model parameters' không ảnh hưởng nghĩa"
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "'kiến trúc tương tự'/'tham số tương tự' sai nghĩa 'same'; 'đào tạo trước' lẫn với 'huấn luyện trước'; 'mã thông báo' dịch máy cho token; 'tác vụ tiếp theo' chưa chuẩn; có ký tự ẩn"
+    }
+   },
+   "best": "haiku"
+  },
+  {
+   "key": [
+    "bert",
+    3,
+    3
+   ],
+   "mapping": {
+    "A": "sonnet",
+    "B": "google",
+    "C": "haiku",
+    "D": "nemotron"
+   },
+   "scores": {
+    "sonnet": {
+     "adequacy": 5,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Đúng nghĩa, trích dẫn đủ; 'công thức' dịch sát chữ 'recipe' nghe hơi gượng; 'nhiệm vụ' chấp nhận được nhưng 'tác vụ' chuẩn hơn"
+    },
+    "google": {
+     "adequacy": 5,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Đúng nghĩa, 'tác vụ' tốt; 'đào tạo trước' kém chuẩn hơn 'huấn luyện trước'; 'công thức' sát chữ"
+    },
+    "haiku": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Đúng nghĩa, 'cách tiếp cận' và 'trên ImageNet' tự nhiên, thuật ngữ chuẩn"
+    },
+    "nemotron": {
+     "adequacy": 5,
+     "terminology": 4,
+     "fluency": 3,
+     "note": "Đúng nghĩa; 'mô hình đã được huấn luyện trước lớn' trật trật tự từ, 'công thức' sát chữ"
+    }
+   },
+   "best": "haiku"
+  },
+  {
+   "key": [
+    "bert",
+    3,
+    5
+   ],
+   "mapping": {
+    "A": "nemotron",
+    "B": "haiku",
+    "C": "google",
+    "D": "sonnet"
+   },
+   "scores": {
+    "nemotron": {
+     "adequacy": 4,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "Dịch 'downstream tasks' thành 'nhiệm vụ xuống dòng' sai thuật ngữ; 'ví dụ chạy' dịch máy móc 'running example'; bỏ sót 'first'; diễn đạt hơi cứng."
+    },
+    "haiku": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Đầy đủ ý, giữ 'trước hết'; 'nhiệm vụ hạ nguồn', 'ví dụ xuyên suốt' chuẩn; câu văn tự nhiên, gọn."
+    },
+    "google": {
+     "adequacy": 4,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "Dùng lẫn 'đào tạo trước' và 'huấn luyện trước', 'nhiệm vụ' và 'tác vụ'; 'xuôi dòng' không chuẩn; 'ví dụ thực tế' sai nghĩa 'running example'; văn dịch máy."
+    },
+    "sonnet": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Đầy đủ, chính xác; thuật ngữ nhất quán ('hạ nguồn', 'ví dụ xuyên suốt'); diễn đạt tự nhiên."
+    }
+   },
+   "best": "haiku"
+  },
+  {
+   "key": [
+    "bert",
+    3,
+    8
+   ],
+   "mapping": {
+    "A": "nemotron",
+    "B": "sonnet",
+    "C": "haiku",
+    "D": "google"
+   },
+   "scores": {
+    "nemotron": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "'mã hóa viên' không phải thuật ngữ chuẩn cho encoder, nên dùng 'bộ mã hóa'; câu đầu hơi cứng."
+    },
+    "sonnet": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Đúng nghĩa, thuật ngữ chuẩn ('bộ mã hóa', 'nhiều lớp'), câu tự nhiên."
+    },
+    "haiku": {
+     "adequacy": 4,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Diễn đạt tự nhiên, 'và cộng sự' hợp lệ; 'tốt' làm nhẹ nghĩa 'excellent'."
+    },
+    "google": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 3,
+     "note": "'mô tả cơ bản đầy đủ' chưa sát 'exhaustive background'; câu dài, cấu trúc 'Vì... nên' hơi nặng; có ký tự ẩn trong 'kiến trúc'."
+    }
+   },
+   "best": "sonnet"
+  },
+  {
+   "key": [
+    "bert",
+    3,
+    9
+   ],
+   "mapping": {
+    "A": "sonnet",
+    "B": "google",
+    "C": "nemotron",
+    "D": "haiku"
+   },
+   "scores": {
+    "sonnet": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Đúng nghĩa, số liệu đầy đủ; giữ 'self-attention' hợp thói quen học thuật; thiếu dấu chấm sau {v3} giống bản gốc."
+    },
+    "google": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "Không nhất quán: một chỗ giữ 'Total Parameters', chỗ khác dịch 'Tổng thông số'; 'thông số' không chuẩn cho 'parameters' (nên là 'tham số'); 'công việc này' và 'biểu thị' kém tự nhiên."
+    },
+    "nemotron": {
+     "adequacy": 5,
+     "terminology": 4,
+     "fluency": 5,
+     "note": "Đúng nghĩa, số liệu chính xác; 'đầu tự chú ý' chấp nhận được nhưng ít phổ biến hơn 'self-attention'."
+    },
+    "haiku": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Chính xác, mượt; 'tầng' cho 'layer' hợp lý; giữ 'self-attention'; thêm dấu chấm sau {v3} hợp lý."
+    }
+   },
+   "best": "haiku"
+  },
+  {
+   "key": [
+    "bert",
+    3,
+    10
+   ],
+   "mapping": {
+    "A": "sonnet",
+    "B": "nemotron",
+    "C": "haiku",
+    "D": "google"
+   },
+   "scores": {
+    "sonnet": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Đúng nghĩa, giữ đủ 'Critically, however'; thuật ngữ self-attention, token giữ đúng thói quen; câu tự nhiên."
+    },
+    "nemotron": {
+     "adequacy": 3,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Bỏ mất 'however' và dịch 'Critically' thành 'Quan trọng hơn' làm lệch sắc thái; bỏ 'của nó'; 'tự chú ý' chấp nhận được nhưng 'nơi mỗi token' hơi gượng."
+    },
+    "haiku": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 4,
+     "note": "Đúng nghĩa và đủ ý; thuật ngữ chuẩn; lặp 'trong khi... trong đó' hơi nặng, 'chỉ được chú ý' hơi lệch sắc thái 'can only'."
+    },
+    "google": {
+     "adequacy": 4,
+     "terminology": 2,
+     "fluency": 2,
+     "note": "Đủ ý nhưng dịch máy: 'mã thông báo' cho token, 'khả năng tự chú ý' thừa chữ, 'về mặt quan trọng' gượng."
+    }
+   },
+   "best": "sonnet"
+  },
+  {
+   "key": [
+    "datasentinel",
+    9,
+    29
+   ],
+   "mapping": {
+    "A": "sonnet",
+    "B": "haiku",
+    "C": "google",
+    "D": "nemotron"
+   },
+   "scores": {
+    "sonnet": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Đầy đủ, chính xác; giữ Combined Attack, embedding, baseline, epoch, batch hợp lý; văn tự nhiên."
+    },
+    "haiku": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Bỏ 'bộ dữ liệu', 'tức'; 'kết hợp tấn công' dịch sai tên Combined Attack; dùng 0.001 thay vì 0,001."
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "Dịch máy: 'rõ ràng' cho clean sai, 'kỷ nguyên' cho epoch, 'cơ sở', 'thực tế cơ bản', 'tác vụ được chèn', 'mạng thần kinh'; không nhất quán sạch/rõ ràng."
+    },
+    "nemotron": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "'kết hợp tấn công' sai tên Combined Attack; 'mã hóa văn bản' thiếu 'bộ'; 'lần lặp' cho epoch chưa chuẩn; 'nơ ron' thiếu gạch nối."
+    }
+   },
+   "best": "sonnet"
+  },
+  {
+   "key": [
+    "datasentinel",
+    9,
+    30
+   ],
+   "mapping": {
+    "A": "nemotron",
+    "B": "sonnet",
+    "C": "google",
+    "D": "haiku"
+   },
+   "scores": {
+    "nemotron": {
+     "adequacy": 5,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Đầy đủ, đúng nghĩa; 'nhắc LLM phát hiện' và 'hướng dẫn bị tiêm' hơi máy móc; giữ yes/no hợp lý vì là đáp án mô hình"
+    },
+    "sonnet": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 5,
+     "note": "Giữ nguyên câu lệnh tiếng Anh là chấp nhận được; bỏ 'của chúng tôi' và 'cho trước', mất chút ý"
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "Sai viết tắt NLLLD; dịch yes/no thành có/không làm sai đáp án mô hình; 'phát hiện phát hiện' lặp, câu lệnh dịch thiếu 'Given'"
+    },
+    "haiku": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Bỏ 'dựa trên' trong tên phương pháp, viết sai 'datasentinel', bỏ 'của chúng tôi' và 'cho trước'; câu văn khá tự nhiên"
+    }
+   },
+   "best": "nemotron"
+  },
+  {
+   "key": [
+    "datasentinel",
+    9,
+    32
+   ],
+   "mapping": {
+    "A": "nemotron",
+    "B": "sonnet",
+    "C": "haiku",
+    "D": "google"
+   },
+   "scores": {
+    "nemotron": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "'cài đặt' cho 'setting' chưa chuẩn; 'gây lừa' gượng; 'tránh' yếu hơn 'evade'; 'làm bộ phân loại' hơi lệch; nghĩa nhìn chung đủ"
+    },
+    "sonnet": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Đầy đủ, chính xác; 'thiết lập', 'qua mặt', 'luân phiên' tự nhiên; giữ đúng DataSentinel"
+    },
+    "haiku": {
+     "adequacy": 5,
+     "terminology": 4,
+     "fluency": 5,
+     "note": "Gần như B nhưng viết sai 'datasentinel' (mất chữ hoa tên riêng)"
+    },
+    "google": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "'cài đặt' không chuẩn; 'LLM phụ trợ' dịch lệch 'backend'; 'tương tự' yếu hơn 'same'; còn lại đủ ý"
+    }
+   },
+   "best": "sonnet"
+  },
+  {
+   "key": [
+    "datasentinel",
+    9,
+    33
+   ],
+   "mapping": {
+    "A": "google",
+    "B": "nemotron",
+    "C": "haiku",
+    "D": "sonnet"
+   },
+   "scores": {
+    "google": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "Dịch sai tên riêng PromptGuard thành 'NhắcGuard'; 'injection' dịch không nhất quán (chèn nội dung/tiêm nhiễm); câu bị động 'được phát hành bởi Meta' máy móc"
+    },
+    "nemotron": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Đủ ý; 'điều chỉnh' không sát 'fine-tune'; giữ nhãn đầu ra tiếng Anh hợp lý; còn cấu trúc bị động 'bởi Meta'"
+    },
+    "haiku": {
+     "adequacy": 5,
+     "terminology": 4,
+     "fluency": 5,
+     "note": "Chính xác, tự nhiên; 'tiêm' cho nhãn injection hơi cụt, trộn lẫn nhãn Việt/Anh không nhất quán"
+    },
+    "sonnet": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Chính xác, thuật ngữ chuẩn, giữ nguyên nhãn đầu ra nhất quán, câu văn tự nhiên"
+    }
+   },
+   "best": "sonnet"
+  },
+  {
+   "key": [
+    "datasentinel",
+    9,
+    34
+   ],
+   "mapping": {
+    "A": "google",
+    "B": "sonnet",
+    "C": "nemotron",
+    "D": "haiku"
+   },
+   "scores": {
+    "google": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "Bỏ mất 'As a result' (Do đó). 'nghiên cứu điểm chuẩn' và 'đường cơ sở' dịch máy móc. 'theo thiết kế' đặt cuối câu gây mơ hồ."
+    },
+    "sonnet": {
+     "adequacy": 5,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Đủ ý. Giữ benchmark/baseline/fine-tune đúng thói quen. 'theo thiết kế' đặt đúng chỗ. 'máy phát hiện' hơi gượng."
+    },
+    "nemotron": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Đủ ý. Dịch fine-tune thành 'điều chỉnh' nên mất nghĩa chuyên ngành. 'theo thiết kế' đặt cuối câu hơi mơ hồ. Câu văn hơi dài dòng."
+    },
+    "haiku": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Đủ ý, thuật ngữ ổn. Viết sai tên riêng thành 'datasentinel' (chữ thường). 'theo thiết kế' đặt cuối câu."
+    }
+   },
+   "best": "sonnet"
+  },
+  {
+   "key": [
+    "datasentinel",
+    9,
+    35
+   ],
+   "mapping": {
+    "A": "sonnet",
+    "B": "google",
+    "C": "nemotron",
+    "D": "haiku"
+   },
+   "scores": {
+    "sonnet": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Đúng nghĩa và đủ ý. Giữ nguyên tên Availability Attack/PLeak, dịch 'tiêm prompt' hợp lý. Câu văn gọn, tự nhiên."
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "Dịch sai 'prompt injection' thành 'tiêm nhiễm kịp thời'. 'tổ hợp tác vụ được đưa vào mục tiêu' sai nghĩa của target-injected. Dùng lẫn tác vụ/nhiệm vụ và chèn/tiêm. Văn mang tính dịch máy."
+    },
+    "nemotron": {
+     "adequacy": 4,
+     "terminology": 5,
+     "fluency": 4,
+     "note": "Thuật ngữ tốt. Cấu trúc 'càng… càng' làm lệch nhẹ ý so sánh. Lẫn 'chúng ta' với 'chúng tôi'. Hơi dài dòng."
+    },
+    "haiku": {
+     "adequacy": 5,
+     "terminology": 4,
+     "fluency": 5,
+     "note": "Đúng và trôi chảy. 'tấn công khả dụng' là cách dịch chưa chuẩn cho Availability Attack, nên dùng 'tấn công tính sẵn sàng' hoặc giữ nguyên tên."
+    }
+   },
+   "best": "sonnet"
+  },
+  {
+   "key": [
+    "roformer-rope",
+    4,
+    1
+   ],
+   "mapping": {
+    "A": "sonnet",
+    "B": "google",
+    "C": "haiku",
+    "D": "nemotron"
+   },
+   "scores": {
+    "sonnet": {
+     "adequacy": 4,
+     "terminology": 5,
+     "fluency": 4,
+     "note": "Đúng nghĩa, thuật ngữ chuẩn; 'được thay đơn giản' hơi cụt; 'cho rằng' nhẹ hơn 'argued'."
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "'mã thông báo', 'thuật ngữ' (terms) dịch sai thuật ngữ; 'chỉ được thay thế' lệch nghĩa 'simply'; thêm ký tự '˜' trước {v3}."
+    },
+    "haiku": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Đầy đủ, chính xác, thuật ngữ chuẩn, câu văn tự nhiên."
+    },
+    "nemotron": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Đúng nghĩa; 'được mô hình đầy đủ' thiếu 'hóa'; 'hạng tử giữa' chấp nhận được nhưng hơi gọn."
+    }
+   },
+   "best": "haiku"
+  },
+  {
+   "key": [
+    "roformer-rope",
+    4,
+    2
+   ],
+   "mapping": {
+    "A": "sonnet",
+    "B": "nemotron",
+    "C": "haiku",
+    "D": "google"
+   },
+   "scores": {
+    "sonnet": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Đổi 'among the other three' thành 'trong bốn biến thể', hợp lý hơn về logic nhưng lệch câu chữ gốc. Mở đầu 'Một so sánh' gượng và thiếu 'của' trước tên tác giả. Phần còn lại tự nhiên."
+    },
+    "nemotron": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 3,
+     "note": "Đúng ý. 'có thể giải thích hơn' sai ngữ pháp so sánh. 'xoay của các biểu diễn' gượng. Viết thường 'phương trình' chưa nhất quán."
+    },
+    "haiku": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Bám sát bản gốc, thuật ngữ ổn ('dễ diễn giải', 'phép xoay'). Lặp 'trực tiếp' thừa. Giữ nguyên 'and' trong tên tác giả."
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 4,
+     "fluency": 2,
+     "note": "Dịch sai 'Unlikely' thành 'Không chắc', đáng lẽ là 'Ngược lại'. 'Họ thường giới thiệu cách' dịch máy móc. 'chứng minh' mạnh hơn 'show'."
+    }
+   },
+   "best": "haiku"
+  },
+  {
+   "key": [
+    "roformer-rope",
+    4,
+    4
+   ],
+   "mapping": {
+    "A": "google",
+    "B": "haiku",
+    "C": "nemotron",
+    "D": "sonnet"
+   },
+   "scores": {
+    "google": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "Đủ ý nhưng 'nhúng vị trí quay', 'điều tra các thuộc tính' dịch máy móc; 'xây dựng bài toán' tạm chấp nhận; lặp 'chúng tôi'."
+    },
+    "haiku": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Giữ nguyên tên phương pháp Rotary Position Embedding đúng thói quen học thuật; 'suy ra', 'khảo sát các tính chất', 'Mục' chuẩn; văn tự nhiên."
+    },
+    "nemotron": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "'định dạng vấn đề' sai nghĩa của formulate; 'nhúng vị trí xoay đề xuất' thiếu 'được'; trật tự 'Chúng tôi trước tiên' gượng."
+    },
+    "sonnet": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "'phát biểu bài toán' sát nghĩa formulate; 'nhúng vị trí xoay' là cách Việt hóa hợp lý; câu tự nhiên, chính xác."
+    }
+   },
+   "best": "sonnet"
+  },
+  {
+   "key": [
+    "roformer-rope",
+    4,
+    6
+   ],
+   "mapping": {
+    "A": "nemotron",
+    "B": "google",
+    "C": "sonnet",
+    "D": "haiku"
+   },
+   "scores": {
+    "nemotron": {
+     "adequacy": 4,
+     "terminology": 4,
+     "fluency": 4,
+     "note": "Bỏ sót 'chỉ' (takes only); 'mô hình ngôn ngữ' chưa sát 'language modeling'; thuật ngữ còn lại tốt"
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 1,
+     "fluency": 2,
+     "note": "Dịch máy: 'máy biến áp', 'mã thông báo', 'sản phẩm bên trong', 'tích bên trong', 'từ nhúng' sai thuật ngữ"
+    },
+    "sonnet": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Đầy đủ ý, giữ 'chỉ'; 'mô hình hóa ngôn ngữ', 'tích trong' chuẩn; câu tự nhiên"
+    },
+    "haiku": {
+     "adequacy": 4,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Thuật ngữ tốt, văn mượt; lược 'của chúng'; 'mô hình ngôn ngữ' chưa sát 'modeling'"
+    }
+   },
+   "best": "sonnet"
+  },
+  {
+   "key": [
+    "roformer-rope",
+    4,
+    9
+   ],
+   "mapping": {
+    "A": "sonnet",
+    "B": "nemotron",
+    "C": "haiku",
+    "D": "google"
+   },
+   "scores": {
+    "sonnet": {
+     "adequacy": 4,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Đúng nghĩa, thuật ngữ chuẩn (nghiệm, dạng phức); bỏ sót 'our formulation' và mạo từ 'a' ở 'a simple case'."
+    },
+    "nemotron": {
+     "adequacy": 5,
+     "terminology": 3,
+     "fluency": 4,
+     "note": "Đầy đủ ý; 'giải pháp' thay cho 'nghiệm' là sai thuật ngữ toán học; 'công thức của chúng tôi trong phương trình' hơi gượng."
+    },
+    "haiku": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 4,
+     "note": "Đầy đủ, 'nghiệm', 'số chiều', 'bài toán' chính xác; 'dạng số phức của nó' và cấu trúc đồng vị hơi nặng."
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 2,
+     "fluency": 3,
+     "note": "'thứ nguyên' và 'dạng phức tạp' sai thuật ngữ (complex form→dạng phức); 'nghiệm' thay vì 'một nghiệm' làm mất ý; 'công thức Phương trình (11)' máy móc."
+    }
+   },
+   "best": "haiku"
+  },
+  {
+   "key": [
+    "roformer-rope",
+    4,
+    11
+   ],
+   "mapping": {
+    "A": "haiku",
+    "B": "google",
+    "C": "sonnet",
+    "D": "nemotron"
+   },
+   "scores": {
+    "haiku": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Đúng nghĩa và đủ ý; thuật ngữ chuẩn; giữ tên RoPE; câu văn tự nhiên"
+    },
+    "google": {
+     "adequacy": 3,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "'diễn giải trực quan' hiểu sai 'intuition'; 'giải công thức' dịch sát chữ; 'theo số bội số góc' và 'việc kết hợp việc' lủng củng; dịch tên riêng thành 'Nhúng vị trí quay' kém thông dụng"
+    },
+    "sonnet": {
+     "adequacy": 5,
+     "terminology": 5,
+     "fluency": 5,
+     "note": "Chính xác; 'đưa nhúng vị trí tương đối vào' tự nhiên; tương đương A"
+    },
+    "nemotron": {
+     "adequacy": 4,
+     "terminology": 3,
+     "fluency": 3,
+     "note": "'giải phương trình' sai so với 'formulation'; 'bởi số góc bội số' và 'dưới trường hợp 2D' dịch máy móc"
+    }
+   },
+   "best": "haiku"
+  }
+ ]
+}
