@@ -85,6 +85,9 @@ DOCS: dict[str, dict] = {}
 
 
 OCRSPACE_DEMO = "helloworld"
+# Server riêng (llama.cpp trên TUF, proxy ChatGPT): địa chỉ thật đặt qua biến môi trường, không ghi vào code
+TUF_URL = os.environ.get("VP_TUF_URL", "http://localhost:8080/v1")
+CHATGPT_PROXY_URL = os.environ.get("VP_CHATGPT_PROXY_URL", "http://localhost:10531/v1")
 
 
 # Mặc định = model free của OpenRouter. Dịch + trò chuyện: nemotron-3.5-super-vl:free (15/10/2026) — bench_english 0,76
@@ -131,7 +134,7 @@ class Config(BaseModel):
     ocr_lang: str = "eng"
     ocr_api_key: str = OCRSPACE_DEMO  # key demo của OCR.space, nên đăng ký key riêng (miễn phí)
     # OCR bằng vision LLM (OpenAI-compatible): PP-DocLayout + RapidOCR định vị đoạn, VLM đọc chữ
-    ocr_vlm_base_url: str = "http://100.64.0.1:8080/v1"   # server TUF (PaddleOCR-VL trên llama.cpp)
+    ocr_vlm_base_url: str = TUF_URL   # server TUF (PaddleOCR-VL trên llama.cpp)
     ocr_vlm_api_key: str = ""
     ocr_vlm_model: str = "paddleocr-vl"
     ocr_vlm_concurrency: int = 1   # số vùng gửi cùng lúc; llama-server chạy -np 1 (vd. TUF) nên để 1, Ollama/API cloud 4
@@ -524,11 +527,11 @@ OLLAMA_PROVIDER = {"id": "ollama", "name": "Ollama (local)", "base_url": "http:/
 SEED_PROVIDERS = [
     OLLAMA_PROVIDER,
     # 4b chứ không phải 9b: bench 21/09/2026 hai model ngang nhau về nghĩa mà 4b nhanh gấp 4 lần (nằm trọn trên GPU)
-    {"id": "tuf", "name": "llama.cpp – server TUF (Tailscale)", "base_url": "http://100.64.0.1:8080/v1",
+    {"id": "tuf", "name": "llama.cpp – server TUF (Tailscale)", "base_url": TUF_URL,
      "model": "4b", "vision": "paddleocr-vl", "parallel": 1},
     # Proxy OAuth tới tài khoản ChatGPT web (free) trên TUF, chỉ vào được trong LAN. gpt-6-luna căn vệt tô đúng nhất
     # (bench_align 24/09/2026: 56/60, ~3 s/lần); không nhận `temperature` (app tự bỏ); không nhận ảnh (25/09/2026).
-    {"id": "chatgpt", "name": "ChatGPT (proxy OAuth trên TUF, mạng LAN)", "base_url": "http://192.168.1.10:10531/v1",
+    {"id": "chatgpt", "name": "ChatGPT (proxy OAuth trên TUF, mạng LAN)", "base_url": CHATGPT_PROXY_URL,
      "model": "gpt-6-luna", "vision": "", "parallel": 1},
 ]
 PROVIDERS_FILE = DATA / "providers.json"

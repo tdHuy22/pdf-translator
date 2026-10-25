@@ -396,6 +396,7 @@ Trò chuyện / lập thuật ngữ / căn vệt tô chạy trên **server riên
 - **Chặn trang lạ**: request đổi dữ liệu (POST/PUT/PATCH/DELETE) phải có `Origin` khớp đúng scheme://host:cổng của app (CSRF; dịch vụ khác cùng tên máy khác cổng cũng bị chặn); header `Host` phải nằm trong danh sách cho phép (chặn DNS rebinding) — mặc định `localhost`, `127.0.0.1`, thêm tên khác bằng biến môi trường `ALLOWED_HOSTS`.
 - **Header bảo mật** trên mọi phản hồi: CSP chỉ cho script của chính app, không tải ảnh/font/kết nối nơi khác, không cho nhúng khung; `nosniff`.
 - **Giới hạn**: file tải lên tối đa 200 MB và 2.000 trang (`MAX_UPLOAD`, `MAX_PAGES` trong `app.py`; không có `Content-Length` — vd. HTTP/2 qua proxy — thì đếm từng mẩu lúc nhận), body đăng nhập tối đa 4 KB, phân tích PDF trong luồng riêng; ảnh trang `zoom` trong 0,5–4; một câu trả lời trò chuyện tối đa 8.192 token.
+- **Địa chỉ server riêng không nằm trong code**: preset `tuf` (llama.cpp) và `chatgpt` (proxy) lấy địa chỉ từ biến môi trường `VP_TUF_URL`, `VP_CHATGPT_PROXY_URL` (mặc định `localhost`). Đặt hai biến này trước lần chạy đầu, vì `data/providers.json` được tạo lúc đó; các script bench cũng đọc `VP_TUF_URL` làm `--base-url` mặc định.
 - **Trên server TUF**: app chỉ nghe `127.0.0.1:8000`; máy trong tailnet (Mac, iPhone) vào bằng **https://<máy>.<tailnet>.ts.net:8443** qua `tailscale serve` (HTTPS, chỉ trong tailnet, **không** bật Funnel — app còn tự từ chối mọi request có header `Tailscale-Funnel-Request`, phòng khi lỡ bật). Unit systemd đặt `HOST=127.0.0.1 ALLOWED_HOSTS=<máy>.<tailnet>.ts.net`; bật lối vào:
   ```
   tailscale serve --bg --https=8443 http://127.0.0.1:8000
@@ -503,3 +504,7 @@ Giới hạn còn lại: trang đầu của bản scan phải chờ OCR tới h�
 6. Mỗi ảnh trang được phủ một lớp chữ trong suốt (lấy lại từ lớp chữ PDF của chính trang đó) để bôi đen, tô vàng đồng bộ hai bản và hỏi LLM về đoạn đang đọc.
 
 Giới hạn: trang scan (OCR) chưa giữ được công thức giữa câu — chữ lấy từ OCR nên công thức thành chữ thường hoặc bị bỏ.
+
+## Giấy phép
+
+GNU AGPL-3.0, xem [LICENSE](LICENSE). Báo lỗi bảo mật: [SECURITY.md](SECURITY.md).

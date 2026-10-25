@@ -21,6 +21,7 @@ Kết quả: `bench/quality/judge.json` (điểm từng đoạn, kèm hoán vị
 import argparse
 import asyncio
 import json
+import os
 import random
 import re
 import sys
@@ -104,7 +105,7 @@ def parse_scores(content: str) -> tuple[dict | None, list[dict]]:
 async def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--systems", default="google,2b,4b,9b")
-    ap.add_argument("--base-url", default="http://100.64.0.1:8080/v1")
+    ap.add_argument("--base-url", default=os.environ.get("VP_TUF_URL", "http://localhost:8080/v1"))
     ap.add_argument("--model", default="gpt-oss", help="model TRỌNG TÀI, không được nằm trong --systems")
     ap.add_argument("--api-key", default="")
     ap.add_argument("--per-page", type=int, default=6)

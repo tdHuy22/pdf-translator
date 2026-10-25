@@ -24,6 +24,7 @@ import argparse
 import asyncio
 import collections
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -191,7 +192,7 @@ HEAD = ROW.format(system="hệ thống", paper="bài", page="tr.", seconds="giâ
 async def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--systems", default="google,2b,4b,9b", help="google hoặc tên preset/model trên --base-url")
-    ap.add_argument("--base-url", default="http://100.64.0.1:8080/v1", help="server LLM (mặc định: TUF)")
+    ap.add_argument("--base-url", default=os.environ.get("VP_TUF_URL", "http://localhost:8080/v1"), help="server LLM (mặc định: TUF)")
     ap.add_argument("--api-key", default="")
     ap.add_argument("--glossary-model", default="9b", help="model lập bảng thuật ngữ đóng băng")
     ap.add_argument("--rebuild-glossary", action="store_true")

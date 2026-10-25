@@ -30,6 +30,7 @@ import argparse
 import datetime
 import importlib.util
 import json
+import os
 import re
 import sys
 import time
@@ -130,7 +131,7 @@ def main():
     ap.add_argument("--app", default=str(ROOT / "app.py"))
     ap.add_argument("--tag", default="")
     ap.add_argument("--llm", default="", help="preset/model của router để đo cả bước LLM, vd. 4b")
-    ap.add_argument("--base-url", default="http://100.64.0.1:8080/v1", help="server LLM (mặc định router TUF)")
+    ap.add_argument("--base-url", default=os.environ.get("VP_TUF_URL", "http://localhost:8080/v1"), help="server LLM (mặc định router TUF)")
     ap.add_argument("--cands", type=int, default=0, help="--llm: số ứng viên gửi LLM (mặc định theo app)")
     ap.add_argument("--rows", type=int, default=0, help="--llm: số hàng tối đa của bảng (mặc định theo app)")
     ap.add_argument("--scan", action="store_true", help="đo trên bản scan (samples/<bài>-scan.pdf), chữ từ khối OCR")
