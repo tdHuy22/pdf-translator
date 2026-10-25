@@ -257,6 +257,8 @@ with A.test_client() as c:
     r = c.post(f"/api/{did}/chat", json={"cfg": cfg, "question": "Tóm tắt?", "page": 0})
     ok(r.status_code == 200 and "Xin chào từ Claude" in r.text, "trò chuyện (stream) qua Claude Code")
     ok(A.pdf_input(A.Config(base_url=CC.BASE, model="claude-sonnet-5-5")) == "native", "chế độ “Nguyên PDF” bật cho Claude Code")
+    r = c.post(f"/api/{did}/graph/build", json={"cfg": cfg, "source": "claude", "model": "gpt-4o"})
+    ok(r.status_code == 400 and "claude-opus-5-5" in r.json()["detail"], "dựng sơ đồ bằng Claude với model lạ → 400")
 
 print("4. Dựng sơ đồ bằng Claude: lệnh agent bị khoá (TM-19)")
 a = A.G.claude_argv("claude", "/venv/bin/python")
@@ -319,10 +321,13 @@ ok(not okk and name == gp.draft.name and gp.graph.read_bytes() == before,
    "agent đổi ô khoá và ghi {} vào bản sao sơ đồ cũ → bản nháp, sơ đồ của bài không đổi")
 (TMP / "build_graph.json").write_text(json.dumps(base_doc, ensure_ascii=False), "utf-8")
 mode("build")
-okk, name = asyncio.run(A.G.run_claude(gid, ROOT / "data" / "rag.pdf"))
+n0 = len(calls())
+okk, name = asyncio.run(A.G.run_claude(gid, ROOT / "data" / "rag.pdf", "claude-sonnet-5-5"))
 ok(okk and name == gp.graph.name and gp.graph.with_name("paper.graph.old.json").exists()
    and not [d for d in CC.WORK.iterdir() if d.name.startswith("graph-")],
    "sơ đồ giữ ô khoá → đạt, bản cũ sang paper.graph.old.json, thư mục làm việc đã xoá")
+a2 = calls()[-1]["args"]
+ok(len(calls()) == n0 + 1 and a2[a2.index("--model") + 1] == "claude-sonnet-5-5", "chọn Sonnet → agent chạy đúng --model đó")
 mode("flood")
 (TMP / "child.pid").unlink(missing_ok=True)
 old, A.G.CLAUDE_TIMEOUT = A.G.CLAUDE_TIMEOUT, 2

@@ -14,7 +14,14 @@ const shown = () => document.body.classList.contains("chat") && !$("graphPane").
 // trình duyệt, mặc định Claude (sơ đồ tốt nhất đã đo)
 let gsrc = "claude";
 try { gsrc = localStorage.getItem("graph_source") === "api" ? "api" : "claude"; } catch {}
-function drawSrc() { document.querySelectorAll("#graphPane [data-gsrc]").forEach(b => b.classList.toggle("on", b.dataset.gsrc === gsrc)); }
+const gmodel = $("graphModel");   // model Claude dựng sơ đồ (Opus mặc định), nhớ trong trình duyệt
+try { if (localStorage.getItem("graph_model")) gmodel.value = localStorage.getItem("graph_model"); } catch {}
+if (!gmodel.value) gmodel.value = "claude-opus-5-5";
+gmodel.onchange = () => { try { localStorage.setItem("graph_model", gmodel.value); } catch {} };
+function drawSrc() {
+  document.querySelectorAll("#graphPane [data-gsrc]").forEach(b => b.classList.toggle("on", b.dataset.gsrc === gsrc));
+  gmodel.hidden = gsrc !== "claude";
+}
 document.querySelectorAll("#graphPane [data-gsrc]").forEach(b => b.onclick = () => {
   gsrc = b.dataset.gsrc;
   try { localStorage.setItem("graph_source", gsrc); } catch {}
@@ -91,7 +98,7 @@ btn.onclick = async () => {
   if (!doc) return;
   const model = ST?.model || "model miễn phí", keep = ST?.graph ? " Ô bạn đã khoá giữ nguyên, bản cũ được giữ lại." : "";
   const ask = gsrc === "claude"
-    ? `Dựng sơ đồ bằng Claude Code (Opus 5.5) trên máy chạy app, dùng gói Claude đã đăng nhập ở đó. Agent đọc bài, viết ` +
+    ? `Dựng sơ đồ bằng Claude Code (${gmodel.selectedOptions[0]?.textContent || "Opus 5.5"}) trên máy chạy app, dùng gói Claude đã đăng nhập ở đó. Agent đọc bài, viết ` +
       `sơ đồ, tự kiểm và sửa; mất khoảng 10–30 phút.` + keep + "\n\nTiếp tục?"
     : `Dựng sơ đồ gửi toàn văn bài tới ${model} qua OpenRouter. Nhà cung cấp model miễn phí có thể dùng chữ ` +
       `gửi đi để huấn luyện: chỉ dựng cho bài đã công khai.\n\nMất 5–30 phút, tối đa 32 lượt gọi trong hạn mức ` +
@@ -100,7 +107,8 @@ btn.onclick = async () => {
   btn.disabled = true;
   try {
     const r = await fetch(`/api/${doc.id}/graph/build`, { method: "POST", headers: { "Content-Type": "application/json" },
-                                                          body: JSON.stringify({ cfg: cfg(), source: gsrc, allow_training: gsrc === "api" }) });
+                                                          body: JSON.stringify({ cfg: cfg(), source: gsrc, allow_training: gsrc === "api",
+                                                                               model: gsrc === "claude" ? gmodel.value : "" }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { state.textContent = j.detail || `Lỗi ${r.status}`; return; }
     loadedFor = null;

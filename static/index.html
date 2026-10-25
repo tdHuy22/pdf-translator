@@ -318,6 +318,8 @@
   .ghead { display:flex; gap:8px; align-items:center; justify-content:space-between; padding:6px 10px; flex-wrap:wrap; }
   .gtools { display:flex; gap:6px; align-items:center; margin-left:auto; }
   .gtools .seg button { font-size:12px; padding:3px 8px; }
+  #graphModel { font-size:12px; padding:2px 4px; }
+  #graphModel[hidden] { display:none; }
   #graphBuild[hidden], #graphLog[hidden], #graphFrame[hidden] { display:none; }
   #graphLog { margin:0 10px 8px; padding:6px 8px; max-height:45vh; overflow:auto; font-size:11px; white-space:pre-wrap;
               background:var(--hover); border-radius:6px; }
@@ -695,8 +697,9 @@
   <div id="graphPane" class="pane" hidden>
     <div class="ghead"><span id="graphState" class="hint"></span>
       <span class="gtools"><span class="seg" role="group" aria-label="Dựng sơ đồ bằng">
-        <button type="button" data-gsrc="claude" title="Agent Claude Code (Opus) chạy skill dựng sơ đồ trên máy chạy app: sơ đồ tốt nhất, 10–30 phút, dùng gói Claude">✳️ Claude</button>
+        <button type="button" data-gsrc="claude" title="Agent Claude Code (model chọn ở ô bên cạnh: Opus kỹ nhất, Sonnet nhanh hơn) chạy skill dựng sơ đồ trên máy chạy app: sơ đồ tốt nhất, 10–30 phút, dùng gói Claude">✳️ Claude</button>
         <button type="button" data-gsrc="api" title="Model miễn phí của OpenRouter: chữ bài gửi tới nhà cung cấp có thể huấn luyện trên đó">🌐 API</button></span>
+      <select id="graphModel" title="Model Claude dựng sơ đồ: Opus kỹ nhất (skill dựng sơ đồ đo trên Opus), Sonnet nhanh hơn"><option value="claude-opus-5-5">Opus 5.5</option><option value="claude-sonnet-5-5">Sonnet 5.5</option></select>
       <button id="graphBuild" type="button" hidden title="Dựng sơ đồ (vài phút đến nửa giờ). Dựng lại: ô bạn đã khoá giữ nguyên">Dựng sơ đồ</button></span></div>
     <pre id="graphLog" hidden></pre>
     <iframe id="graphFrame" title="Sơ đồ bài báo" hidden></iframe>

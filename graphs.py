@@ -373,7 +373,7 @@ def verify(graph_file: Path, blocks_file: Path, pdf: Path, base: bytes | None) -
     return not bad, "; ".join(f"{d.code} {d.where}: {d.msg}" for d in bad[:8]) or f"{len(graph.nodes)} ô, đạt"
 
 
-async def run_claude(doc_id: str, src: Path) -> tuple[bool, str]:
+async def run_claude(doc_id: str, src: Path, model: str = CLAUDE_MODEL) -> tuple[bool, str]:
     """Dựng bằng agent Claude Code trong thư mục làm việc tạm (bản sao blocks, PDF, skill, sơ đồ cũ). Đạt thì chép
     vào thư mục bài (bản cũ sang `.old.json`; ô khoá đã được kiểm như `check --base`); chưa đạt thì thành bản nháp."""
     p = paths(doc_id)
@@ -394,7 +394,7 @@ async def run_claude(doc_id: str, src: Path) -> tuple[bool, str]:
             (work / "base.graph.json").write_bytes(base)
         py = sys.executable
         proc = await asyncio.create_subprocess_exec(
-            *claude_argv(exe, py), cwd=work, env=CC.child_env(), stdin=asyncio.subprocess.PIPE,
+            *claude_argv(exe, py, model), cwd=work, env=CC.child_env(), stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, limit=64 << 20, start_new_session=True)
         proc.stdin.write(claude_prompt(py, locked).encode("utf-8"))
         proc.stdin.close()

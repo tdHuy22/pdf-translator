@@ -300,13 +300,14 @@ tầng dưới. Mỗi ô neo về đúng câu trong bài:
   nguyên văn, **bản dịch** của câu đó (câu cùng vị trí trong bản dịch của đoạn; hai bản khác số câu thì cả đoạn, ghi
   "Bản dịch cả đoạn") và nút **Xem trong bài**. Trên điện thoại khung sơ đồ che cả bài: nút Xem trong bài đóng khung lại.
 - **Dựng bằng ✳️ Claude | 🌐 API** (nút chuyển cạnh nút dựng, nhớ trong trình duyệt, mặc định Claude). ✳️ Claude: agent
-  Claude Code (Opus 5.5) chạy skill dung-so-do của paper-graph trên máy chạy app, trong thư mục làm việc tạm (bản sao
+  Claude Code (chọn Opus 5.5, mặc định và kỹ nhất, hay Sonnet 5.5, nhanh hơn) chạy skill dung-so-do của paper-graph trên máy chạy app, trong thư mục làm việc tạm (bản sao
   các đoạn, PDF, skill, sơ đồ cũ): đọc bài bằng `paper_graph read`, cắt hình xem bằng mắt, viết sơ đồ, `check` và sửa
   tới khi đạt; app kiểm lại (0 lỗi, không PG220, ô khoá giữ nguyên) rồi mới chép vào bài. Agent bị khoá: `--safe-mode
   --restricted`, `dontAsk`, công cụ file chỉ trong thư mục làm việc, shell chỉ một lệnh: cổng `pg_gate.py` chạy bằng
   `python -I` (không nạp module từ thư mục làm việc), nhận `read|check|figure|fmt` và chỉ các file của thư mục đó; bước
   kiểm cuối dùng bản gốc (các đoạn, PDF, bản chụp sơ đồ cũ), không dùng bản sao agent sửa được. Đo 23/10/2026 bài GQA
-  (7 trang): khoảng 5 phút, 31–33 ô, 6 tầng, 0 lỗi (hai lần, lần hai qua cổng). 🌐 API: như dưới.
+  (7 trang): khoảng 5 phút, 31–33 ô, 6 tầng, 0 lỗi (hai lần, lần hai qua cổng); bản scan GQA (OCR RapidOCR): 5,5 phút, 35 ô, 56/56
+  câu trích có thật; bài 40 trang (FIDES): 10 phút, 46 ô, 85 câu trích, 0 lỗi (còn xa hạn chót 45 phút). 🌐 API: như dưới.
 - **Dựng sơ đồ / Dựng lại bằng 🌐 API**: gửi toàn văn bài tới model miễn phí của OpenRouter (mặc định của paper-graph, có model dự
   phòng), dùng key OpenRouter đã nhớ trong ⚙️ Cấu hình. Nhà cung cấp model miễn phí có thể huấn luyện trên chữ gửi đi
   (cần bật "Free model training" trên OpenRouter), nên app hỏi lại trước khi gửi: chỉ dựng cho bài đã công khai. Mất 5–30

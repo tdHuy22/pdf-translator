@@ -6085,8 +6085,8 @@ async def graph_job(doc_id: str, d: dict, cfg: Config, model: str, key: str, sou
         G.keep_old(p)              # dựng lại không đạt thì sơ đồ cũ vẫn đi với đúng các đoạn cũ
         await asyncio.to_thread(G.export_blocks, sys.modules[__name__], Path(d["src"]), given, p)
         if source == "claude":
-            G.say(f"Dựng bằng Claude Code ({G.CLAUDE_MODEL}, skill dung-so-do): thường 10–30 phút")
-            ok, name = await G.run_claude(doc_id, Path(d["src"]))
+            G.say(f"Dựng bằng Claude Code ({model}, skill dung-so-do): thường 10–30 phút")
+            ok, name = await G.run_claude(doc_id, Path(d["src"]), model)
         else:
             ok, name = await asyncio.to_thread(G.run_build, doc_id, model, key)
         done = {"ok": ok, "out": name}
@@ -6111,9 +6111,12 @@ async def graph_build(doc_id: str, req: GraphBuild):
     if req.source == "claude":   # gói Claude của chủ máy, chữ bài không qua nhà cung cấp free (TM-19 … TM-23)
         if not CC.binary():
             raise HTTPException(400, "Chưa cài Claude Code trên máy chạy app")
-        if not G.claim(doc_id, G.CLAUDE_MODEL):
+        model = req.model.strip() or G.CLAUDE_MODEL   # Opus mặc định (skill đo trên Opus); Sonnet nhanh hơn
+        if model not in CC.MODELS:
+            raise HTTPException(400, f"Model Claude phải là một trong: {', '.join(CC.MODELS)}")
+        if not G.claim(doc_id, model):
             raise HTTPException(409, "Đang dựng một sơ đồ khác: chờ xong rồi thử lại")
-        task = asyncio.create_task(graph_job(doc_id, d, resolve_keys(req.cfg), G.CLAUDE_MODEL, "", "claude"))
+        task = asyncio.create_task(graph_job(doc_id, d, resolve_keys(req.cfg), model, "", "claude"))
         _graph_tasks.add(task)
         task.add_done_callback(_graph_tasks.discard)
         return G.status(doc_id, d)
