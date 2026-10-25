@@ -2,7 +2,7 @@
 
 ## 2026-10-11 · Đăng nhập cho app, truy cập qua LAN và Tailscale
 Luồng:
-- Trình duyệt (điện thoại, laptop) → HTTP tới TUF. Hiện nay vào thẳng `192.168.1.10:8000` trong LAN; sắp tới vào thêm qua Tailscale (IP tailnet `100.64.0.1` hoặc `tailscale serve` HTTPS, KHÔNG dùng Funnel).
+- Trình duyệt (điện thoại, laptop) → HTTP tới TUF. Hiện nay vào qua Tailscale (`tailscale serve` HTTPS, KHÔNG dùng Funnel).
 - FastAPI (`app.py`): 37 route `/api/*` và static mount `/` (`app.py:5754`), hiện không kiểm ai gọi.
 - Tài sản: tài liệu, bản dịch, trò chuyện, ghi chú trong `data/`; key API trong `data/keys.json`; hạn mức LLM (OpenRouter, proxy ChatGPT); hệ thống file của TUF.
 - Mới: trang đăng nhập → `POST /api/login` → cookie phiên → một middleware kiểm mọi request trước khi tới route hay static.

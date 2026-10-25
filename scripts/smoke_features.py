@@ -170,7 +170,7 @@ with A.test_client() as c:
     ok(A.resolve_keys(A.Config(base_url="https://api.openai.com/v1")).api_key == "sk-proj-ABCDEFGH1234", "gửi rỗng → tự điền lại")
     c.request("DELETE", "/api/keys", params={"slot":"https://api.openai.com/v1"})
     k = A.resolve_keys(A.Config(base_url="https://openrouter.ai/api/v1", api_key="sk-or-SECRET123456",
-                                align_base_url="http://192.168.1.10:10531/v1", chat_base_url="http://10.0.0.9/v1"))
+                                align_base_url="http://100.64.0.1:10531/v1", chat_base_url="http://10.0.0.9/v1"))
     ok(A.align_cfg(k).api_key == "" and A.chat_cfg(k).api_key == "" and A.gloss_cfg(k).api_key == "sk-or-SECRET123456",
        "server riêng cho căn/trò chuyện không nhận key của server dịch (chỉ dùng chung khi để trống base URL)")
     c.request("DELETE", "/api/keys", params={"slot": "https://openrouter.ai/api/v1"})
@@ -470,7 +470,7 @@ OR = "https://openrouter.ai/api/v1"
 ok(A.pdf_input(A.Config(base_url=OR, model="nex-agi/nex-n2.5-pro:free")) == "pdf-text"
    and A.pdf_input(A.Config(base_url=OR, model="google/gemini-2.5-flash")) == "native"
    and A.pdf_input(A.Config(base_url="https://api.openai.com/v1", model="gpt-5")) == "native"
-   and not A.pdf_input(A.Config(base_url="http://192.168.1.10:10531/v1", model="gpt-6-luna"))
+   and not A.pdf_input(A.Config(base_url="http://100.64.0.1:10531/v1", model="gpt-6-luna"))
    and not A.pdf_input(A.Config(base_url="http://localhost:11434/v1", model="q")),
    "server nhận file PDF: OpenRouter (pdf-text / native), OpenAI; proxy ChatGPT, Ollama thì không")
 with A.test_client() as c:
@@ -759,7 +759,7 @@ try:
         items = [{"base_url": A.OPENROUTER + "/", "model": "inclusionai/ling-3.1-flash"},
                  {"base_url": A.OPENROUTER, "model": "nvidia/nemotron-3.5-super-vl:free"},
                  {"base_url": A.OPENROUTER, "model": "inclusionai/khong-con"},
-                 {"base_url": "http://192.168.1.10:8080/v1", "model": "4b"},
+                 {"base_url": "http://100.64.0.1:8080/v1", "model": "4b"},
                  {"base_url": A.OPENROUTER, "model": "x/nan"}]
         got = c.post("/api/model_prices", json={"items": items}).json()["items"]
         ok(got[4]["listed"] and got[4]["price"] is None and not got[2]["listed"],
