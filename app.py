@@ -526,11 +526,11 @@ OLLAMA_PROVIDER = {"id": "ollama", "name": "Ollama (local)", "base_url": "http:/
                    "model": "qwen3.5:latest", "vision": PADDLE_OCR, "parallel": 4}
 SEED_PROVIDERS = [
     OLLAMA_PROVIDER,
-    # 4b chứ không phải 9b: bench 21/09/2026 hai model ngang nhau về nghĩa mà 4b nhanh gấp 4 lần (nằm trọn trên GPU).
+    # Model dịch: qwen36-35b (Qwen3.6-35B-A3B, expert trên CPU), người dùng chọn 03/11/2026 khi router TUF bỏ preset 4b.
     # OCR: xiaomi-ocr (Xiaomi-OCR-0 Q6_K, 4 slot) — bench 02/11/2026 trên 30 trang scan 100 dpi, cả pipeline: giống
     # theo thứ tự 98,42% / 8,2 s/trang, paddleocr-vl 97,78% / 19,7 s/trang (scripts/bench_ocr_pipeline.py --vlm)
     {"id": "tuf", "name": "llama.cpp – server TUF (Tailscale)", "base_url": TUF_URL,
-     "model": "4b", "vision": "xiaomi-ocr", "parallel": 1},
+     "model": "qwen36-35b", "vision": "xiaomi-ocr", "parallel": 1},
     # Proxy OAuth tới tài khoản ChatGPT web (free) trên TUF, chỉ vào được trong LAN. gpt-6-luna căn vệt tô đúng nhất
     # (bench_align 24/09/2026: 56/60, ~3 s/lần); không nhận `temperature` (app tự bỏ); không nhận ảnh (25/09/2026).
     {"id": "chatgpt", "name": "ChatGPT (proxy OAuth trên TUF, mạng LAN)", "base_url": CHATGPT_PROXY_URL,

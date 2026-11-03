@@ -704,7 +704,7 @@ dflt, tuf = asyncio.run(cfg_of("openrouter")), asyncio.run(cfg_of("tuf"))
 # → chỉ kiểm script và app dùng cùng một mặc định
 ok(dflt == {"base_url": "https://openrouter.ai/api/v1", "model": A.FREE_MODEL} and A.Config().model == A.FREE_MODEL,
    "mặc định (script và app): OpenRouter, FREE_MODEL")
-ok(tuf["base_url"].endswith(":8080/v1") and tuf["model"] == "4b" and asyncio.run(cfg_of("tuf", "model=9b"))["model"] == "9b",
+ok(tuf["base_url"].endswith(":8080/v1") and tuf["model"] == "qwen36-35b" and asyncio.run(cfg_of("tuf", "model=9b"))["model"] == "9b",
    "--provider tuf: Base URL + model của nhà cung cấp đã lưu; --set/--model vẫn đè được")
 try:
     asyncio.run(cfg_of("khong-co"))

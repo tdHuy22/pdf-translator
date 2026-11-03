@@ -132,6 +132,11 @@ function loadSettings() {
   // v10: OCR trên TUF đổi từ PaddleOCR-VL sang Xiaomi-OCR-0 (preset xiaomi-ocr, 02/11/2026: chép chữ đúng hơn,
   // nhanh hơn ~2,4 lần qua cả pipeline) → cài đặt còn để mặc định cũ của TUF thì đổi theo
   if (ver < 10 && s.ocr_preset === "tuf" && $("ocr_vlm_model").value === "paddleocr-vl") $("ocr_vlm_model").value = "xiaomi-ocr";
+  // v11: router TUF bỏ preset 4b (11/2026) → ô model nào của TUF còn để 4b thì đổi sang qwen36-35b (Qwen3.6-35B-A3B)
+  if (ver < 11) for (const [sel, model] of [["preset", "model"], ["chat_preset", "chat_model"], ["gloss_preset", "gloss_model"],
+                                            ["align_preset", "align_model"]]) {
+    if (s[sel] === "tuf" && $(model).value === "4b") $(model).value = "qwen36-35b";
+  }
   // nhà cung cấp đã lưu không còn (đã xoá) → "Tùy chỉnh", giữ nguyên Base URL và model đang có
   document.querySelectorAll("select.provider-sel").forEach(sel => { if (!sel.value) sel.value = "custom"; });
   fillKeys();
@@ -140,7 +145,7 @@ function loadSettings() {
   saveSettings();
 }
 function saveSettings() {
-  const s = { settings_v: 10 };
+  const s = { settings_v: 11 };
   FIELDS.forEach(f => s[f] = $(f).value);
   CHECKS.forEach(f => s[f] = $(f).checked);
   try { localStorage.setItem("llm", JSON.stringify(s)); } catch {}
