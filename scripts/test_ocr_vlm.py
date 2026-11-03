@@ -42,6 +42,14 @@ CASES = [
     (r"the \( ^{*} \) mark", "the * mark"),                        # kiểu chỉ số của Unlimited-OCR (đã có từ trước)
     ("## 2.3 FLASHATTENTION", "2.3 FLASHATTENTION"),             # tiêu đề Markdown
     ("**Abstract** text", "Abstract text"),
+    # review 03/11/2026: "\" lẻ, ngoặc thoát, ** của code, # không phải tiêu đề, dòng trống giữ nguyên
+    (r"\(a\\)", "a"),
+    ("\\(a\\\nb\\)", "a b"),
+    (r"\(a^{\}}\)", "a}"),
+    (r"x $y\$ z", r"x $y\$ z"),
+    ("compute x**2 + y**2 and f(**kw)", "compute x**2 + y**2 and f(**kw)"),
+    ("a\n\n# Intro", "a\n\nIntro"),
+    ("# of samples", "# of samples"),
 ]
 for src, want in CASES:
     got = A.latex_to_text(src)

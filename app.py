@@ -1651,11 +1651,15 @@ def _tex_arg(s: str, i: int) -> tuple[str, int]:
     if i >= len(s):
         return "", i
     if s[i] == "{":
-        depth = 0
-        for j in range(i, len(s)):
+        depth, j = 0, i
+        while j < len(s):
+            if s[j] == "\\":  # \{ \} là ký tự, không phải ngoặc
+                j += 2
+                continue
             depth += {"{": 1, "}": -1}.get(s[j], 0)
             if depth == 0:
                 return s[i + 1:j], j + 1
+            j += 1
         return s[i + 1:], len(s)
     m = re.match(r"\\[A-Za-z]+|\\.|.", s[i:])
     return m[0], i + len(m[0])
@@ -1680,7 +1684,10 @@ def tex_math_text(s: str) -> str:
             out.append(c)
             i += 1
             continue
-        m = re.match(r"\\([A-Za-z]+|.)", s[i:])
+        m = re.match(r"\\([A-Za-z]+|.)", s[i:], re.S)
+        if not m:  # "\" lẻ ở cuối (model chép "\\" sát "\)")
+            i += 1
+            continue
         name, i = m[1], i + len(m[0])
         if name in ("frac", "dfrac", "tfrac"):
             a, i = _tex_arg(s, i)
@@ -1700,7 +1707,7 @@ def tex_math_text(s: str) -> str:
         elif name in ("left", "right", "big", "Big", "bigg", "Bigg", "bigl", "bigr", "Bigl", "Bigr", "displaystyle",
                       "limits", "nolimits", "!"):
             continue
-        elif name in (",", ";", ":", " ", "\\", "quad", "qquad", "enspace"):
+        elif name in (",", ";", ":", " ", "\\", "\n", "quad", "qquad", "enspace"):
             out.append(" ")
         elif name in _TEX_SYMBOLS:
             out.append(_TEX_SYMBOLS[name])
@@ -1713,10 +1720,12 @@ def latex_to_text(s: str) -> str:
     """Công thức trong dòng `\\( … \\)`, `$…$` → chữ (tex_math_text); `\\dagger` → `†`… ngoài công thức; bỏ đánh dấu
     Markdown mà model OCR hay thêm (`## Tiêu đề`, `**đậm**`)."""
     s = re.sub(r"\\\((.+?)\\\)", lambda m: tex_math_text(m[1]), s, flags=re.S)
-    s = re.sub(r"(?<![\\$\w])\$(?!\s)([^$\n]{1,200}?)(?<!\s)\$(?!\w)", lambda m: tex_math_text(m[1]), s)
+    s = re.sub(r"(?<![\\$\w])\$(?!\s)([^$\n]{1,200}?)(?<![\s\\])\$(?!\w)", lambda m: tex_math_text(m[1]), s)
     s = re.sub(r"\\(ddagger|dagger|ast)\b", lambda m: {"ddagger": "‡", "dagger": "†", "ast": "*"}[m[1]], s)
-    s = re.sub(r"(?m)^\s*#{1,6}\s+", "", s)
-    s = re.sub(r"\*\*(.+?)\*\*", r"\1", s)
+    # tiêu đề "## 2.3 …" (một dấu # thì chỉ khi theo sau là chữ hoa/số: "# of samples" là chữ thật); không ăn dòng trống
+    s = re.sub(r"(?m)^[ \t]*(?:#{2,6}|#(?=[ \t]+[A-Z0-9]))[ \t]+", "", s)
+    # **đậm** chỉ khi ** sát chữ ở cả hai phía và không dính chữ bên ngoài: "x**2 + y**2", "f(**kw)" giữ nguyên
+    s = re.sub(r"(?<![\w*])\*\*(?=\S)(.+?)(?<=\S)\*\*(?![\w*])", r"\1", s)
     return re.sub(r"\s+([,.;:])", r"\1", s)
 
 
