@@ -526,9 +526,11 @@ OLLAMA_PROVIDER = {"id": "ollama", "name": "Ollama (local)", "base_url": "http:/
                    "model": "qwen3.5:latest", "vision": PADDLE_OCR, "parallel": 4}
 SEED_PROVIDERS = [
     OLLAMA_PROVIDER,
-    # 4b chứ không phải 9b: bench 21/09/2026 hai model ngang nhau về nghĩa mà 4b nhanh gấp 4 lần (nằm trọn trên GPU)
+    # 4b chứ không phải 9b: bench 21/09/2026 hai model ngang nhau về nghĩa mà 4b nhanh gấp 4 lần (nằm trọn trên GPU).
+    # OCR: xiaomi-ocr (Xiaomi-OCR-0 Q6_K, 4 slot) — bench 02/11/2026 trên 30 trang scan 100 dpi, cả pipeline: giống
+    # theo thứ tự 98,42% / 8,2 s/trang, paddleocr-vl 97,78% / 19,7 s/trang (scripts/bench_ocr_pipeline.py --vlm)
     {"id": "tuf", "name": "llama.cpp – server TUF (Tailscale)", "base_url": TUF_URL,
-     "model": "4b", "vision": "paddleocr-vl", "parallel": 1},
+     "model": "4b", "vision": "xiaomi-ocr", "parallel": 1},
     # Proxy OAuth tới tài khoản ChatGPT web (free) trên TUF, chỉ vào được trong LAN. gpt-6-luna căn vệt tô đúng nhất
     # (bench_align 24/09/2026: 56/60, ~3 s/lần); không nhận `temperature` (app tự bỏ); không nhận ảnh (25/09/2026).
     {"id": "chatgpt", "name": "ChatGPT (proxy OAuth trên TUF, mạng LAN)", "base_url": CHATGPT_PROXY_URL,
@@ -1387,6 +1389,7 @@ def ocr_lines(lines: list[tuple]) -> list[dict]:
                 x += w
         chars = [{"c": c, "bbox": (a, y0, b, y1), "origin": (a, base)} for c, (a, b) in zip(text, boxes)]
         out.append({"bbox": (x0, y0, x1, y1), "block": 0, "cover": tuple(ln[:4]),
+                    "score": ln[7] if len(ln) > 7 else None,
                     "spans": [{"font": OCR_FONT, "flags": 4, "size": size, "color": 0, "origin": (x0, base), "chars": chars}]})
     paras: list[dict] = []  # dòng liền dưới, giao nhau theo x, cao gần bằng nhau → cùng khối
     for ln in sorted(out, key=lambda l: (l["bbox"][1], l["bbox"][0])):
@@ -1430,10 +1433,12 @@ def stroke_weights(page: pymupdf.Page, lines: list[dict], zoom: float = 2.0) -> 
     return [w / med if w else None for w in out]
 
 
-def lines_to_blocks(page: pymupdf.Page, lines: list[tuple], regions: list[dict] | None = None) -> list[dict]:
+def lines_to_blocks(page: pymupdf.Page, lines: list[tuple], regions: list[dict] | None = None,
+                    keep_lines: bool = False) -> list[dict]:
     """Gom dòng OCR theo vùng PP-DocLayout bằng đúng bộ gom đoạn của PDF có lớp chữ (layout_groups, text_block):
     đúng đoạn, đúng thứ tự đọc, bỏ hình/công thức, bảng dịch từng ô, thuật toán từng dòng. Không có model layout
-    thì gom theo khoảng cách dòng. Chữ đậm đoán theo độ dày nét của cả khối (một dòng lẻ dễ nhầm)."""
+    thì gom theo khoảng cách dòng. Chữ đậm đoán theo độ dày nét của cả khối (một dòng lẻ dễ nhầm).
+    keep_lines: thêm "_lines" (khung từng dòng) cho ocr_vlm che dòng của khối khác; ocr_vlm bỏ trước khi trả về."""
     if regions is None:
         regions = detect_layout(page)
     lines = ocr_lines(lines)
@@ -1455,14 +1460,19 @@ def lines_to_blocks(page: pymupdf.Page, lines: list[tuple], regions: list[dict] 
         b["cover"] = (min(r[0] for r in c), min(r[1] for r in c), max(r[2] for r in c), max(r[3] for r in c))
         if g and per_region[id(g)] == 1 and g["label"] not in ("table", "algorithm"):
             b["region"] = g["bbox"]  # vùng chỉ có một đoạn: VLM đọc lại cả vùng (khung vùng không cắt sát chữ)
+        scores = [l["score"] for l in ls if l.get("score") is not None]
+        if scores:
+            b["conf"] = min(scores)  # dòng kém chắc nhất: ocr_vlm chỉ đọc lại khối có dòng dưới VLM_CONF
+        if keep_lines:
+            b["_lines"] = [l["bbox"] for l in ls]
         blocks.append(b)
     return blocks
 
 
 def rapid_lines(page: pymupdf.Page, lang: str, zoom: float = 2.0) -> list[tuple]:
     """RapidOCR (PP-OCR chạy ONNX) → các dòng (x0, y0, x1, y1, chữ, cỡ chữ, [(x0, x1) từng ký tự khác dấu cách] hoặc
-    None). Lần đầu tự tải model (~15MB). Không chạy bộ phân loại chữ ngược (use_cls): trang tài liệu không có dòng
-    lộn ngược, đoán nhầm thì hỏng dòng."""
+    None, độ tin cậy 0–1). Lần đầu tự tải model (~15MB). Không chạy bộ phân loại chữ ngược (use_cls): trang tài liệu
+    không có dòng lộn ngược, đoán nhầm thì hỏng dòng."""
     import numpy as np
     from rapidocr import LangRec, RapidOCR
     code = {"eng": "EN", "en": "EN", "chi": "CH", "ch": "CH", "vie": "LATIN", "vi": "LATIN"}.get(lang.lower(), lang.upper())
@@ -1492,7 +1502,7 @@ def rapid_lines(page: pymupdf.Page, lang: str, zoom: float = 2.0) -> list[tuple]
         (ax, ay), (bx, by), (cx, cy), (dx, dy) = [(float(x) / zoom, float(y) / zoom) for x, y in box]
         h = (math.hypot(dx - ax, dy - ay) + math.hypot(cx - bx, cy - by)) / 2  # chiều cao khung xoay theo dòng
         lines.append((min(ax, bx, cx, dx), min(ay, by, cy, dy), max(ax, bx, cx, dx), max(ay, by, cy, dy), text,
-                      RAPID_EM * h, chars))
+                      RAPID_EM * h, chars, round(float(score), 4)))
     return lines
 
 
@@ -1591,6 +1601,8 @@ def vlm_ocr_prompt(model: str) -> str:
         return "OCR:"
     if "deepseek-ocr" in m:
         return "Free OCR."
+    if "xiaomi-ocr" in m:  # prompt chính thức của Xiaomi-OCR-0 cho vùng chữ (evaluation_pipeline/twostage_img2md.py)
+        return "Extract the text in the image."
     return VLM_OCR_PROMPT
 
 
@@ -1608,10 +1620,103 @@ def uocr_skip(label: str) -> bool:
         not re.search(r"caption|title|footnote", label)
 
 
+# LaTeX trong dòng mà model OCR chép ra (Xiaomi-OCR-0: "\(\mathbf{Q}\in \mathbb{R}^{N\times d}\)") → chữ thường để dịch
+# và in lại. Không dùng pylatexenc: nó đổi \mathbf{Q} thành ký tự toán 𝐐 (font Times/Liberation không có glyph) và để
+# nguyên ^ _ — đằng nào cũng phải xử lý tiếp, nên tự đổi: bỏ lệnh định kiểu, ký hiệu → Unicode thông dụng, mũ/chỉ số
+# → ký tự trên/dưới khi Unicode có đủ, không thì viết liền như chữ glyph của PDF có lớp chữ ("RN×d").
+_TEX_SYMBOLS = {
+    "in": "∈", "notin": "∉", "times": "×", "cdot": "·", "cdots": "⋯", "ldots": "…", "dots": "…", "top": "⊤",
+    "intercal": "⊺", "leq": "≤", "le": "≤", "geq": "≥", "ge": "≥", "neq": "≠", "ne": "≠", "approx": "≈", "sim": "∼",
+    "simeq": "≃", "equiv": "≡", "propto": "∝", "gg": "≫", "ll": "≪", "to": "→", "rightarrow": "→", "leftarrow": "←",
+    "Rightarrow": "⇒", "leftrightarrow": "↔", "mapsto": "↦", "infty": "∞", "sum": "∑", "prod": "∏", "int": "∫",
+    "partial": "∂", "nabla": "∇", "pm": "±", "mp": "∓", "odot": "⊙", "otimes": "⊗", "oplus": "⊕", "circ": "∘",
+    "forall": "∀", "exists": "∃", "subset": "⊂", "subseteq": "⊆", "cup": "∪", "cap": "∩", "emptyset": "∅",
+    "mid": "|", "vert": "|", "Vert": "‖", "|": "‖", "langle": "⟨", "rangle": "⟩", "lfloor": "⌊", "rfloor": "⌋",
+    "lceil": "⌈", "rceil": "⌉", "prime": "′", "dagger": "†", "ddagger": "‡", "ast": "*", "star": "⋆", "%": "%",
+    "neg": "¬", "land": "∧", "lor": "∨", "wedge": "∧", "vee": "∨", "{": "{", "}": "}", "_": "_", "&": "&", "#": "#",
+    "alpha": "α", "beta": "β", "gamma": "γ", "delta": "δ", "epsilon": "ϵ", "varepsilon": "ε", "zeta": "ζ", "eta": "η",
+    "theta": "θ", "vartheta": "ϑ", "iota": "ι", "kappa": "κ", "lambda": "λ", "mu": "μ", "nu": "ν", "xi": "ξ",
+    "pi": "π", "rho": "ρ", "sigma": "σ", "tau": "τ", "upsilon": "υ", "phi": "ϕ", "varphi": "φ", "chi": "χ",
+    "psi": "ψ", "omega": "ω", "Gamma": "Γ", "Delta": "Δ", "Theta": "Θ", "Lambda": "Λ", "Xi": "Ξ", "Pi": "Π",
+    "Sigma": "Σ", "Phi": "Φ", "Psi": "Ψ", "Omega": "Ω", "ell": "ℓ",
+}
+_SUP = ("0123456789+-=()niT", "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱᵀ")
+_SUB = ("0123456789+-=()aeoxijklmnprstuv", "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎ₐₑₒₓᵢⱼₖₗₘₙₚᵣₛₜᵤᵥ")
+
+
+def _tex_arg(s: str, i: int) -> tuple[str, int]:
+    """Đối số tại s[i]: {…} (đếm ngoặc lồng) hoặc một ký tự / một lệnh."""
+    while i < len(s) and s[i] == " ":
+        i += 1
+    if i >= len(s):
+        return "", i
+    if s[i] == "{":
+        depth = 0
+        for j in range(i, len(s)):
+            depth += {"{": 1, "}": -1}.get(s[j], 0)
+            if depth == 0:
+                return s[i + 1:j], j + 1
+        return s[i + 1:], len(s)
+    m = re.match(r"\\[A-Za-z]+|\\.|.", s[i:])
+    return m[0], i + len(m[0])
+
+
+def tex_math_text(s: str) -> str:
+    """Nội dung một công thức LaTeX (không có dấu bao) → chữ Unicode, vd. `\\mathbf{O}\\in \\mathbb{R}^{N\\times d}` →
+    `O∈RN×d`, `O(N^{2})` → `O(N²)`, `\\frac{a}{b}` → `a/b`, `\\sqrt{d}` → `√d`."""
+    out, i = [], 0
+    while i < len(s):
+        c = s[i]
+        if c in "^_":
+            arg, i = _tex_arg(s, i + 1)
+            t = tex_math_text(arg)
+            src, dst = _SUP if c == "^" else _SUB
+            out.append(t.translate(str.maketrans(src, dst)) if t and all(ch in src + dst for ch in t) else t)
+            continue
+        if c in "{}":
+            i += 1
+            continue
+        if c != "\\":
+            out.append(c)
+            i += 1
+            continue
+        m = re.match(r"\\([A-Za-z]+|.)", s[i:])
+        name, i = m[1], i + len(m[0])
+        if name in ("frac", "dfrac", "tfrac"):
+            a, i = _tex_arg(s, i)
+            b, i = _tex_arg(s, i)
+            a, b = tex_math_text(a), tex_math_text(b)
+            out.append(f"{a}/{b}" if len(a) <= 1 and len(b) <= 1 else
+                       f"{a if len(a) <= 1 else f'({a})'}/{b if len(b) <= 1 else f'({b})'}")
+        elif name == "sqrt":
+            a, i = _tex_arg(s, i)
+            a = tex_math_text(a)
+            out.append("√" + (a if len(a) <= 1 else f"({a})"))
+        elif name in ("mathbf", "boldsymbol", "bm", "mathrm", "mathit", "mathcal", "mathbb", "mathsf", "mathtt",
+                      "mathfrak", "text", "textbf", "textit", "textrm", "operatorname", "mathscr", "hat", "tilde",
+                      "bar", "vec", "dot", "ddot", "widehat", "widetilde", "overline", "underline"):
+            a, i = _tex_arg(s, i)
+            out.append(a if name.startswith("text") else tex_math_text(a))
+        elif name in ("left", "right", "big", "Big", "bigg", "Bigg", "bigl", "bigr", "Bigl", "Bigr", "displaystyle",
+                      "limits", "nolimits", "!"):
+            continue
+        elif name in (",", ";", ":", " ", "\\", "quad", "qquad", "enspace"):
+            out.append(" ")
+        elif name in _TEX_SYMBOLS:
+            out.append(_TEX_SYMBOLS[name])
+        else:  # \log, \max, \softmax… và lệnh lạ: giữ tên
+            out.append(name)
+    return re.sub(r"\s+", " ", "".join(out)).strip()
+
+
 def latex_to_text(s: str) -> str:
-    """`\\( ^{*} \\)` → `*`, `\\dagger` → `†`… (chỉ số trên/dưới Unlimited-OCR xuất dạng LaTeX)."""
-    s = re.sub(r"\\\(\s*[\^_]\{\s*(.*?)\s*\}\s*\\\)", r"\1", s)
+    """Công thức trong dòng `\\( … \\)`, `$…$` → chữ (tex_math_text); `\\dagger` → `†`… ngoài công thức; bỏ đánh dấu
+    Markdown mà model OCR hay thêm (`## Tiêu đề`, `**đậm**`)."""
+    s = re.sub(r"\\\((.+?)\\\)", lambda m: tex_math_text(m[1]), s, flags=re.S)
+    s = re.sub(r"(?<![\\$\w])\$(?!\s)([^$\n]{1,200}?)(?<!\s)\$(?!\w)", lambda m: tex_math_text(m[1]), s)
     s = re.sub(r"\\(ddagger|dagger|ast)\b", lambda m: {"ddagger": "‡", "dagger": "†", "ast": "*"}[m[1]], s)
+    s = re.sub(r"(?m)^\s*#{1,6}\s+", "", s)
+    s = re.sub(r"\*\*(.+?)\*\*", r"\1", s)
     return re.sub(r"\s+([,.;:])", r"\1", s)
 
 
@@ -1688,6 +1793,29 @@ async def ocr_vlm_fullpage(page: pymupdf.Page, cfg: Config, client: httpx.AsyncC
     return await asyncio.to_thread(fullpage_blocks, page, choice["message"]["content"] or "", cfg.ocr_lang, truncated)
 
 
+# Khối mà mọi dòng RapidOCR đều chắc chắn ≥ ngưỡng thì không gửi VLM đọc lại (None = đọc lại mọi khối). Bench
+# 02/11/2026 (bench_ocr_pipeline.py --vlm xiaomi-ocr, 30 trang): scan 200 dpi 8,7 → 6,4 s/trang, giống theo thứ tự
+# 98,79 → 98,86%; scan 100 dpi 8,2 → 7,8 s/trang, chất lượng như cũ. 0,95 bớt thêm ít mà bắt đầu giảm chất lượng.
+VLM_CONF: float | None = 0.98
+
+
+def mask_others(pix: pymupdf.Pixmap, clip: pymupdf.Rect, zoom: float, own: list, others: list) -> None:
+    """Tô trắng dòng của khối khác lọt vào ảnh cắt (pix = vùng clip phóng zoom lần): khung dòng OCR cao hơn chữ nên
+    khung cắt của một đoạn hay dính dòng cuối đoạn trước, VLM chép luôn dòng đó (đo 02/11/2026 trên FlashAttention-2
+    scan 100 dpi: chữ đoạn trước lặp sang đoạn sau). Không tô vào lõi (60% giữa) dòng của chính khối."""
+    cores = [pymupdf.Rect(r.x0, r.y0 + 0.2 * r.height, r.x1, r.y1 - 0.2 * r.height) for r in own]
+    for r in others:
+        r = r & clip
+        if r.is_empty:
+            continue
+        for c in cores:
+            if r.intersects(c):  # cắt phần chồng lên lõi dòng của mình: giữ nửa trên hoặc nửa dưới
+                r = pymupdf.Rect(r.x0, r.y0, r.x1, min(r.y1, c.y0)) if (r.y0 + r.y1) < (c.y0 + c.y1) else \
+                    pymupdf.Rect(r.x0, max(r.y0, c.y1), r.x1, r.y1)
+        if r.width > 0 and r.height > 0:
+            pix.set_rect(pymupdf.IRect((r * pymupdf.Matrix(zoom, zoom)).irect) & pix.irect, (255,) * pix.n)
+
+
 async def ocr_vlm(page: pymupdf.Page, cfg: Config) -> list[dict]:
     """PP-DocLayout + RapidOCR chia vùng, vision LLM đọc lại chữ từng vùng (chính xác hơn với scan xấu).
     Riêng Unlimited-OCR: gửi cả trang một lần."""
@@ -1698,10 +1826,16 @@ async def ocr_vlm(page: pymupdf.Page, cfg: Config) -> list[dict]:
     if is_fullpage_ocr(cfg.ocr_vlm_model):
         async with llm_client(timeout=600) as client:  # lần đầu gọi còn phải nạp model
             return await ocr_vlm_fullpage(page, cfg, client, url, headers)
-    blocks = await asyncio.to_thread(ocr_rapid, page, cfg.ocr_lang)
-    # Chỉ đọc lại vùng layout và đoạn đủ dài; ô bảng/mẩu chữ ngắn giữ RapidOCR (model OCR hay bịa với ảnh quá nhỏ)
-    todo = [b for b in blocks if "region" in b or len(b["text"]) >= 40]
-    sem = asyncio.Semaphore(max(1, cfg.ocr_vlm_concurrency))
+    blocks = await asyncio.to_thread(lambda: lines_to_blocks(page, rapid_lines(page, cfg.ocr_lang), keep_lines=True))
+    owner = [(pymupdf.Rect(r), id(b)) for b in blocks for r in b.pop("_lines")]
+    # Chỉ đọc lại vùng layout và đoạn đủ dài; ô bảng/mẩu chữ ngắn giữ RapidOCR (model OCR hay bịa với ảnh quá nhỏ).
+    # Có VLM_CONF: bỏ qua khối mà mọi dòng RapidOCR đều chắc chắn ≥ ngưỡng
+    todo = [b for b in blocks if ("region" in b or len(b["text"]) >= 40)
+            and (VLM_CONF is None or b.get("conf", 0) < VLM_CONF)]
+    # llama.cpp cho biết số slot (--parallel) của đúng preset: theo đó thay vì số người dùng nhập — preset nhỏ
+    # nhiều slot (xiaomi-ocr, np 4) đọc 4 vùng cùng lúc, preset np 1 thì gửi dồn chỉ làm request chờ nhau
+    kind, _, slots = await server_info(cfg.ocr_vlm_base_url, cfg.ocr_vlm_model)
+    sem = asyncio.Semaphore(slots if kind == "llamacpp" else max(1, cfg.ocr_vlm_concurrency))
 
     async def read(client: httpx.AsyncClient, b: dict):
         rect = pymupdf.Rect(b.get("cover", b["bbox"]))  # khung dò chữ: khung khối sát chữ có khi cắt mất nét đầu/cuối dòng
@@ -1710,7 +1844,9 @@ async def ocr_vlm(page: pymupdf.Page, cfg: Config) -> list[dict]:
         rect += (-3, -3, 3, 3)
         # ≥150dpi, phóng to vùng chữ nhỏ để mỗi dòng cao ≥ ~40px
         zoom = min(4.0, max(150 / 72, 40 / max(b["size"] / 0.8, 1)))
-        png = page.get_pixmap(clip=rect, matrix=pymupdf.Matrix(zoom, zoom)).tobytes("png")
+        pix = page.get_pixmap(clip=rect, matrix=pymupdf.Matrix(zoom, zoom))
+        mask_others(pix, rect, zoom, [r for r, o in owner if o == id(b)], [r for r, o in owner if o != id(b)])
+        png = pix.tobytes("png")
         body = {"model": cfg.ocr_vlm_model, "temperature": 0,
                 "max_tokens": len(b["text"]) * 2 + 1024,  # chặn sinh lặp vô hạn, chừa chỗ cho model vẫn "suy nghĩ"
                 "messages": [{"role": "user", "content": [
@@ -1737,7 +1873,7 @@ async def ocr_vlm(page: pymupdf.Page, cfg: Config) -> list[dict]:
             return
         text = re.sub(r"<think>.*?</think>", "", choice["message"]["content"] or "", flags=re.S)
         text = clean_vlm_lines(re.sub(r"```[a-z]*", "", text))
-        text = dedupe_sentences(strip_repeats(latex_to_text(re.sub(r"\s+", " ", text).strip())))
+        text = dedupe_sentences(strip_repeats(re.sub(r"\s+", " ", latex_to_text(text)).strip()))
         if text:  # VLM trả rỗng thì giữ kết quả RapidOCR
             b["text"] = text
 
@@ -4461,6 +4597,8 @@ def formula_prompt(model: str) -> str:
     m = model.lower()
     if "paddleocr-vl" in m or "glm-ocr" in m:   # prompt chính thức của hai model OCR này cho vùng công thức
         return "Formula Recognition:"
+    if "xiaomi-ocr" in m:
+        return "Identify the formula in the image and represent it using LATEX format."
     return FORMULA_PROMPT
 
 
@@ -4614,8 +4752,8 @@ async def recognize_page(d: dict, n: int, fc: Config) -> int:
     # model chép cả chữ bên cạnh ("… in generating the", đo 25/09/2026 trên DataSentinel) và bị loại khi đối chiếu
     inline = [j[3] for j in jobs if j[3]]
     fdoc = await asyncio.to_thread(formula_source, src, n, inline) if inline else None
-    _, _, slots = await server_info(fc.base_url, fc.model)
-    slots = fc.ocr_vlm_concurrency if fc.base_url == fc.ocr_vlm_base_url else slots
+    kind, _, slots = await server_info(fc.base_url, fc.model)
+    slots = fc.ocr_vlm_concurrency if fc.base_url == fc.ocr_vlm_base_url and kind != "llamacpp" else slots
 
     async def one(client: httpx.AsyncClient, key: str, rect, glyph: str, f: dict | None):
         r = pymupdf.Rect(formula_reach(f) if f else rect) + (-2, -1.5, 2, 1.5)

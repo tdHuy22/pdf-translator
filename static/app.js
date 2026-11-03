@@ -70,7 +70,7 @@ function loadSettings() {
   let s = {};
   try { s = JSON.parse(localStorage.getItem("llm") || "{}"); } catch {}
   const P = id => PRESETS[id] || {};
-  // Mặc định: OpenRouter (có sẵn, luôn còn); OCR bằng Vision LLM thì server TUF (PaddleOCR-VL) nếu còn trong danh sách
+  // Mặc định: OpenRouter (có sẵn, luôn còn); OCR bằng Vision LLM thì server TUF (Xiaomi-OCR-0) nếu còn trong danh sách
   const ocrDef = PRESETS.tuf ? "tuf" : "openrouter";
   s = { preset:"openrouter", base_url:P("openrouter").base_url, model:P("openrouter").model, temperature:0.2, concurrency:1, glossary:"", glossary_auto:true, ...s };
   s = { ocr_preset:ocrDef, chat_preset:"openrouter", translator:"llm", length_ratio:1.3, page_span:0, ocr_mode:"auto",
@@ -129,6 +129,9 @@ function loadSettings() {
   if (ver < 9) for (const f of ["model", "chat_model", "gloss_model", "align_model"]) {
     if ($(f).value === "inclusionai/ling-3.1-flash" && P("openrouter").model) $(f).value = P("openrouter").model;
   }
+  // v10: OCR trên TUF đổi từ PaddleOCR-VL sang Xiaomi-OCR-0 (preset xiaomi-ocr, 02/11/2026: chép chữ đúng hơn,
+  // nhanh hơn ~2,4 lần qua cả pipeline) → cài đặt còn để mặc định cũ của TUF thì đổi theo
+  if (ver < 10 && s.ocr_preset === "tuf" && $("ocr_vlm_model").value === "paddleocr-vl") $("ocr_vlm_model").value = "xiaomi-ocr";
   // nhà cung cấp đã lưu không còn (đã xoá) → "Tùy chỉnh", giữ nguyên Base URL và model đang có
   document.querySelectorAll("select.provider-sel").forEach(sel => { if (!sel.value) sel.value = "custom"; });
   fillKeys();
@@ -137,7 +140,7 @@ function loadSettings() {
   saveSettings();
 }
 function saveSettings() {
-  const s = { settings_v: 9 };
+  const s = { settings_v: 10 };
   FIELDS.forEach(f => s[f] = $(f).value);
   CHECKS.forEach(f => s[f] = $(f).checked);
   try { localStorage.setItem("llm", JSON.stringify(s)); } catch {}

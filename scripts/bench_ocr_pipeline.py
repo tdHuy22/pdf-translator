@@ -15,9 +15,14 @@ Không gọi LLM. Kết quả OCR thô (dòng RapidOCR, vùng layout) được c
   .venv/bin/python scripts/bench_ocr_pipeline.py bert gqa -v     # vài bài, in từng lỗi
   .venv/bin/python scripts/bench_ocr_pipeline.py --no-cache --jobs 1   # đo tốc độ thật
   git show HEAD:app.py > app_before.py && .venv/bin/python scripts/bench_ocr_pipeline.py --app app_before.py --tag before
+  # đường Vision LLM của app (app.ocr_vlm: RapidOCR + layout định vị, VLM đọc lại từng vùng) — gọi server thật,
+  # không cache kết quả VLM; --jobs 1 để đo tốc độ đúng, --max-pages giữ lần chạy ngắn
+  .venv/bin/python scripts/bench_ocr_pipeline.py --vlm xiaomi-ocr --vlm-url http://127.0.0.1:8080/v1 \
+      --concurrency 4 --jobs 1 --max-pages 3 --scan-suffix scan100
 Kết quả lưu ở bench/ocr/results/, mỗi lần chạy tự so với lần trước.
 """
 import argparse
+import asyncio
 import collections
 import concurrent.futures as cf
 import datetime
@@ -144,7 +149,8 @@ def compare(truth: list[dict], got: list[dict]) -> dict:
     return {"n": dict(r), "sims": sims, "sizes": sizes, "labels": labels, "errs": errs}
 
 
-def run_paper(name: str, use_cache: bool, engine: str, app_path: str = "") -> dict:
+def run_paper(name: str, use_cache: bool, engine: str, app_path: str = "", vlm: dict | None = None,
+              suffix: str = "scan", max_pages: int = 0) -> dict:
     import app  # đáp án luôn trích bằng app.py hiện tại, để hai phiên bản OCR được chấm như nhau
     mod = app
     if app_path:  # đo OCR của bản app.py khác (vd. bản trước khi sửa: git show HEAD:app.py > app_before.py)
@@ -159,18 +165,33 @@ def run_paper(name: str, use_cache: bool, engine: str, app_path: str = "") -> di
         mod.detect_layout = cache.wrap(mod.detect_layout)
     mod.rapid_lines = cache.wrap(mod.rapid_lines, fresh)
     ocr = getattr(mod, engine)
-    src, scan = pymupdf.open(DATA / name), pymupdf.open(SCANS / (Path(name).stem + "-scan.pdf"))
-    pages, ocr_secs, group_secs = [], [], []
-    for n in range(len(src)):
+    if vlm:
+        if vlm.get("conf") is not None:
+            mod.VLM_CONF = vlm["conf"]
+        cfg = mod.Config(ocr_engine="vlm", ocr_vlm_base_url=vlm["url"], ocr_vlm_model=vlm["model"],
+                         ocr_vlm_concurrency=vlm["concurrency"])
+
+        def ocr(page, lang):
+            return asyncio.run(mod.ocr_vlm(page, cfg))
+    src, scan = pymupdf.open(DATA / name), pymupdf.open(SCANS / f"{Path(name).stem}-{suffix}.pdf")
+    pages, ocr_secs, group_secs, vlm_secs = [], [], [], []
+    for n in range(min(len(src), max_pages or len(src))):
         truth = truth_blocks(src[n])
         t = time.perf_counter()
         before = len(fresh)
         got = ocr(scan[n], "eng")
         # dòng OCR vừa đọc thật: cả trang tính là thời gian OCR; lấy từ cache: chỉ còn thời gian gom đoạn
-        (ocr_secs if len(fresh) > before else group_secs).append(time.perf_counter() - t)
+        # (đường VLM: phần gọi VLM tính riêng, trừ thời gian RapidOCR nếu vừa đọc thật)
+        dt = time.perf_counter() - t
+        if len(fresh) > before:
+            ocr_secs.append(fresh[-1] if vlm else dt)
+        elif not vlm:
+            group_secs.append(dt)
+        if vlm:
+            vlm_secs.append(dt - (fresh[-1] if len(fresh) > before else 0))
         pages.append(compare(truth, got))
     cache.save()
-    return {"pages": pages, "ocr_secs": ocr_secs, "group_secs": group_secs}
+    return {"pages": pages, "ocr_secs": ocr_secs, "group_secs": group_secs, "vlm_secs": vlm_secs}
 
 
 def summarize(pages: list[dict]) -> dict:
@@ -213,16 +234,28 @@ def main() -> None:
     ap.add_argument("-v", "--verbose", action="store_true", help="in từng lỗi")
     ap.add_argument("--tag", default="")
     ap.add_argument("--no-save", action="store_true")
+    ap.add_argument("--vlm", default="", help="đo app.ocr_vlm với model này (vd. xiaomi-ocr, paddleocr-vl)")
+    ap.add_argument("--vlm-url", default="http://127.0.0.1:8080/v1")
+    ap.add_argument("--concurrency", type=int, default=1,
+                    help="số vùng gửi VLM cùng lúc (ocr_vlm_concurrency; server llama.cpp thì app theo số slot)")
+    ap.add_argument("--conf", type=float, default=None,
+                    help="đặt app.VLM_CONF (bỏ qua khối RapidOCR chắc chắn ≥ ngưỡng); 1.1 = đọc lại mọi khối")
+    ap.add_argument("--scan-suffix", default="scan", help="đọc samples/<tên>-<suffix>.pdf (xem make_scans.py)")
+    ap.add_argument("--max-pages", type=int, default=0, help="chỉ đo N trang đầu mỗi bài")
     args = ap.parse_args()
+    vlm = {"model": args.vlm, "url": args.vlm_url, "concurrency": args.concurrency, "conf": args.conf} \
+        if args.vlm else None
 
     names = [p for p in PAPERS if not args.papers or any(a in p for a in args.papers)]
-    missing = [p for p in names if not (SCANS / (Path(p).stem + "-scan.pdf")).exists()]
+    missing = [p for p in names if not (SCANS / f"{Path(p).stem}-{args.scan_suffix}.pdf").exists()]
     if missing:
-        sys.exit(f"thiếu bản scan {missing}: chạy scripts/make_scans.py trước")
+        sys.exit(f"thiếu bản scan {missing}: chạy scripts/make_scans.py --suffix {args.scan_suffix} trước")
     t0 = time.time()
     with cf.ProcessPoolExecutor(max(1, min(args.jobs, len(names)))) as ex:
-        res = dict(zip(names, ex.map(run_paper, names, [not args.no_cache] * len(names), [args.engine] * len(names),
-                                     [str(Path(args.app).resolve()) if args.app else ""] * len(names))))
+        k = len(names)
+        res = dict(zip(names, ex.map(run_paper, names, [not args.no_cache] * k, [args.engine] * k,
+                                     [str(Path(args.app).resolve()) if args.app else ""] * k, [vlm] * k,
+                                     [args.scan_suffix] * k, [args.max_pages] * k)))
     print(f"{'bài':26}" + "".join(f"{h:>8}" for _, h in COLS))
     per = {}
     for name, r in res.items():
@@ -243,14 +276,24 @@ def main() -> None:
     if group:
         total["group_sec_page"] = round(statistics.mean(group), 3)
         print(f"gom đoạn {total['group_sec_page']} s/trang")
+    vs = [s for r in res.values() for s in r["vlm_secs"]]
+    if vs:
+        total["vlm_sec_page"] = round(statistics.mean(vs), 2)
+        print(f"VLM {args.vlm} đọc lại {total['vlm_sec_page']} s/trang"
+              + (f", bỏ qua khối chắc chắn ≥ {args.conf}" if args.conf is not None else "")
+              + (" (nhiều bài cùng lúc nên chậm hơn thật)" if args.jobs > 1 else ""))
     print(f"khối đáp án {total['truth_blocks']}, khối OCR {total['ocr_blocks']}, "
           f"cặp 1–1 giống < 90%: {total['text_sim_lt90']}, cỡ chữ lệch > 10%: {total['size_err_gt10']} — {time.time() - t0:.0f}s")
 
+    setup = {"engine": args.engine, "vlm": args.vlm, "conf": args.conf, "scan": args.scan_suffix,
+             "max_pages": args.max_pages}
     runs = OUT / "results"
     prev = sorted(runs.glob("*.json")) if runs.exists() else []
     if prev:
         old = json.loads(prev[-1].read_text())
-        if old.get("papers") == list(per):
+        old_setup = old.get("setup", {"engine": old.get("engine"), "vlm": "", "scan": "scan", "max_pages": 0})
+        old_setup.setdefault("conf", None)
+        if old.get("papers") == list(per) and old_setup == setup:
             o = old["total"]
             print(f"so với {prev[-1].name}: " + (", ".join(
                 f"{h} {o.get(k)}→{total[k]}" for k, h in COLS if o.get(k) != total[k]) or "không đổi"))
@@ -258,7 +301,8 @@ def main() -> None:
         runs.mkdir(parents=True, exist_ok=True)
         stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + (f"-{args.tag}" if args.tag else "")
         (runs / f"{stamp}.json").write_text(json.dumps(
-            {"engine": args.engine, "papers": list(per), "total": total, "per_paper": per}, ensure_ascii=False, indent=1))
+            {"engine": args.engine, "setup": setup, "papers": list(per), "total": total, "per_paper": per},
+            ensure_ascii=False, indent=1))
 
 
 if __name__ == "__main__":

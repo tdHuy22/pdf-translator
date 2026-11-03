@@ -6,6 +6,7 @@ Bản gốc có lớp chữ ở data/ vẫn là ĐÁP ÁN (xem scripts/bench_ocr
 
   .venv/bin/python scripts/make_scans.py            # tạo file còn thiếu
   .venv/bin/python scripts/make_scans.py --force    # tạo lại tất cả
+  .venv/bin/python scripts/make_scans.py --dpi 100 --jpeg 35 --suffix scan100   # bộ scan xấu → <tên>-scan100.pdf
 """
 import argparse
 import io
@@ -52,10 +53,11 @@ def main() -> None:
     ap.add_argument("--dpi", type=int, default=200)
     ap.add_argument("--jpeg", type=int, default=60)
     ap.add_argument("--force", action="store_true", help="tạo lại cả file đã có")
+    ap.add_argument("--suffix", default="scan", help="tên file ra: samples/<tên>-<suffix>.pdf")
     args = ap.parse_args()
     OUT.mkdir(exist_ok=True)
     for name in PAPERS:
-        dst = OUT / (Path(name).stem + "-scan.pdf")
+        dst = OUT / f"{Path(name).stem}-{args.suffix}.pdf"
         if args.force or not dst.exists():
             make(DATA / name, dst, args.dpi, args.jpeg)
 

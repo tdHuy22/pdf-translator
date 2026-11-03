@@ -17,10 +17,10 @@ App gửi **một vùng chữ (hoặc cả trang) mỗi request** tới `POST {o
 
 | Chi tiết | Giá trị app dùng |
 |---|---|
-| Prompt | `PaddleOCR-VL` → `OCR:` · `glm-ocr` → `Text Recognition:` · `deepseek-ocr` → `Free OCR.` · `Unlimited-OCR` → `<image>\ndocument parsing.` (cả trang) · còn lại → prompt chung "Transcribe ALL text…" |
+| Prompt | `xiaomi-ocr` → `Extract the text in the image.` · `PaddleOCR-VL` → `OCR:` · `glm-ocr` → `Text Recognition:` · `deepseek-ocr` → `Free OCR.` · `Unlimited-OCR` → `<image>\ndocument parsing.` (cả trang) · còn lại → prompt chung "Transcribe ALL text…" |
 | `max_tokens` | tên model có "ocr": `len(chữ gốc)//2 + 64` kèm `stop: ["```"]`; model khác: `len(chữ gốc)*2 + 1024` |
 | Ảnh gửi | vùng chữ + lề 3pt, phóng to `min(4.0, max(150/72, 40/(cỡ chữ/0.8)))` để mỗi dòng cao ≥ ~40px; cả trang thì 144 dpi (zoom 2.0), PNG |
-| Số request song song | `ocr_vlm_concurrency` — với TUF để **1** (`--parallel 1`) |
+| Số request song song | server llama.cpp: đúng số slot `--parallel` của preset (đọc ở `/v1/models`); server khác: `ocr_vlm_concurrency` |
 | Khi `finish_reason == "length"` | app **bỏ** kết quả của model, giữ chữ RapidOCR → cấu hình nào hay chạm `max_tokens` coi như hỏng |
 | Sau khi nhận | app bỏ `<think>…</think>`, bỏ ```` ``` ````, gộp khoảng trắng, bỏ câu lặp, chuyển LaTeX đơn giản thành chữ |
 

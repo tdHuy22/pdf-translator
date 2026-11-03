@@ -41,7 +41,7 @@ Server khác (vLLM, llama.cpp, LM Studio, proxy riêng…) thì lưu thành **nh
 | **RapidOCR** (mặc định) | local, miễn phí | Model PP-OCR của PaddleOCR chạy bằng ONNX, tự tải ~15MB lần đầu. Ngôn ngữ: `eng`, `ch`, `latin`, `japan`, `korean`… Dòng chữ được gom thành đoạn theo vùng của **PP-DocLayoutV3** (ONNX, tự tải ~130MB vào `models/layout/` lần đầu) bằng **đúng bộ gom đoạn của PDF có lớp chữ**: đúng đoạn, đúng thứ tự đọc, bỏ qua hình/công thức/chữ dọc bên lề, bảng dịch từng ô, thuật toán từng dòng (xem *Bench pipeline OCR*) |
 | Tesseract | local, miễn phí | `brew install tesseract tesseract-lang`, ngôn ngữ `eng`, `eng+vie`… Dòng chữ cũng được gom theo PP-DocLayout |
 | OCR.space | API miễn phí | Đăng ký key miễn phí tại ocr.space (key demo `helloworld` bị giới hạn) |
-| Vision LLM | local hoặc API | Mọi API OpenAI-compatible có vision: Ollama, llama.cpp, LM Studio, OpenRouter… PP-DocLayout + RapidOCR định vị đoạn, VLM đọc lại chữ từng vùng → tốt với scan xấu. Prompt tự chọn theo tên model: `PaddleOCR-VL` → `OCR:`, `glm-ocr` → `Text Recognition:`. Riêng **Unlimited-OCR** gửi cả trang (150 dpi) một lần; PP-DocLayout làm "trọng tài": bỏ dòng không khớp vùng nào, vùng bị sót thì đọc bù bằng RapidOCR |
+| Vision LLM | local hoặc API | Mọi API OpenAI-compatible có vision: Ollama, llama.cpp, LM Studio, OpenRouter… PP-DocLayout + RapidOCR định vị đoạn, VLM đọc lại chữ từng vùng → tốt với scan xấu. Prompt tự chọn theo tên model: `xiaomi-ocr` (Xiaomi-OCR-0) → `Extract the text in the image.`, `PaddleOCR-VL` → `OCR:`, `glm-ocr` → `Text Recognition:`. Công thức trong dòng model chép ra LaTeX được đổi về chữ (`\(O(N^{2})\)` → `O(N²)`); dòng của đoạn bên cạnh lọt vào ảnh cắt được tô trắng; khối mà RapidOCR đã chắc chắn (mọi dòng ≥ 0,98) thì không gửi VLM; server llama.cpp thì gửi song song đúng bằng số slot của model. Riêng **Unlimited-OCR** gửi cả trang (150 dpi) một lần; PP-DocLayout làm "trọng tài": bỏ dòng không khớp vùng nào, vùng bị sót thì đọc bù bằng RapidOCR |
 | Endpoint tuỳ chỉnh | local hoặc API | Server OCR riêng (PaddleOCR, Surya, docTR…). Xem `examples/custom_ocr_server.py` |
 
 **Hợp đồng endpoint tuỳ chỉnh:** `POST` multipart `file=<page.png>`, `lang=<mã>` (header `Authorization: Bearer <key>` nếu có) → trả `{"lines": [{"bbox": [x0,y0,x1,y1], "text": "..."}]}` theo pixel ảnh (hoặc `"box": [[x,y]×4]` kiểu PaddleOCR).
@@ -142,7 +142,27 @@ OCR trang scan xấu — đo lại 20/09/2026 bằng `scripts/bench_ocr.py`, đ�
 
 Điểm mấu chốt: hai model OCR chuyên dụng đủ nhỏ để đẩy **hết** lên GPU 4 GB (`ngl=99`), còn `9b-vision` chỉ nhét được 8 lớp nên chạy phần lớn trên CPU — **147 giây/vùng xuống còn 1,2 giây**. Một trang scan ~10 vùng: 25 phút → khoảng 12 giây. Gọi từ Mac qua Tailscale không chậm thêm (đo 0,5 giây/vùng khi model đã nóng).
 
-→ PDF có lớp chữ: chọn preset **TUF**, model **`4b`** (xem mục dưới). PDF scan: `paddleocr-vl`, đọc từng vùng.
+→ PDF có lớp chữ: chọn preset **TUF**, model **`4b`** (xem mục dưới). PDF scan: `xiaomi-ocr` (từ 02/11/2026, xem mục dưới), đọc từng vùng.
+
+### Xiaomi-OCR-0 thay PaddleOCR-VL – 02/11/2026
+[Xiaomi-OCR-0](https://huggingface.co/xiaomi-research/Xiaomi-OCR-0) (0.8B, từ Qwen3.5-0.8B, Apache-2.0). Trên TUF: preset `xiaomi-ocr` = GGUF Q6_K của cộng đồng (`prithivMLmods/Xiaomi-OCR-0-GGUF`) + mmproj BF16, `np = 4`, tắt thinking, greedy.
+Đo cả pipeline của app (RapidOCR + PP-DocLayout định vị, VLM đọc lại từng vùng) bằng `scripts/bench_ocr_pipeline.py --vlm <preset> --max-pages 3`: 3 trang đầu của 10 bài bench, so với lớp chữ của bản gốc.
+
+| Cấu hình (scan 100 dpi, JPEG 35) | Phủ từ | Đúng từ | Giống theo thứ tự | Giây/trang |
+|---|---:|---:|---:|---:|
+| RapidOCR một mình | 98,97% | 97,02% | 98,11% | — |
+| paddleocr-vl (1 slot) | 99,23% | 96,81% | 97,78% | 19,7 |
+| xiaomi-ocr BF16 (4 slot) | 99,53% | 97,09% | 98,44% | 14,4 |
+| xiaomi-ocr Q6_K, 1 slot | 99,51% | 97,09% | 98,43% | 14,7 |
+| **xiaomi-ocr Q6_K, 4 slot** ✅ | 99,51% | 97,07% | 98,42% | **8,2** |
+| … + bỏ qua khối chắc chắn ≥ 0,98 ✅ | 99,50% | 97,10% | 98,44% | **7,8** |
+
+Scan 200 dpi (bộ `samples/` mặc định): RapidOCR 98,73% giống theo thứ tự; xiaomi-ocr đọc lại mọi khối 98,79% / 8,7 s/trang; bỏ qua khối chắc chắn ≥ 0,98: **98,86% / 6,4 s/trang**.
+
+- Q6_K ngang BF16 mà nhanh gần gấp đôi: GTX 1650 Ti không có nhân tính BF16.
+- Công thức → LaTeX (6 công thức của RoFormer, có ma trận 7×7): Xiaomi đúng cả 6 và giữ chữ đậm; PaddleOCR-VL bỏ `\boldsymbol` ở 4 công thức, bọc nhầm một công thức trong `\left|…\right|`, chép hỏng một chỉ số.
+- Trước hai bản sửa của pipeline (đổi LaTeX trong dòng về chữ, che dòng của đoạn bên cạnh), Xiaomi làm *giảm* độ đúng từ trên FlashAttention-2 (95,6 → 91,6%) vì chép `\mathbf`, `\mathbb` và chép lặp dòng của đoạn trước.
+- Xiaomi chưa tự đánh giá các bản GGUF cộng đồng; số trên là số đo của app, không phải số của Xiaomi.
 Chi tiết cách quét tham số và báo cáo đầy đủ: [docs/ocr-tuf.md](docs/ocr-tuf.md), kết quả nằm ở `~/vietpaper-ocr-bench/REPORT.md` trên TUF.
 
 ## Bench chất lượng dịch: Claude Code vs model free vs Google – 24/10/2026

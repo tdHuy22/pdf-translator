@@ -33,7 +33,7 @@ import pymupdf
 
 # Prompt riêng của từng model OCR (giống app: xem vlm_ocr_prompt trong app.py)
 PROMPTS = {"glm-ocr": "Text Recognition:", "paddleocr-vl": "OCR:", "deepseek-ocr": "Free OCR.",
-           "unlimited-ocr": "<image>\ndocument parsing."}
+           "unlimited-ocr": "<image>\ndocument parsing.", "xiaomi-ocr": "Extract the text in the image."}
 GENERIC_PROMPT = ("Transcribe ALL text in this image exactly as written, in reading order. "
                   "Output only the text, no explanations.")
 

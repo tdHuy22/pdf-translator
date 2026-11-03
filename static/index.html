@@ -531,7 +531,7 @@
   <label class="ocr-opt" data-engine="vlm">API key <input id="ocr_vlm_api_key" type="password" placeholder="(để trống nếu local)"></label>
   <label class="ocr-opt" data-engine="vlm">Model
     <div class="mpick"><input id="ocr_vlm_model" autocomplete="off" spellcheck="false" placeholder="gõ để tìm model…"><button id="btnOcrModels" type="button" title="Tải lại danh sách model của server này">↻</button><div class="mlist" hidden></div></div></label>
-  <label class="ocr-opt" data-engine="vlm" title="Ollama/API cloud: 4. llama-server chỉ có 1 slot (-np 1, vd. TUF): 1 — gửi nhiều hơn chỉ phải xếp hàng, dễ quá thời gian chờ">Số vùng gửi cùng lúc
+  <label class="ocr-opt" data-engine="vlm" title="Ollama/API cloud: 4. Server llama.cpp (vd. TUF) thì app tự theo số slot (--parallel) của model, bỏ qua ô này">Số vùng gửi cùng lúc
     <input id="ocr_vlm_concurrency" type="number" min="1" max="8"></label>
   <label class="ocr-opt" data-engine="custom">URL <input id="ocr_custom_url" placeholder="http://localhost:9000/ocr"></label>
   <label class="ocr-opt" data-engine="custom">API key <input id="ocr_custom_api_key" type="password" placeholder="(tuỳ chọn)"></label>
@@ -558,7 +558,7 @@
   <label class="see-opt">Model (phải đọc được ảnh 👁)
     <div class="mpick"><input id="see_model" autocomplete="off" spellcheck="false" placeholder="gõ để tìm model…"><button id="btnSeeModels" type="button" title="Tải lại danh sách model của server này">↻</button><div class="mlist" hidden></div></div></label>
   <label style="grid-column:1/-1" title="Việc riêng, không liên quan ai trả lời câu hỏi. Chữ chép từ PDF làm rối công thức (ma trận ra một dãy ô lẫn lộn, phân số và căn mất gạch). Bật thì khi trò chuyện app cắt ảnh từng công thức cho model đọc ảnh chép ra LaTeX — một lần cho mỗi công thức, lưu lại dùng mãi. Trang đang hỏi chờ tối đa 30 giây, các trang khác chạy nền. Công thức đã có LaTeX thì model trò chuyện (kể cả loại không đọc được ảnh) đọc được đúng.">Công thức → LaTeX khi trò chuyện (model nào chép công thức, chạy nền)
-    <select id="formula_ocr"><option value="ocr">Model OCR ở mục 2 (mặc định PaddleOCR-VL, chạy local)</option>
+    <select id="formula_ocr"><option value="ocr">Model OCR ở mục 2 (mặc định Xiaomi-OCR-0 trên TUF, chạy local)</option>
       <option value="see">Model xem ảnh ở trên</option><option value="off">Tắt — chỉ chép chữ từ PDF</option></select></label>
 
   <h3 class="sec api-only">4. Lập bảng thuật ngữ</h3>
