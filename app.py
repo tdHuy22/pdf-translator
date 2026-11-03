@@ -85,9 +85,8 @@ DOCS: dict[str, dict] = {}
 
 
 OCRSPACE_DEMO = "helloworld"
-# Server riêng (llama.cpp trên TUF, proxy ChatGPT): địa chỉ thật đặt qua biến môi trường, không ghi vào code
+# Server riêng (llama.cpp trên TUF): địa chỉ thật đặt qua biến môi trường, không ghi vào code
 TUF_URL = os.environ.get("VP_TUF_URL", "http://localhost:8080/v1")
-CHATGPT_PROXY_URL = os.environ.get("VP_CHATGPT_PROXY_URL", "http://localhost:10531/v1")
 
 
 # Mặc định = model free của OpenRouter. Dịch + trò chuyện: nemotron-3.5-super-vl:free (15/10/2026) — bench_english 0,76
@@ -155,7 +154,7 @@ class Config(BaseModel):
     align_api_key: str = ""
     align_model: str = ""
     # Model xem ảnh trang khi trò chuyện (câu hỏi về hình, bảng, công thức): để trống model = không gửi ảnh.
-    # Proxy ChatGPT không nhận ảnh (25/09/2026) → mặc định giao diện là OpenRouter dots-studio/dots-3-note-preview:free
+    # Mặc định giao diện: OpenRouter dots-studio/dots-3-note-preview:free (đo 25/09/2026)
     # (nex-agi/nex-n2.5-pro:free chọn trước đó bị OpenRouter gỡ cùng ngày).
     see_base_url: str = ""
     see_api_key: str = ""
@@ -312,8 +311,8 @@ def is_self_hosted(url: str) -> bool:
 
 
 # Tham số tuỳ chọn mà một (url, model) từ chối — đã hỏi lại không có nó và được, nên lần sau khỏi gửi:
-# - "temperature": model suy nghĩ của OpenAI chỉ nhận giá trị mặc định (đo 24/09/2026: gpt-6-luna qua proxy ChatGPT OAuth
-#   trả 500 "Bad Request" khi có temperature, còn stream thì trả 200 rồi ngắt kết nối; gpt-5.6-terra thì nhận).
+# - "temperature": model suy nghĩ của OpenAI chỉ nhận giá trị mặc định (đo 24/09/2026: gpt-6-luna qua một proxy tương
+#   thích OpenAI trả 500 "Bad Request" khi có temperature, còn stream thì trả 200 rồi ngắt kết nối; gpt-5.6-terra thì nhận).
 # - "reasoning": model trên OpenRouter bắt buộc suy nghĩ thì báo lỗi khi bị tắt → "reasoning:min" = xin mức suy nghĩ
 #   thấp nhất (REASONING_MIN); mức đó cũng bị từ chối thì "reasoning" = bỏ hẳn tham số.
 _REFUSED: dict[tuple[str, str], set[str]] = {}
@@ -326,7 +325,7 @@ REASONING_MIN = {"effort": "minimal"}
 
 def refused_param(body: dict, status: int, text: str) -> str | None:
     """Lỗi này có phải do một tham số tuỳ chọn không: trả tên tham số nên bỏ để hỏi lại, hoặc None.
-    Chỉ nhận lỗi có nhắc tới tham số đó (hay "Bad Request" trơn của proxy ChatGPT) — lỗi khác như vượt ngữ cảnh,
+    Chỉ nhận lỗi có nhắc tới tham số đó (hay "Bad Request" trơn của một số proxy) — lỗi khác như vượt ngữ cảnh,
     429, sai key thì hỏi lại cũng vô ích, và không được làm mất temperature của những lượt dịch sau."""
     t = text.lower()
     if status not in (400, 422, 500):
@@ -531,10 +530,6 @@ SEED_PROVIDERS = [
     # theo thứ tự 98,42% / 8,2 s/trang, paddleocr-vl 97,78% / 19,7 s/trang (scripts/bench_ocr_pipeline.py --vlm)
     {"id": "tuf", "name": "llama.cpp – server TUF (Tailscale)", "base_url": TUF_URL,
      "model": "qwen36-35b", "vision": "xiaomi-ocr", "parallel": 1},
-    # Proxy OAuth tới tài khoản ChatGPT web (free) trên TUF, chỉ vào được trong LAN. gpt-6-luna căn vệt tô đúng nhất
-    # (bench_align 24/09/2026: 56/60, ~3 s/lần); không nhận `temperature` (app tự bỏ); không nhận ảnh (25/09/2026).
-    {"id": "chatgpt", "name": "ChatGPT (proxy OAuth trên TUF, mạng LAN)", "base_url": CHATGPT_PROXY_URL,
-     "model": "gpt-6-luna", "vision": "", "parallel": 1},
 ]
 PROVIDERS_FILE = DATA / "providers.json"
 _PROVIDER_ID = re.compile(r"[a-z0-9][a-z0-9_-]{0,39}")
@@ -5254,7 +5249,7 @@ def pdf_input(c: Config) -> str:
       hình, tính token như ảnh trang), còn lại "pdf-text" (trích chữ, miễn phí; đo 25/09/2026 với nex-n2.5-pro:free:
       BERT 18,8k token, 5 giây, đúng cả số liệu trong bảng). Không dùng "mistral-ocr" (tính tiền theo trang).
     - OpenAI (api.openai.com): model đọc thẳng file.
-    - "" = không nhận: proxy ChatGPT trả 200 nhưng lặng lẽ bỏ file, llama.cpp trả 400, Ollama/LM Studio không có kiểu
+    - "" = không nhận: có proxy trả 200 nhưng lặng lẽ bỏ file, llama.cpp trả 400, Ollama/LM Studio không có kiểu
       nội dung này."""
     url = c.base_url.lower()
     if "openrouter.ai" in url:
@@ -5577,7 +5572,7 @@ async def chat_stream(cfg: Config, system: str, messages: list[dict], num_ctx: i
                 _REFUSED.setdefault((url, cfg.model), set()).update(dropped)
             return
         except httpx.HTTPError as e:
-            # Proxy ChatGPT OAuth với gpt-6-luna: có temperature thì trả 200, gửi một mẩu rỗng rồi NGẮT kết nối
+            # Có proxy (gpt-6-luna): có temperature thì trả 200, gửi một mẩu rỗng rồi NGẮT kết nối
             # (đo 24/09/2026) — chưa ra chữ nào thì bỏ temperature và hỏi lại. Chỉ lỗi ngắt kết nối này: hết giờ chờ
             # hay không kết nối được thì hỏi lại cũng vô ích.
             if (not attempt and not got and kind != "ollama" and "temperature" in body

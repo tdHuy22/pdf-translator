@@ -113,7 +113,7 @@ async def main():
     ap.add_argument("--max-tokens", type=int, default=800)
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--out", default="judge.json", help="tên file kết quả trong bench/quality (một file mỗi trọng tài)")
-    ap.add_argument("--no-temperature", action="store_true", help="trọng tài không nhận temperature (gpt-6-luna qua proxy ChatGPT)")
+    ap.add_argument("--no-temperature", action="store_true", help="trọng tài không nhận temperature (vd. model suy nghĩ của OpenAI)")
     args = ap.parse_args()
 
     systems = [s.strip() for s in args.systems.split(",") if s.strip()]

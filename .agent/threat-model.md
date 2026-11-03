@@ -4,7 +4,7 @@
 Luồng:
 - Trình duyệt (điện thoại, laptop) → HTTP tới TUF. Hiện nay vào qua Tailscale (`tailscale serve` HTTPS, KHÔNG dùng Funnel).
 - FastAPI (`app.py`): 37 route `/api/*` và static mount `/` (`app.py:5754`), hiện không kiểm ai gọi.
-- Tài sản: tài liệu, bản dịch, trò chuyện, ghi chú trong `data/`; key API trong `data/keys.json`; hạn mức LLM (OpenRouter, proxy ChatGPT); hệ thống file của TUF.
+- Tài sản: tài liệu, bản dịch, trò chuyện, ghi chú trong `data/`; key API trong `data/keys.json`; hạn mức LLM (OpenRouter, server riêng); hệ thống file của TUF.
 - Mới: trang đăng nhập → `POST /api/login` → cookie phiên → một middleware kiểm mọi request trước khi tới route hay static.
 
 | ID | Mối đe dọa | Actor | Surface | Asset | Chốt chặn phải có | Trạng thái |

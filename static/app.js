@@ -77,8 +77,8 @@ function loadSettings() {
         ocr_engine:"rapidocr", ocr_lang:"eng", ocr_vlm_base_url:P(ocrDef).base_url, ocr_vlm_model:P(ocrDef).vision,
         ocr_vlm_concurrency:P(ocrDef).parallel || 1, ocr_custom_url:"", google_fallback:true, chat_same:true, chat_base_url:"",
         chat_model:"", gloss_preset:"openrouter", gloss_same:true, gloss_base_url:P("openrouter").base_url,
-        gloss_model:P("openrouter").gloss, align_llm:true, align_same:false, align_preset:"chatgpt",
-        align_base_url:P("chatgpt").base_url, align_model:P("chatgpt").model, sync_marks:false, see_on:true, see_preset:"openrouter",
+        gloss_model:P("openrouter").gloss, align_llm:true, align_same:false, align_preset:"openrouter",
+        align_base_url:P("openrouter").base_url, align_model:P("openrouter").model, sync_marks:false, see_on:true, see_preset:"openrouter",
         see_base_url:P("openrouter").base_url, see_model:SEE_MODEL, formula_ocr:"ocr", font_serif:"auto", font_sans:"auto", font_mono:"auto",
         model_source:"api", cc_model:"claude-sonnet-5-5", cc_model2:"claude-sonnet-5-5", ...s };
   const ver = s.settings_v || 1;
@@ -100,11 +100,12 @@ function loadSettings() {
   }
   CHECKS.forEach(f => $(f).checked = s[f] !== false && s[f] !== "false");
   if (ver < 3 && s.disable_thinking === undefined) $("disable_thinking").checked = true;
-  // v4: căn vệt tô mặc định đổi từ 4b trên TUF sang gpt-6-luna qua proxy ChatGPT — đổi cài đặt còn để mặc định cũ
+  // v4: căn vệt tô mặc định cũ (4b trên TUF) → nhà cung cấp "chatgpt" nếu người dùng có, không thì OpenRouter
   if (ver < 4 && s.align_preset === "tuf" && s.align_model === "4b") {
-    $("align_preset").value = "chatgpt";
-    $("align_base_url").value = P("chatgpt").base_url || "";
-    $("align_model").value = P("chatgpt").model || "";
+    const to = PRESETS.chatgpt ? "chatgpt" : "openrouter";
+    $("align_preset").value = to;
+    $("align_base_url").value = P(to).base_url || "";
+    $("align_model").value = P(to).model || "";
   }
   // v5: model xem ảnh mặc định cũ bị OpenRouter gỡ → đổi sang mặc định mới
   if (ver < 5 && GONE_MODELS.includes($("see_model").value)) $("see_model").value = SEE_MODEL;
@@ -1603,7 +1604,7 @@ const dropSel = () => keepSel(null);
 try { $("ctxMode").value = localStorage.getItem("ctx_mode") || "auto"; } catch {}
 $("ctxMode").onchange = () => {
   try { localStorage.setItem("ctx_mode", $("ctxMode").value); } catch {}
-  // Chỉ OpenRouter / OpenAI nhận file PDF (proxy ChatGPT lặng lẽ bỏ file, llama.cpp/Ollama từ chối): server khác thì
+  // Chỉ OpenRouter / OpenAI nhận file PDF (có proxy lặng lẽ bỏ file, llama.cpp/Ollama từ chối): server khác thì
   // app gửi chữ cả bài — báo trước để người dùng khỏi tưởng model đã đọc file
   const c = cfg(), base = c.chat_base_url || c.base_url;
   if ($("ctxMode").value === "pdf" && !/openrouter\.ai|api\.openai\.com/i.test(base))

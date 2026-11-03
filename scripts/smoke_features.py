@@ -472,7 +472,7 @@ ok(A.pdf_input(A.Config(base_url=OR, model="nex-agi/nex-n2.5-pro:free")) == "pdf
    and A.pdf_input(A.Config(base_url="https://api.openai.com/v1", model="gpt-5")) == "native"
    and not A.pdf_input(A.Config(base_url="http://100.64.0.1:10531/v1", model="gpt-6-luna"))
    and not A.pdf_input(A.Config(base_url="http://localhost:11434/v1", model="q")),
-   "server nhận file PDF: OpenRouter (pdf-text / native), OpenAI; proxy ChatGPT, Ollama thì không")
+   "server nhận file PDF: OpenRouter (pdf-text / native), OpenAI; proxy khác, Ollama thì không")
 with A.test_client() as c:
     with open(ROOT / "data/attention-is-all-you-need.pdf", "rb") as f:
         aid = c.post("/api/upload", files={"file": ("att3.pdf", f, "application/pdf")}).json()["id"]
@@ -629,8 +629,9 @@ A.httpx.AsyncClient = RealClient
 print("9. Nhà cung cấp, thông tin model")
 with A.test_client() as c:
     ps = c.get("/api/providers").json()["providers"]
-    ok({"openrouter", "tuf", "chatgpt"} <= {p["id"] for p in ps} and not next(p for p in ps if p["id"] == "tuf")["builtin"],
-       "lần đầu: có sẵn + gieo TUF/ChatGPT thành nhà cung cấp của người dùng")
+    ok({"openrouter", "tuf"} <= {p["id"] for p in ps} and "chatgpt" not in {p["id"] for p in ps}
+       and not next(p for p in ps if p["id"] == "tuf")["builtin"],
+       "lần đầu: có sẵn + gieo TUF thành nhà cung cấp của người dùng (không gieo proxy ChatGPT)")
     r = c.post("/api/providers", json={"name": "Máy Lab", "base_url": "http://lab:8000/v1/", "model": "m"}).json()
     ok(r["id"] == "may-lab" and r["base_url"] == "http://lab:8000/v1", "thêm mới: id theo tên (bỏ dấu), bỏ / cuối URL")
     r2 = c.post("/api/providers", json={"id": "may-lab", "name": "Máy Lab", "base_url": "http://lab:9000/v1"}).json()
